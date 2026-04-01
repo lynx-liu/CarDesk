@@ -1,0 +1,1434 @@
+                       坐标  长宽
+
+背景：background.png  inside_background.png
+
+字体：思源黑体  
+
+左侧返回：butt_back_up.png butt_back_down.png  60 103 60 60
+
+=================================================================================
+
+状态栏：topbar.png   0  0    1280 82
+
+
+主界面标题：x:588 y:10  字号:36 行高:54
+
+蓝牙：pict_buetooth.png  pict_buetooth_on.png  930 12   48 48
+
+USB：pict_usb.png   pict_usb_on.png   994 12   48 48
+
+音量：pict_volume.png  pict_volume_mute.png  1058 12   48 48
+
+音量数值：x:1110 y:10  字号:36  行高:54
+
+时间：x:1174 y:10  字号:36  行高:54
+
+
+主页（内页）：pict_home_up.png  pict_home_down.png  12 12 48 48
+
+=================================================================================
+
+
+主页*：background.png
+
+
+butt_home_radio_up.png  butt_home_radio_down.png    118 116  216 271
+
+butt_home_driving_image_up.png  butt_home_driving_image_down.png   394 116  216 271
+
+butt_home_video_play_up.png  butt_home_video_play_down.png   670 116  216 271
+
+butt_home_image_viewing_up.png  butt_home_image_viewing_down.png   946 116  216 271
+
+butt_home_diagnostic_maintenance_up.png  butt_home_diagnostic_maintenance_down.png  118 382  216 271
+
+butt_home_bluetooth_phone_up.png  butt_home_bluetooth_phone_down.png  394 382  216 271
+
+butt_home_audio_play_up.png  butt_butt_home_audio_play_down.png  670 382  216 271
+
+butt_home_system_settings_up.png  butt_home_system_settings_down.png  946 382  216 271
+
+=================================================================================
+
+音频播放*：inside_background.png
+
+标题：x:568 y:10  字号:36 行高:54
+
+butt_tab_left_on.png  butt_tab_left_down.png 480 100  160 66
+
+文字：x:504 y:112  字号:28  行高:42
+
+butt_tab_right_on.png  butt_tab_right_down.png   640 100  160 66
+
+文字：x:664 y:112  字号:28  行高:42
+
+
+USB音乐：
+
+music_show.png  120 182  210 210
+
+音乐名称：  x:410  y:183  字号:48  行高:72
+
+pict_music_singer_icon.png  410 283  40 40
+
+歌手：x:466  y:279  字号:32  行高:48
+
+pict_music_album_icon.png  410 347  40 40
+
+专辑：x:466  y:343  字号:32  行高:48
+
+butt_music_collection_up.png  butt_music_collection_down.png  1100 190  60 60 
+
+butt_music_scan_up.png  butt_music_scan_down.png 1100 324  60 60
+
+
+进度条：
+
+播放时间：x:120 y:408  字号:24  行高:36
+
+视频时长：x:1100 y:408  字号:24  行高:36
+
+prog_music_fore.png  prog_music_back.png 204 422 872 8
+
+butt_music_list_up.png  butt_music_list_down.png  238 466  60 60
+
+butt_music_prev_up.png butt_music_prev_down.png 418 466 60 60
+
+butt_music_play_up.png  butt_music_play_down.png 598 454 84 84 
+
+butt_music_stop_up,png butt_music_stop_up,png 598 454 84 84 
+
+butt_music_next_up.png  butt_music_next_down.png   802 466 60 60
+
+butt_music_circle_up.png  butt_music_circle_down.png  982 466 60 60
+
+butt_music_random_up.png  butt_music_circle_down.png  982 466 60 60
+
+
+播放页音乐列表：120 562 1040 120
+
+music_play_musiclist_show.png  music_play_musiclist_style_up.png  music_play_musiclist_style_down.png y:562  120 120
+
+文字：y:651  字号:20  行高:30
+
+
+
+
+音乐列表：inside_background.png
+
+
+butt_tab_left_on.png  butt_tab_left_down.png 480 100  160 66
+
+文字：x:504 y:112  字号:28  行高:42
+
+butt_tab_right_on.png  butt_tab_right_down.png   640 100  160 66
+
+文字：x:664 y:112  字号:28  行高:42
+
+
+我的收藏：168 190  944 356
+
+music_play_musiclist_show.png music_musiclist_file_up.png  music_musiclist_file_down.png  music_musiclist_up.png   music_musiclist_down.png    
+
+x:168 364  560 756 952  y:190 386   宽:160    高:160
+
+music_musiclist_path.png 168 590  944 50
+
+文字：x:192  y:597  字号:24  行高:36
+
+歌曲列表：同我的收藏
+
+
+蓝牙音乐：inside_background.png
+
+
+music_buetooth_show.png 120 190 320 320 
+
+音乐名称：  x:520  y:250  字号:48  行高:72
+
+pict_music_singer_icon.png  520 350  40 40
+
+歌手：x:576  y:346  字号:32  行高:48
+
+pict_music_album_icon.png  520 410  40 40
+
+专辑：x:466  y:406  字号:32  行高:48
+
+进度条：
+
+播放时间：x:120 y:552  字号:24  行高:36
+
+视频时长：x:1100 y:552  字号:24  行高:36
+
+prog_music_fore.png  prog_music_back.png 204 566 872 8
+
+butt_music_prev_up.png butt_music_prev_down.png 418 614 60 60
+
+butt_music_play_up.png  butt_music_play_down.png 598 602 84 84 
+
+butt_music_stop_up,png butt_music_stop_up,png 598 602 84 84 
+
+butt_music_next_up.png  butt_music_next_down.png   802 614 60 60
+
+
+=================================================================================
+
+视频播放*：inside_background.png
+
+标题：x:568 y:10  字号:36 行高:54
+
+视频列表：168 190  944 356
+
+music_play_musiclist_show.png music_musiclist_file_up.png  music_musiclist_file_down.png  music_musiclist_up.png   music_musiclist_down.png    
+
+x:168 364  560 756 952  y:190 386   宽:160    高:160
+
+music_musiclist_path.png 168 590  944 50
+
+文字：x:192  y:597  字号:24  行高:36
+
+
+视频全屏播放：
+
+video_play.png  0 0  1280 720
+
+video_play_top.png 0 0 1280 72
+
+butt_video_back_up.png butt_video_back_down.png  12 12  48 48
+
+标题：y:9  字号:36  行高:54
+
+video_play_bottom.png 0 588 1280 132
+
+butt_music_prev_up.png butt_music_prev_down.png 48 624  60 60
+
+butt_music_play_up.png  butt_music_play_down.png 168 612  84 84 
+
+butt_music_stop_up,png butt_music_stop_down,png 168 612  84 84 
+
+butt_music_next_up.png  butt_music_next_down.png   312 624  60 60
+
+播放时间：x420 y:636  字号:24  行高:36
+
+视频时长：x:1138 y:636  字号:24  行高:36
+
+prog_video_fore.png  prog_video_back.png 538 650 576 8
+
+
+=================================================================================
+
+图片浏览*：inside_background.png
+
+标题：x:568 y:10  字号:36 行高:54
+
+列表：168 190  944 356
+
+music_play_musiclist_show.png music_musiclist_file_up.png  music_musiclist_file_down.png  image_imagellist_up.png   image_imagellist_down.png    
+
+x:168 364  560 756 952  y:190 386   宽:160    高:160
+
+music_musiclist_path.png 168 590  944 50
+
+文字：x:192  y:597  字号:24  行高:36
+
+
+图片全屏：
+
+image_view.png  0 0  1280 720
+
+video_play_top.png 0 0 1280 72
+
+butt_video_back_up.png butt_video_back_down.png  12 12  48 48
+
+标题：y:9  字号:36  行高:54
+
+video_play_bottom.png 0 588 1280 132
+
+butt_music_prev_up.png butt_music_prev_down.png 430 624  60 60
+
+butt_music_next_up.png  butt_music_next_down.png   610 624  60 60
+
+butt_image_rotate_up.png  butt_image_rotate_down.png   790 624  60 60
+
+
+
+=================================================================================
+
+收音机*：inside_background.png
+
+标题：x:586 y:10  字号:36 行高:54
+
+butt_tab_left_on.png  butt_tab_left_down.png 480 100  160 66
+
+文字：x:540 y:112  字号:28  行高:42
+
+butt_tab_right_on.png  butt_tab_right_down.png   640 100  160 66
+
+文字：x:700 y:112  字号:28  行高:42
+
+音效：x:240 y:219  字号:36  行高:54 颜色：#00FAFF
+
+频率数值：x:497 y:186  字号:120  行高:120
+
+频率单位：x:752 y:252  字号:48  行高:48
+
+butt_radio_searchpre_up.png  butt_radio_searchpre_down.png  112 326  120 120
+
+butt_radio_searchnext_up.png  butt_radio_searchnext_down.png  1048 326  120 120
+
+频率显示区域：278 356  724 106
+
+pict_radio_barmask_left.png  278 356  64 106
+
+pict_radio_barmask_right.png  938 356  64 106
+
+pict_radio_fmbar.png  y:356  2160 106
+
+pict_radio_ambar.png  y:356  2442 106
+
+pict_radio_mark.png y:334  8 85
+
+
+butt_radio_list_up.png  butt_radio_list_down.png  238 494  60 60
+
+butt_radio_search_up.png   butt_radio_search_down.png  418 494 60 60
+
+butt_music_play_up.png  butt_music_play_down.png 598 482 84 84
+
+butt_music_stop_up,png butt_music_stop_down,png 598 482 84 84
+
+butt_music_collection_up.png  butt_music_collection_down.png   802 494 60 60
+
+butt_music_scan_up.png  butt_music_scan_down.png  982 494 60 60
+
+
+
+收音机播放页电台列表：82 582 1118 118
+
+radio_play_list_up.png  radio_play_list_down.png  y:582  150 118
+
+文字：y:614  字号:36  行高:54  选中颜色：#00FAFF
+
+
+
+
+
+电台列表：inside_background.png
+
+butt_tab_left_on.png  butt_tab_left_down.png 480 100  160 66
+
+文字：x:504 y:112  字号:28  行高:42
+
+butt_tab_right_on.png  butt_tab_right_down.png   640 100  160 66
+
+文字：x:664 y:112  字号:28  行高:42
+
+
+我的收藏：110 182  1060 424
+
+radio_list_up.png  radio_list_down.png 
+
+x:110 322  534  746  858  y:182 394  宽:212  高:212
+
+频率数值：x:169  y:234  446  字号:48  行高:48
+
+频率单位：x:179  y:305  517  字号:36  行高:36
+
+
+butt_radiolist_search_up.png butt_radiolist_search_down.png  1108 625 48 48
+
+搜索文字： x:1168  y:622  字号:36  行高:64
+
+本地电台：同我的收藏
+
+
+
+电台搜索：inside_background.png
+
+pict_radio_search_input.png 232 157 816 72
+
+butt_radiolist_search_up.png butt_radiolist_search_down.png  256 169  48 48
+
+文字：x:320  y:157  字号:48  行高:72
+
+butt_radio_search_del_all_up.png  butt_radio_search_del_all_down.png  976 169  48 48
+
+
+butt_radio_search_num1_up.png  butt_radio_search_num1_down.png  232 237  198 94
+
+butt_radio_search_num2_up.png  butt_radio_search_num2_down.png  438 237  198 94
+
+butt_radio_search_num3_up.png  butt_radio_search_num3_down.png  644  237  198 94
+
+butt_radio_search_num4_up.png  butt_radio_search_num4_down.png  232  339  198 94
+
+butt_radio_search_num5_up.png  butt_radio_search_num5_down.png  438  339  198 94
+
+butt_radio_search_num6_up.png  butt_radio_search_num6_down.png  644  339  198 94
+
+butt_radio_search_num7_up.png  butt_radio_search_num7_down.png  232  441  198 94
+
+butt_radio_search_num8_up.png  butt_radio_search_num8_down.png  438  441  198 94
+
+butt_radio_search_num9_up.png  butt_radio_search_num9_down.png  644  441  198 94
+
+butt_radio_search_num10_up.png  butt_radio_search_num10_down.png  232  543  198 94
+
+butt_radio_search_num0_up.png  butt_radio_search_num0_down.png  438  543  198 94
+
+butt_radio_search_del_up.png  butt_radio_search_del_down.png  644  543  198 94
+
+butt_radio_search_enter_up.png  butt_radio_search_enter_down.png  850 237  198 400
+
+确认文字：文字：x:901  y:401  字号:48  行高:72 加粗
+
+
+=================================================================================
+
+蓝牙电话*：inside_background.png
+
+
+标题：x:568 y:10  字号:36 行高:54
+
+butt_tab_left_on.png  butt_tab_left_down.png 398 100  160 66
+
+文字：x:422  y:112  字号:28  行高:42
+
+butt_tab_center_on.png  butt_tab_center_down.png 560 100  160 66
+
+文字：x:584  y:112  字号:28  行高:42
+
+butt_tab_right_on.png  butt_tab_right_down.png 722 100  160 66
+
+文字：x:760  y:112  字号:28  行高:42
+
+
+拨号键盘：inside_background.png
+
+
+pict_radio_search_input.png 232 190 816 72
+
+butt_radiolist_search_up.png butt_radiolist_search_down.png  256 202  48 48
+
+文字：x:320  y:190  字号:48  行高:72
+
+butt_radio_search_del_all_up.png  butt_radio_search_del_all_down.png  976 202  48 48
+
+
+butt_calling_num1_up.png  butt_calling_num1_down.png  232 270  198 94
+
+butt_calling_num2_up.png  butt_calling_num2_down.png  438 270  198 94
+
+butt_calling_num3_up.png  butt_calling_num3_down.png  644  270  198 94
+
+butt_calling_num4_up.png butt_calling_num4_down.png  232  372  198 94
+
+butt_calling_num5_up.png  butt_calling_num5_down.png  438  372  198 94
+
+butt_calling_num6_up.png  butt_calling_num6_down.png  644  372  198 94
+
+butt_calling_num7_up.png  butt_calling_num7_down.png  232  474  198 94
+
+butt_calling_num8_up.png  butt_calling_num8_down.png  438   474  198 94
+
+butt_calling_num9_up.png  butt_calling_num9_down.png  644   474  198 94
+
+butt_calling_num10_up.png  butt_calling_num10_down.png  232  576  198 94
+
+butt_calling_num0_up.png butt_calling_num0_down.png  438  576  198 94
+
+butt_calling_num11_up.png butt_calling_num11_down.png  644  576  198 94
+
+butt_calling_del_up.png  butt_calling_del_down.png   850 270  198 196
+
+butt_calling_enter_up.png  butt_calling_enter_down.png  850 474  198 196
+
+拨号文字：文字：x:901  y:536  字号:48  行高:72 加粗
+
+
+蓝牙电话-呼入：
+
+pict_calling_bg.png  40 90  1200 180
+
+butt_calling_hangup_up.png butt_calling_hangup_down.png  136 114 84 84
+
+文字： x:146  y:214  字号:32  行高:32
+
+butt_calling_anwer_up.png butt_calling_anwer_down.png  292 114 84 84
+
+文字： x:302  y:214  字号:32  行高:32
+
+pic_calling_user.png 677 114  132 132
+
+电话号码：x:833  y:131  字号:48  行高:48
+
+通话状态：x:833  y:199  字号:30  行高:30
+
+pict_calling_phone_bg.png 415 420  451 300
+
+
+
+蓝牙电话-通话中：inside_background.png
+
+pict_calling_bg.png  40 90  1200 180
+
+butt_calling_hangup_up.png butt_calling_hangup_down.png  136 114 84 84
+
+文字： x:146  y:214  字号:32  行高:32
+
+pic_calling_user.png 677 114  132 132
+
+电话号码：x:833  y:131  字号:48  行高:48
+
+通话状态：x:833  y:199  字号:30  行高:30
+
+通话时长：x:1068  y:199  字号:30  行高:30
+
+
+butt_calling_mute_up.png  butt_calling_mute_down.png  330 360 84 84
+
+文字： x:340  y:460  字号:32  行高:32
+
+butt_calling_keyboard_up.png  butt_calling_keyboard_down.png  598 360 84 84
+
+文字： x:608  y:460  字号:32  行高:32
+
+butt_calling_recording_up.png  butt_calling_recording_down.png  866 360 84 84
+
+文字： x:876  y:460  字号:32  行高:32
+
+
+
+
+蓝牙电话-通话中-键盘：
+
+butt_calling_num1_up.png  butt_calling_num1_down.png  232 286  198 94
+
+butt_calling_num2_up.png  butt_calling_num2_down.png  438 286  198 94
+
+butt_calling_num3_up.png  butt_calling_num3_down.png  644  286  198 94
+
+butt_calling_num4_up.png butt_calling_num4_down.png  232  388  198 94
+
+butt_calling_num5_up.png  butt_calling_num5_down.png  438  388  198 94
+
+butt_calling_num6_up.png  butt_calling_num6_down.png  644  388  198 94
+
+butt_calling_num7_up.png  butt_calling_num7_down.png  232  490  198 94
+
+butt_calling_num8_up.png  butt_calling_num8_down.png  438   490  198 94
+
+butt_calling_num9_up.png  butt_calling_num9_down.png  644   490  198 94
+
+butt_calling_num10_up.png  butt_calling_num10_down.png  232  592  198 94
+
+butt_calling_num0_up.png butt_calling_num0_down.png  438  592  198 94
+
+butt_calling_num11_up.png butt_calling_num11_down.png  644  592  198 94
+
+butt_calling_enter_up.png  butt_calling_enter_down.png  850 286  198 400
+
+键盘隐藏文字：x:901  y:450  字号:48  行高:72 加粗
+
+
+
+通话记录：inside_background.png
+
+
+列表显示区域：168 190  944 488
+
+pict_callinglist_bg.png 168 190  944 68
+
+pict_callinglist_user.png 172 194  60 60
+
+名字：256 200 字号:32  行高:46
+
+pict_callinglist_state_1.png  pict_callinglist_state_2.png  pict_callinglist_state_3.png  485 206  36 36
+
+电话号码：x:545 y:206 字号:24  行高:36
+
+来电时间：x:857 y: 206 字号:24  行高:36
+
+butt_callinglist_detail_up.png  butt_callinglist_detail_down.png 1048 194 60 60 
+
+
+
+通话记录详情：inside_background.png
+
+
+pict_callinglist_user.png 168 112  60 60
+
+姓名：x:240  y:118  字号:32  行高:48
+
+电话号码：x:316  y:124  字号:24  行高:36
+
+butt_calllinglist_answer_up.png  butt_calllinglist_answer_down.png  1052 112  60 60
+
+
+列表显示区域：168 190  944 488 
+
+pict_callingdetail_bg.png 168 190  944 68
+
+pict_callinglist_state_1.png  pict_callinglist_state_2.png  pict_callinglist_state_3.png  192 206  36 36
+
+通话时间：x:240  y:206  字号:24  行高:36
+
+通话时长：x:994  y:206  字号:24  行高:36
+
+
+通讯录：inside_background.png
+
+列表显示区域：168 190  944 488
+
+pict_callinglist_bg.png 168 190  944 68
+
+pict_callinglist_user.png 172 194  60 60
+
+名字：256 200 字号:32  行高:46
+
+电话号码：x:610 y:206 字号:24  行高:36
+
+butt_calllinglist_answer_up.png  butt_calllinglist_answer_down.png  1048 194  60 60
+
+
+=================================================================================
+
+行车影像*：inside_background.png
+
+
+自检故障:
+
+pict_popalert_bg.png  390 224  500 272 
+
+pict_popalert_fault_icon.png  414 252  104 104
+
+文字：x:538  y:273  字号:36  行高:54
+
+butt_popalert_sure_up.png  butt_popalert_sure_down.png  556 404  168 64
+
+按钮文字：x:604  y:409  字号:36  行高:54 选中颜色：#00FAFF
+
+
+
+一般模式：
+
+前：
+
+显示区域：0 0  636 356
+
+pict_driving_image_direction.png 588 0  48 48
+
+文字： x:597 y:9  字号:30  行高:30
+
+后：
+
+显示区域：644 0  636 356
+
+pict_driving_image_direction.png 1232 0  48 48
+
+文字： x:1241 y:9  字号:30  行高:30
+
+pict_driving_image_video_recording.png 1172 12  48 48 
+
+左：
+
+显示区域：0 364  636 356
+
+pict_driving_image_direction.png 588 364  48 48
+
+文字： x:597 y:373  字号:30  行高:30
+
+右：
+
+显示区域：644 364  636 356
+
+pict_driving_image_direction.png 1232 364  48 48
+
+文字： x:1241 y:373  字号:30  行高:30
+ 
+
+pict_driving_image_tips_bg.png 0 173  60 374
+
+pict_driving_image_tips_icon.png  10 205 40 40
+
+文字： x:12  y:277  字号:30  行高:34  颜色：#E3D948
+
+pict_driving_image_tips_bg.png 1220 173  60 374
+
+文字： x:1232  y:207  字号:30  行高:34 颜色：#E3D948
+
+
+状态栏：
+
+video_play_top.png 0 0 1280 72
+
+butt_video_back_up.png butt_video_back_down.png  12 12  48 48
+
+标题：x:568  y:9  字号:36  行高:54
+
+pict_driving_image_bottom.png 0 612 1280 108
+
+butt_driving_image_video_up.png  butt_driving_image_video_down.png  385 636 60 60
+
+butt_driving_image_setting_up.png  butt_driving_image_setting_down.png  610  636  60 60  
+
+butt_driving_image_playback_up.png  butt_driving_image_playback_down.png  835 636  60  60 
+
+
+行车模式:
+
+后：
+
+显示区域：0 0  1280 720
+
+pict_driving_image_direction.png 1232 0  48 48
+
+文字： x:1241 y:9  字号:30  行高:30
+
+pict_driving_image_tips_bg.png 0 173  60 374
+
+pict_driving_image_tips_icon.png  10 205 40 40
+
+文字： x:12  y:277  字号:30  行高:34
+
+
+
+右转向模式:
+
+前：
+
+显示区域：0 0  392 356
+
+pict_driving_image_direction.png 344 0  48 48
+
+文字： x:353  y:9  字号:30  行高:30
+
+左：
+
+显示区域：0 364  392 356
+
+pict_driving_image_direction.png 344 364  48 48
+
+文字： x:353  y:373  字号:30  行高:30
+
+右：
+
+显示区域：400 0  880 720
+
+pict_driving_image_direction.png 1232 0  48 48
+
+文字： x:1241  y:9  字号:30  行高:30 
+
+
+pict_driving_image_tips_bg.png 0 173  60 374
+
+pict_driving_image_tips_icon.png  10 205 40 40
+
+文字： x:12  y:277  字号:30  行高:34
+
+
+左转向模式：
+
+左：
+
+显示区域：0 0  880 720
+
+pict_driving_image_direction.png 832 0  48 48
+
+文字： x:841 y:9  字号:30  行高:30
+
+前：
+
+显示区域：888 0  392 356
+
+pict_driving_image_direction.png 1232 0  48 48
+
+文字： x:1241 y:9  字号:30  行高:30
+
+右：
+
+显示区域：888 364  392 356
+
+pict_driving_image_direction.png 1232 364  48 48
+
+文字： x:1241 y:373  字号:30  行高:30
+
+
+pict_driving_image_tips_bg.png 0 173  60 374
+
+pict_driving_image_tips_icon.png  10 205 40 40
+
+文字： x:12  y:277  字号:30  行高:34
+
+
+倒车模式：
+
+左：
+
+显示区域：0 0  636 240
+
+pict_driving_image_direction.png 588 0  48 48
+
+文字： x:597 y:9  字号:30  行高:30
+
+右：
+
+显示区域：1232 0  636 240
+
+pict_driving_image_direction.png 1232 0  48 48
+
+文字： x:1241 y:9  字号:30  行高:30
+
+后：
+
+显示区域：0 248  1280 472
+
+pict_driving_image_direction.png 1232 248  48 48
+
+文字： x:1241 y:257  字号:30  行高:30
+ 
+
+pict_driving_image_tips_bg.png 0 173  60 374
+
+pict_driving_image_tips_icon.png  10 205 40 40
+
+文字： x:12  y:277  字号:30  行高:34
+
+
+
+行车影像设置：inside_background.png
+
+标题：x:586 y:10  字号:36 行高:54
+
+
+左侧导航：
+
+pict_driving_image_subnav_bg.png 0 74 280 538 
+
+butt_subnav_on.png   x:0  y:74 164  宽:280 高:90 
+
+文字：x:76  y:95 185  字号:32  行高:48  选中颜色:#00FAFF
+
+
+行车模式：
+
+行车录像：
+
+文字：x:360 y:118  字号:32 行高:48
+
+butt_setting_close.png butt_setting_open.png 1112 120 88 44
+
+pict_setting_line.png  360 178  840 2
+
+行车模式:
+
+文字：x:360 y:202  字号:32 行高:48
+
+pict_setting_line.png  360 276  840 2
+
+pic_driving_image_setting_direction_behind.png  436 302  312 232
+
+pic_driving_image_setting_direction_side.png  x:820 980 y:302   宽:161 高:232 
+
+文字：x:716 949 1109 y:310  字号:24 行高:24
+
+butt_setting_check_up.png  butt_setting_check_down.png   x:704 1097 y:490   宽:36 高:36 
+
+
+格式化:
+
+说明文字：x:526  y:245  字号:32  行高:48
+
+butt_driving_image_setting_format_up.png  butt_driving_image_setting_format_down.png  684 388 192 54
+
+按钮文字：x:720  y:397  字号:24  行高:36 选中颜色：#00FAFF
+
+
+
+行车影像回放：inside_background.png
+
+列表显示区域：190 130  872 344
+
+butt_driving_image_playback_folder_up.png  butt_driving_image_playback_folder_down.png  
+
+butt_driving_image_playback_filelist_up.png  butt_driving_image_playback_filelist_down.png 
+
+x:190 414  638 862   y:130 314  宽:200 高:160 
+
+文字： y:254  字号:18  行高:27
+
+butt_setting_page_up.png  butt_setting_page_down.png  butt_setting_page_disable.png
+
+上一页：347 510 136 54  文字：x:379 y:519  字号:24 行高:36  选中颜色：#00FAFF
+
+下一页：798 510 136 54  文字：x:830 y:519  字号:24 行高:36  选中颜色：#00FAFF
+
+
+行车影像回放播放：
+
+butt_driving_image_playback_vedio_back_up.png  butt_driving_image_playback_vedio_back_down.png  24 24  72 72
+
+时间：x:120 y:33  字号:36 行高:54
+
+pict_driving_image_direction.png 1232 0  48 48
+
+文字：x:1241 y:9  字号:30 行高:30
+
+video_play_bottom.png 0 588 1280 132
+
+butt_music_prev_up.png butt_music_prev_down.png 48 624  60 60
+
+butt_music_play_up.png  butt_music_play_down.png 168 612  84 84 
+
+butt_music_stop_up,png butt_music_stop_down,png 168 612  84 84 
+
+butt_music_next_up.png  butt_music_next_down.png   312 624  60 60
+
+播放时间：x420 y:636  字号:24  行高:36
+
+视频时长：x:1138 y:636  字号:24  行高:36
+
+prog_video_fore.png  prog_video_back.png 538 650 576 8
+
+
+
+
+=================================================================================
+
+系统设置*：inside_background.png
+
+
+标题：x:586 y:10  字号:36 行高:54
+
+左侧导航：
+
+pict_setting_subnav_bg.png 0 74 280 646 
+
+butt_subnav_on.png   x:0  y:74 164 254 344 434 524  宽:280 高:90 
+
+文字：x:76  y:95 185  275 365 455 545 字号:32  行高:48  选中颜色:#00FAFF
+
+
+显示模式：
+
+亮度模式：
+
+文字：x:360 y:130  字号:32 行高:48
+
+butt_setting_tab_left_up.png  butt_setting_tab_left_down.png  836 132 120 44
+
+butt_setting_tab_center_up.png  butt_setting_tab_center_down.png  958 132 120 44
+
+butt_setting_tab_right_up.png  butt_setting_tab_right_down.png  1080 132 120 44
+
+文字： x:872 994 1116  y:142 字号:24  行高:24
+
+pict_brightness_low.png 552 244 24 24
+
+pict_brightness_high.png  1100 238 36 36
+
+pro_brightness_back.png  pro_brightness_fore.png   588 252  500 8
+
+pict_brightness_mark.png  y:238  宽:24  高:44 
+
+pict_brightness_tips.png  y:202  宽:48  高:38
+
+ 文字： y:204  字号:24  行高:24
+
+pict_setting_line.png  360 300  840 2
+
+
+关屏时钟:
+
+文字：x:360 y:326  字号:32 行高:48
+
+butt_setting_choose_left.png butt_setting_choose_right.png  960 328 240 44
+
+文字： x:996 1116  y:338 字号:24  行高:24
+
+pict_setting_line.png  360 398  840 2
+
+
+时钟制式:
+
+文字：x:360 y:424  字号:32 行高:48
+
+butt_setting_choose_left.png butt_setting_choose_right.png  960 426 240 44
+
+文字： x:982 1102  y:436 字号:24  行高:24
+
+pict_setting_line.png  360 496  840 2
+
+
+声音设置:
+
+音量：
+
+文字：x:360 y:216  字号:32 行高:48
+
+pict_volume_low.png 604 222 36 36
+
+pict_volume_loud.png  1164 222 36 36
+
+pro_brightness_back.png  pro_brightness_fore.png   652 236  500 8
+
+pict_brightness_mark.png  y:222  宽:24  高:44 
+
+pict_brightness_tips.png  y:186  宽:48  高:38
+
+ 文字： y:188  字号:24  行高:24
+
+pict_setting_line.png  360 282  840 2
+
+
+屏幕点击音：x:360 y:368  字号:32 行高:48
+
+butt_setting_tab_left_up.png  butt_setting_tab_left_down.png  836 390 120 44
+
+butt_setting_tab_center_up.png  butt_setting_tab_center_down.png  958 390 120 44
+
+butt_setting_tab_right_up.png  butt_setting_tab_right_down.png  1080 390 120 44
+
+文字： x:872 994 1116  y:380 字号:24  行高:24
+
+pict_setting_line.png  360 440  840 2
+
+
+声场模式: x:360 y:526  字号:32 行高:48
+
+butt_setting_sound_field_up.png  butt_setting_sound_field_down.png  1032 528 168 44
+
+文字： x:1068  y:538 字号:24  行高:24
+
+pict_setting_line.png  360 598  840 2
+
+
+声场模式选择：inside_background.png
+
+显示区域：298 232 696 330
+
+butt_radio_sound_collect_up.png  butt_radio_sound_collect_down.png  
+
+x:292 540 788   y:232 358 484   宽:200    高:78
+
+
+
+蓝牙设置：
+
+butt_tab_left_on.png  butt_tab_left_down.png 457 100  160 66
+
+文字：x:481  y:112 字号:28  行高:42
+
+butt_tab_center_on.png  butt_tab_center_down.png 619 100  160 66
+
+文字：x:643  y:112  字号:28  行高:42
+
+butt_tab_center_on.png  butt_tab_center_down.png 781 100  160 66
+
+文字：x:805  y:112  字号:28  行高:42
+
+butt_tab_right_on.png  butt_tab_right_down.png 943 100  160 66
+
+文字：x:967  y:112 字号:28  行高:42
+
+
+蓝牙开启：
+
+蓝牙文字：x:360  y:256  字号:32  行高:48
+
+butt_setting_open.png butt_setting_close.png  1112 256 88 44
+
+pict_setting_line.png  360 328  840 2
+
+说明文字：x:360  y:354  字号:28  行高:42
+
+蓝牙设备名: 蓝牙开启文字颜色:#00FAFF  蓝牙关闭文字颜色:#666666
+
+
+蓝牙设备名修改:inside_background.png
+
+pict_bluetooth_name_input.png  231 157  818 72
+
+文字：x:255  y:157  字号:48  行高:72
+
+butt_radio_search_del_all_up.png  butt_radio_search_del_all_down.png  977 169  48 48
+
+butt_bluetooth_name_a_up.png butt_bluetooth_name_a_down.png 231 237  110 94
+
+butt_bluetooth_name_b_up.png butt_bluetooth_name_b_down.png 349 237  110 94
+
+butt_bluetooth_name_c_up.png butt_bluetooth_name_c_down.png 467 237  110 94
+
+butt_bluetooth_name_d_up.png butt_bluetooth_name_d_down.png 585 237  110 94
+
+butt_bluetooth_name_e_up.png butt_bluetooth_name_e_down.png 703 237  110 94
+
+butt_bluetooth_name_f_up.png butt_bluetooth_name_f_down.png 821 237  110 94
+
+butt_bluetooth_name_g_up.png butt_bluetooth_name_g_down.png 939 237  110 94
+
+butt_bluetooth_name_h_up.png butt_bluetooth_name_h_down.png 231 339  110 94
+
+butt_bluetooth_name_i_up.png butt_bluetooth_name_i_down.png 349 339  110 94
+
+butt_bluetooth_name_j_up.png butt_bluetooth_name_j_down.png 467 339  110 94
+
+butt_bluetooth_name_k_up.png butt_bluetooth_name_k_down.png 585 339  110 94
+
+butt_bluetooth_name_l_up.png butt_bluetooth_name_l_down.png 703 339  110 94
+
+butt_bluetooth_name_m_up.png butt_bluetooth_name_m_down.png 821 339  110 94
+
+butt_bluetooth_name_n_up.png butt_bluetooth_name_n_down.png 939 339  110 94
+
+butt_bluetooth_name_o_up.png butt_bluetooth_name_o_down.png 231 441  110 94
+
+butt_bluetooth_name_p_up.png butt_bluetooth_name_p_down.png 349 441  110 94
+
+butt_bluetooth_name_q_up.png butt_bluetooth_name_q_down.png 467 441  110 94
+
+butt_bluetooth_name_r_up.png butt_bluetooth_name_r_down.png 585 441  110 94
+
+butt_bluetooth_name_s_up.png butt_bluetooth_name_s_down.png 703 441  110 94
+
+butt_bluetooth_name_t_up.png butt_bluetooth_name_t_down.png 821 441  110 94
+
+butt_bluetooth_name_u_up.png butt_bluetooth_name_u_down.png 939 441  110 94
+
+butt_bluetooth_name_v_up.png butt_bluetooth_name_v_down.png 231 543  110 94
+
+butt_bluetooth_name_w_up.png butt_bluetooth_name_w_down.png 349 543  110 94
+
+butt_bluetooth_name_x_up.png butt_bluetooth_name_x_down.png 467 543  110 94
+
+butt_bluetooth_name_y_up.png butt_bluetooth_name_y_down.png 585 543  110 94
+
+butt_bluetooth_name_z_up.png butt_bluetooth_name_z_down.png 703 543  110 94
+
+butt_bluetooth_name_del_up.png butt_bluetooth_name_del_down.png 821 543  110 94
+
+butt_bluetooth_name_enter_up.png butt_bluetooth_name_enter_down.png 939 543  110 94
+
+确认文字：x:946  y:554  字号:48  行高:72 加粗
+
+
+匹配设备：
+
+文字：x:360  y:222  字号:32  行高:60
+
+butt_setting_phone_num_up.png  butt_setting_phone_num_down.png 800 222  400 60
+
+手机信息：x:872  y:232  字号:28  行高:42
+
+pict_setting_line.png  360 306  840 2
+
+文字：x:360  y:332  字号:32  行高:60
+
+butt_setting_phone_num_up.png butt_setting_phone_num_down.png 
+
+x:800 y:332 404 476  宽:400  高:60 
+
+手机信息：x:872  y:341 413 485  字号:28  行高:42
+
+butt_setting_mobile_connection_up.png  butt_setting_mobile_connection_down.png
+
+连接：847 568 112 54  文字：x:879  y:577   字号:24  行高:36
+
+断开：1061 568 112 54  文字：x:1093  y:577   字号:24  行高:36
+
+
+删除设备：
+
+文字：x:360  y:222  字号:32  行高:60
+
+butt_setting_phone_num_up.png  800 222  400 60
+
+手机信息：x:872  y:232  字号:28  行高:42
+
+pict_setting_line.png  360 306  840 2
+
+文字：x:360  y:332  字号:32  行高:60
+
+butt_setting_phone_num_up.png butt_setting_phone_num_down.png 
+
+x:800 y:332 404 476  宽:400  高:60 
+
+手机信息：x:872  y:341 413 485  字号:28  行高:42
+
+butt_setting_mobile_connection_up.png  butt_setting_mobile_connection_down.png
+
+确认：954 568 112 54  文字：x:986  y:577   字号:24  行高:36
+
+
+密码设置：
+
+pict_radio_search_input.png 372 190 816 72
+
+文字：x:396  y:190  字号:48  行高:72
+
+butt_radio_search_del_all_up.png  butt_radio_search_del_all_down.png  1116 202  48 48
+
+
+butt_calling_num1_up.png  butt_calling_num1_down.png  372 270  198 94
+
+butt_calling_num2_up.png  butt_calling_num2_down.png  578 270  198 94
+
+butt_calling_num3_up.png  butt_calling_num3_down.png  784  270  198 94
+
+butt_calling_num4_up.png butt_calling_num4_down.png  372  372  198 94
+
+butt_calling_num5_up.png  butt_calling_num5_down.png  578  372  198 94
+
+butt_calling_num6_up.png  butt_calling_num6_down.png  784  372  198 94
+
+butt_calling_num7_up.png  butt_calling_num7_down.png  372  474  198 94
+
+butt_calling_num8_up.png  butt_calling_num8_down.png  578   474  198 94
+
+butt_calling_num9_up.png  butt_calling_num9_down.png  784   474  198 94
+
+butt_calling_num10_up.png  butt_calling_num10_down.png  372  576  198 94
+
+butt_calling_num0_up.png butt_calling_num0_down.png  578  576  198 94
+
+butt_calling_num11_up.png butt_calling_num11_down.png  784  576  198 94
+
+butt_calling_del_up.png  butt_calling_del_down.png   990 270  198 196
+
+butt_calling_enter_up.png  butt_calling_enter_down.png  990 474  198 196
+
+确认文字：文字：x:1041  y:536  字号:48  行高:72 加粗
+
+
+系统信息：
+
+pict_setting_system_infor_bg.png  x:465 y:192 276 360   宽:630  高:60 
+
+文字：x:489  y:201  字号:28  行高:42 
+
+
+出厂设置：
+
+说明文字：x:526  y:245  字号:32  行高:48
+
+butt_driving_image_setting_format_up.png  butt_driving_image_setting_format_down.png  684 388 192 54
+
+按钮文字：x:708  y:397  字号:24  行高:36 选中颜色：#00FAFF
+
+
+
+弹出层：
+
+pict_popalert_bg.png  530 224  500 272 
+
+pict_popalert_icon.png  554 252  104 104
+
+文字：x:678  y:273  字号:36  行高:54
+
+butt_popalert_sure_up.png  butt_popalert_sure_down.png  584 404  168 64
+
+按钮文字：x:632  y:409  字号:36  行高:54 选中颜色：#00FAFF
+
+butt_popalert_reset_up.png  butt_popalert_sure_down.png  808 404  168 64
+
+按钮文字：x:856  y:409  字号:36  行高:54 选中颜色：#00FAFF
+
+
+
+系统更新：
+
+butt_tab_left_on.png  butt_tab_left_down.png 620 100  160 66
+
+文字：x:644 y:112  字号:28  行高:42
+
+butt_tab_right_on.png  butt_tab_right_down.png  780 100  160 66
+
+文字：x:804 y:112  字号:28  行高:42
+
+
+说明文字：x:560  y:246  字号:32  行高:48
+
+butt_driving_image_setting_format_up.png  butt_driving_image_setting_format_down.png  684 414 192 54
+
+按钮文字：x:732  y:423  字号:24  行高:36 选中颜色：#00FAFF
+
+
+系统更新：正在更新
+
+正在更新文字：x:661  y:246  字号:48  行高:72
+
+进度条:
+
+进度文字:x:448 y:354 字号:24 行高:24
+
+pro_brightness_back.png  pro_brightness_fore.png   534 362  500 8
+
+百分比文字:x:1063 y:354 字号:24 行高:24
+
+butt_driving_image_setting_format_up.png  butt_driving_image_setting_format_down.png  684 414 192 54
+
+按钮文字：x:732  y:423  字号:24  行高:36 选中颜色：#00FAFF
+
+
+=================================================================================
+
+诊断维护*：inside_background.png
+
+标题：x:586 y:10  字号:36 行高:54
+
+butt_diagnosis_fault_up.png butt_diagnosis_fault_down.png  408 228 192 192 
+
+文字：x:448  y:436  字号:28  行高:42 
+
+butt_diagnosis_maintenance_up.png butt_diagnosis_maintenance_down.png  680 228 192 192 
+
+文字：x:720  y:436  字号:28  行高:42 
+
+
+
+故障诊断：
+
+butt_diagnosis_abs_up.png butt_diagnosis_abs_down.png  330 289 84 84 
+
+文字：x:325  y:397  字号:24  行高:32 
+
+butt_diagnosis_warning_up.png butt_diagnosis_warning_down.png  598 289 84 84 
+
+文字：x:580  y:397  字号:24  行高:32 
+
+butt_diagnosis_controller_up.png butt_diagnosis_controller_down.png  866 289 84 84 
+
+文字：x:848  y:397  字号:24  行高:32 
+
+pict_diagnosis_tips.png  x:387 655 923  y:281   32 32 
+
+数量：x:396 664 932  y:283  字号:24  行高:24
+
+
+故障诊断详情：
+
+pict_fault_spn_bg.png  147 106   95 60
+
+文字：x:171  y:121  字号:20  行高:30 标题加粗
+
+pict_fault_fmi_bg.png  246 106 88 60
+
+文字：x:270  y:121  字号:20  行高:30 标题加粗
+
+pict_fault_description_bg.png  338 106 395 60
+
+文字：x:362  y:121  字号:20  行高:30 标题加粗
+
+pict_fault_repair_bg.png  737 106 396 60
+
+文字：x:761  y:121  字号:20  行高:30 标题加粗
+
+
+使用维护：pdf_view_bg.png
+
+video_play_top.png 0 0 1280 72
+
+butt_video_back_up.png butt_video_back_down.png  12 12  48 48
+
+标题：x:568 y:9  字号:36  行高:54
+
+页码：x:1170  y:18  字号:24  行高:36
+
+pdf_view.png 466 80 372 500
+
+video_play_bottom.png 0 588 1280 132
+
+butt_music_prev_up.png butt_music_prev_down.png 430 624  60 60
+
+butt_music_next_up.png  butt_music_next_down.png   610 624  60 60
+
+butt_radio_search_up.png  butt_radio_search_down.png  790 624  60 60
+
+
+使用维护文件页码跳转:
+
+pict_pdf_search_input.png 335 157 610 72
+
+butt_radiolist_search_up.png butt_radiolist_search_down.png  359 169  48 48
+
+文字：x:423  y:157  字号:48  行高:72
+
+butt_radio_search_del_all_up.png  butt_radio_search_del_all_down.png  873 169  48 48
+
+
+butt_radio_search_num1_up.png  butt_radio_search_num1_down.png  335 237  198 94
+
+butt_radio_search_num2_up.png  butt_radio_search_num2_down.png  541 237  198 94
+
+butt_radio_search_num3_up.png  butt_radio_search_num3_down.png  747  237  198 94
+
+butt_radio_search_num4_up.png  butt_radio_search_num4_down.png  335  339  198 94
+
+butt_radio_search_num5_up.png  butt_radio_search_num5_down.png  541  339  198 94
+
+butt_radio_search_num6_up.png  butt_radio_search_num6_down.png  747  339  198 94
+
+butt_radio_search_num7_up.png  butt_radio_search_num7_down.png  335  441  198 94
+
+butt_radio_search_num8_up.png  butt_radio_search_num8_down.png  541  441  198 94
+
+butt_radio_search_num9_up.png  butt_radio_search_num9_down.png  747  441  198 94
+
+butt_pdf_page_enter_up.png  butt_pdf_page_enter_down.png  335  543  198 94
+
+确认文字：x:386  y:554  字号:48  行高:72 加粗
+
+butt_radio_search_num0_up.png  butt_radio_search_num0_down.png  541  543  198 94
+
+butt_radio_search_del_up.png  butt_radio_search_del_down.png  747  543  198 94
+
+
+使用维护文件搜索:
+
+pict_radio_search_input.png 232 106 816 72
+
+butt_radiolist_search_up.png butt_radiolist_search_down.png  256 118  48 48
+
+文字：x:320  y:106  字号:48  行高:72
+
+butt_radio_search_del_all_up.png  butt_radio_search_del_all_down.png  976 118  48 48
+
+pict_radio_search_input.png 232 186 816 72
+
+pict_pdf_serch_word_down.png 256 188 68 68 
+
+文字：x:266  y:198  字号:48  行高:48
+
+pict_pdf_serch_writearea.png 232 266 610 400
+
+butt_calling_del_up.png  butt_calling_del_down.png   850 265  198 196
+
+butt_calling_enter_up.png  butt_calling_enter_down.png  850 469  198 196
+文字：x:901  y:531  字号:48  行高:72 加粗
+
+
+使用维护文件搜索结果:
+
+video_play_bottom.png 0 588 1280 132
+
+butt_radio_search_del_all_up.png  butt_radio_search_del_all_down.png  87 630  48 48
+
+pict_radio_search_input.png 159 618 816 72
+
+文字：x:183  y:618  字号:48  行高:72
+
+butt_pdf_serch_result_pre_up.png butt_pdf_serch_result_pre_down.png 999 630  48 48
+
+数值：x:177  y:618  字号:48  行高:72
+
+butt_pdf_serch_result_next_up.png butt_pdf_serch_result_next_down.png 1144 630 48 48
+
+
+butt_pdf_serch_result_tips.png 16 8
+
+
+=================================================================================
+
+开机页面*：power_on_bg.png
+
+

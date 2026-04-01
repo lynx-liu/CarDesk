@@ -1,0 +1,2641 @@
+@charset "utf-8";
+
+/* CSS Document */
+body,
+div,
+span,
+h1,
+h2,
+h3,
+h4,
+a,
+p,
+img,
+ul,
+li,
+ol,
+dl,
+dt,
+dd,
+input {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	list-style: none;
+	font-weight: normal;
+	box-sizing: border-box;
+}
+
+body {
+	color: #fff;
+	font-size: 18px;
+	font-family: "思源黑体";
+}
+
+a {
+	color: #fff;
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: none;
+}
+
+
+/*-----------------------index-------------------------*/
+#box {
+	width: 1280px;
+	height: 720px;
+	background: url(../images/background.png) no-repeat center center;
+	margin: 50px auto;
+}
+
+.top {
+	width: 1280px;
+	height: 82px;
+	background: url(../images/topbar.png) no-repeat;
+	position: relative;
+}
+
+.top h1 {
+	font-size: 36px;
+	line-height: 72px;
+	text-align: center;
+
+}
+
+.top .top_icon {
+
+	position: absolute;
+	right: 16px;
+	top: 0;
+
+}
+
+
+.top .top_icon li {
+	float: left;
+	width: 48px;
+	height: 48px;
+	margin-top: 12px;
+	margin-left: 16px;
+	font-size: 36px;
+	line-height: 48px;
+
+}
+
+.top .top_icon li:nth-child(1) {
+
+	background: url(../images/pict_buetooth.png) no-repeat;
+
+}
+
+.top .top_icon li:nth-child(1):hover {
+
+	background: url(../images/pict_buetooth_on.png) no-repeat;
+
+}
+
+.top .top_icon li:nth-child(2) {
+
+	background: url(../images/pict_usb.png) no-repeat;
+}
+
+.top .top_icon li:nth-child(2):hover {
+
+	background: url(../images/pict_usb_on.png) no-repeat;
+}
+
+.top .top_icon li:nth-child(3) {
+
+	width: auto;
+	padding-left: 52px;
+	background: url(../images/pict_volume.png) no-repeat;
+
+}
+
+.top .top_icon li:nth-child(3):hover {
+
+	background: url(../images/pict_volume_mute.png) no-repeat;
+}
+
+.top .top_icon li:nth-child(3):hover span {
+
+	visibility: hidden
+}
+
+.top .top_icon li:nth-child(4) {
+
+	width: auto;
+}
+
+
+
+.nav ul {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	padding: 34px 118px;
+}
+
+.nav ul li a {
+	display: block;
+	width: 216px;
+	height: 271px;
+
+}
+
+.nav ul li a {
+	background: url(../images/butt_home_radio_up.png);
+	cursor: pointer;
+}
+
+.nav ul li a:hover {
+	background: url(../images/butt_home_radio_down.png);
+}
+
+.nav ul li:nth-child(2) a {
+	background: url(../images/butt_home_driving_image_up.png);
+}
+
+.nav ul li:nth-child(2) a:hover {
+	background: url(../images/butt_home_driving_image_down.png);
+}
+
+.nav ul li:nth-child(3) a {
+	background: url(../images/butt_home_video_play_up.png);
+}
+
+.nav ul li:nth-child(3) a:hover {
+	background: url(../images/butt_home_video_play_down.png);
+}
+
+.nav ul li:nth-child(4) a {
+	background: url(../images/butt_home_image_viewing_up.png);
+}
+
+.nav ul li:nth-child(4) a:hover {
+	background: url(../images/butt_home_image_viewing_down.png);
+}
+
+.nav ul li:nth-child(5) a {
+	background: url(../images/butt_home_diagnostic_maintenance_up.png);
+}
+
+.nav ul li:nth-child(5) a:hover {
+	background: url(../images/butt_home_diagnostic_maintenance_down.png);
+}
+
+.nav ul li:nth-child(6) a {
+	background: url(../images/butt_home_bluetooth_phone_up.png);
+}
+
+.nav ul li:nth-child(6) a:hover {
+	background: url(../images/butt_home_bluetooth_phone_down.png);
+}
+
+.nav ul li:nth-child(7) a {
+	background: url(../images/butt_home_audio_play_up.png);
+}
+
+.nav ul li:nth-child(7) a:hover {
+	background: url(../images/butt_home_audio_play_down.png);
+}
+
+.nav ul li:nth-child(8) a {
+	background: url(../images/butt_home_system_settings_up.png);
+}
+
+.nav ul li:nth-child(8) a:hover {
+	background: url(../images/butt_home_system_settings_down.png);
+}
+
+/*-----------------------音频播放-------------------------*/
+
+#box.boxin {
+	background: url(../images/inside_background.png) no-repeat center center;
+	position: relative;
+	;
+}
+
+.top .top_icon_home {
+	left: 12px;
+	top: 12px;
+	width: 48px;
+	height: 48px;
+	background: url(../images/pict_home_up.png);
+}
+
+.top .top_icon_home:hover {
+
+	background: url(../images/pict_home_down.png);
+}
+
+
+.top .top_icon_home a {
+	display: block;
+	height: 48px;
+}
+
+.tab {
+	width: 320px;
+	height: 66px;
+	margin: 18px auto 0;
+}
+
+.tab li {
+	width: 160px;
+	height: 66px;
+	float: left;
+	background: url(../images/butt_tab_left_on.png);
+	cursor: pointer;
+	font-size: 28px;
+	line-height: 66px;
+	text-align: center;
+}
+
+.tab li:last-child {
+
+	background: url(../images/butt_tab_right_down.png);
+}
+
+.music_con {
+	width: 1040px;
+	margin: 16px auto;
+}
+
+.music_detail {
+	display: flex;
+}
+
+.music_img {
+	width: 210px;
+}
+
+.music_mes {
+	flex: 1;
+	padding-left: 80px;
+
+}
+
+.music_mes p {
+	font-size: 48px;
+	line-height: 72px;
+	margin-bottom: 4px;
+}
+
+.music_mes li {
+	height: 40px;
+	padding-left: 56px;
+	background: url(../images/pict_music_singer_icon.png) no-repeat;
+	font-size: 32px;
+	line-height: 40px;
+	margin-top: 24px;
+
+}
+
+.music_mes li:last-child {
+	background-image: url(../images/pict_music_album_icon.png);
+}
+
+.music_func {
+	width: 80px;
+}
+
+.music_func ul {
+	display: flex;
+	height: 210px;
+	flex-direction: column;
+	justify-content: space-between;
+	padding: 8px 0;
+
+
+}
+
+.music_func li {
+
+	height: 60px;
+	background: url(../images/butt_music_collection_up.png) no-repeat right;
+
+}
+
+.music_func li:hover {
+	background-image: url(../images/butt_music_collection_down.png);
+}
+
+.music_func li:last-child {
+	background-image: url(../images/butt_music_scan_up.png);
+}
+
+.music_func li:last-child:hover {
+	background-image: url(../images/butt_music_scan_down.png);
+}
+
+.music_control {
+	margin-top: 16px;
+}
+
+.music_pro {
+	display: flex;
+}
+
+.music_pro div {
+	flex: 1;
+	padding: 14px 24px 0;
+
+}
+
+.music_pro div img {
+	display: block;
+}
+
+.music_pro span {
+	font-size: 24px;
+	line-height: 36px;
+}
+
+.music_btn ul {
+	display: flex;
+	justify-content: space-around;
+	margin-top: 10px;
+}
+
+.music_btn li {
+	width: 60px;
+	height: 60px;
+	margin-top: 12px;
+	background: url(../images/butt_music_list_up.png) no-repeat;
+}
+
+.music_btn li:hover {
+	background-image: url(../images/butt_music_list_down.png);
+}
+
+.music_btn li:nth-child(2) {
+
+	background: url(../images/butt_music_prev_up.png) no-repeat;
+}
+
+.music_btn li:nth-child(2):hover {
+
+	background: url(../images/butt_music_prev_down.png) no-repeat;
+}
+
+.music_btn li:nth-child(3) {
+	width: 84px;
+	height: 84px;
+	margin-top: 0;
+	background: url(../images/butt_music_play_up.png) no-repeat;
+}
+
+.music_btn li:nth-child(3):hover {
+
+	background: url(../images/butt_music_stop_up.png) no-repeat;
+}
+
+.music_btn li:nth-child(4) {
+
+	background: url(../images/butt_music_next_up.png) no-repeat;
+}
+
+.music_btn li:nth-child(4):hover {
+
+	background: url(../images/butt_music_next_down.png) no-repeat;
+}
+
+.music_btn li:nth-child(5) {
+
+	background: url(../images/butt_music_circle_up.png) no-repeat;
+}
+
+.music_btn li:nth-child(5):hover {
+
+	background: url(../images/butt_music_random_up.png) no-repeat;
+}
+
+.music_play_list {
+	margin-top: 24px;
+	overflow: auto;
+}
+
+.music_play_list::-webkit-scrollbar {
+	display: none
+}
+
+.music_play_list ul {
+	display: flex;
+	width: 1128px;
+	margin-left: -44px;
+}
+
+.music_play_list li {
+
+	width: 120px;
+	height: 120px;
+	background: url(../images/music_play_musiclist_show.png) no-repeat;
+	border: 1px solid #0068FF;
+	margin: 0 12px;
+
+}
+
+
+.music_play_list li span {
+	display: block;
+	background: rgba(0, 0, 0, .75);
+	line-height: 30px;
+	text-align: center;
+	font-size: 20px;
+	border-radius: 25px 25px 0 0;
+	margin-top: 88px;
+
+
+}
+
+.music_play_list li:hover {
+	border: 2px solid #00FAFF;
+
+}
+
+.music_play_list li:hover span {
+
+	margin-top: 86px;
+}
+
+
+
+
+/*---音频列表--*/
+
+.back {
+	width: 60px;
+	height: 60px;
+	background: url(../images/butt_back_up.png) no-repeat;
+	position: absolute;
+	left: 60px;
+	top: 103px;
+}
+
+.back:hover {
+	background: url(../images/butt_back_down.png) no-repeat;
+}
+
+.music_list_con {
+	width: 944px;
+	margin: 24px auto 36px;
+}
+
+.music_list_con ul {
+	display: flex;
+	height: 356px;
+	flex-wrap: wrap;
+	align-content: space-between;
+	justify-content: space-between;
+}
+
+.music_list_con li {
+	width: 160px;
+	height: 160px;
+	background: url(../images/music_musiclist_show.png) no-repeat;
+
+}
+
+
+.music_list_con li div {
+	width: 160px;
+	height: 160px;
+	background: url(../images/music_musiclist_up.png) no-repeat;
+	padding-top: 117px;
+}
+
+.music_list_con li span {
+	display: block;
+
+	line-height: 42px;
+	text-align: center;
+	font-size: 20px;
+	border-radius: 25px 25px 0 0;
+}
+
+.music_list_con li:hover div {
+	background: url(../images/music_musiclist_down.png) no-repeat;
+}
+
+.music_list_con li.music_file {
+	background: none;
+}
+
+
+.music_list_con li.music_file div {
+	background: url(../images/music_musiclist_file_up.png) no-repeat;
+
+}
+
+
+.music_list_con li.music_file:hover div {
+	background: url(../images/music_musiclist_file_down.png) no-repeat;
+}
+
+
+
+.music_list_path {
+	height: 50px;
+	background: rgba(255, 255, 255, .1);
+	border: 1px solid #0068FF;
+	border-radius: 5px;
+	font-size: 24px;
+	line-height: 48px;
+	padding-left: 24px;
+	margin-top: 44px;
+}
+
+
+
+/*---蓝牙音乐--*/
+
+.buetooth_tab li {
+
+	background: url(../images/butt_tab_left_down.png);
+
+}
+
+.buetooth_tab li:last-child {
+
+	background: url(../images/butt_tab_right_on.png);
+}
+
+.misic_buetooth_con {
+	margin-top: 24px;
+}
+
+.misic_buetooth_con .music_img {
+	width: 320px;
+	height: 320px;
+}
+
+.misic_buetooth_con .music_mes {
+	padding-top: 60px;
+}
+
+.misic_buetooth_con .music_control {
+	margin-top: 44px;
+}
+
+.misic_buetooth_con .music_btn ul {
+
+	width: 444px;
+	margin: 14px auto;
+}
+
+
+
+/*-----------------------视频播放-------------------------*/
+
+.video_list_con {
+	margin-top: 108px;
+}
+
+.video_play_con {
+	position: relative;
+	height: 720px;
+}
+
+.video_play_top {
+	width: 1280px;
+	height: 72px;
+	position: absolute;
+	top: 0;
+	background: rgba(0, 0, 0, .5);
+}
+
+.video_play_top span {
+	position: absolute;
+	display: block;
+	width: 48px;
+	height: 48px;
+	background: url(../images/butt_video_back_up.png);
+	left: 12px;
+	top: 12px;
+}
+
+.video_play_top span:hover {
+
+	background: url(../images/butt_video_back_down.png);
+}
+
+.video_play_top h1 {
+	text-align: center;
+	line-height: 72px;
+	font-size: 36px;
+}
+
+.video_play_bottom {
+	width: 1280px;
+	height: 132px;
+	position: absolute;
+	bottom: 0;
+	background: rgba(0, 0, 0, .5);
+	padding: 24px 48px;
+	display: flex;
+}
+
+
+.video_play_btn {
+	width: 324px;
+}
+
+.video_play_btn ul {
+	display: flex;
+	justify-content: space-between;
+
+}
+
+.video_play_btn li {
+	width: 60px;
+	height: 60px;
+	margin-top: 12px;
+	background: url(../images/butt_music_prev_up.png) no-repeat;
+}
+
+.video_play_btn li:hover {
+	background-image: url(../images/butt_music_prev_down.png);
+}
+
+
+.video_play_btn li:nth-child(2) {
+	width: 84px;
+	height: 84px;
+	margin-top: 0;
+	background: url(../images/butt_music_play_up.png) no-repeat;
+}
+
+.video_play_btn li:nth-child(2):hover {
+
+	background: url(../images/butt_music_stop_up.png) no-repeat;
+}
+
+.video_play_btn li:nth-child(3) {
+
+	background: url(../images/butt_music_next_up.png) no-repeat;
+}
+
+.video_play_btn li:nth-child(3):hover {
+
+	background: url(../images/butt_music_next_down.png) no-repeat;
+}
+
+.video_play_control {
+	flex: 1;
+	padding: 24px 0 0 48px;
+	display: flex;
+	justify-content: space-between;
+	width: 836px;
+
+}
+
+.video_play_control div {
+	padding: 14px 24px;
+	width: 624px;
+
+}
+
+.video_play_control img {
+	display: block;
+	height: 8px;
+
+}
+
+.video_play_control span {
+	font-size: 24px;
+	line-height: 36px;
+}
+
+
+/*-----------------------图片浏览-------------------------*/
+
+.image_list_con li div {
+	background-image: url(../images/image_imagellist_up.png);
+
+}
+
+
+.image_list_con li:hover div {
+	background-image: url(../images/image_imagellist_down.png);
+
+}
+
+
+.image_view_btn {
+	width: 100%;
+}
+
+
+.image_view_btn ul {
+	width: 420px;
+	margin: 0 auto;
+	display: flex;
+	justify-content: space-between;
+
+}
+
+
+.image_view_btn li:nth-child(4) {
+
+	background: url(../images/butt_image_rotate_up.png) no-repeat;
+}
+
+.image_view_btn li:nth-child(4):hover {
+
+	background: url(../images/butt_image_rotate_down.png) no-repeat;
+}
+
+
+/*-----------------------收音机-------------------------*/
+
+.radio_con {
+	margin-top: 20px;
+}
+
+.radio_detail {
+	position: relative;
+	height: 120px;
+}
+
+.radio_detail h2 {
+	font-size: 120px;
+	line-height: 120px;
+	text-align: center;
+
+}
+
+.radio_detail h2 span:first-child {
+	margin-left: 33px;
+}
+
+.radio_detail h2 span:last-child {
+	font-size: 48px;
+	font-size: 48px;
+	margin-left: 21px;
+}
+
+
+.radio_detail>span {
+	position: absolute;
+	left: 240px;
+	font-size: 36px;
+	color: #00FAFF;
+	line-height: 120px;
+}
+
+.radio_control {
+
+	width: 1056px;
+	margin: 20px auto;
+}
+
+.radio_pro {
+
+	display: flex;
+	justify-content: space-between;
+	position: relative;
+
+}
+
+.radio_pro>span {
+	display: block;
+	width: 120px;
+	height: 120px;
+	background: url(../images/butt_radio_searchpre_up.png) no-repeat;
+
+}
+
+.radio_pro>span:hover {
+	background-image: url(../images/butt_radio_searchpre_down.png);
+
+}
+
+.radio_pro>span:nth-child(3) {
+	background-image: url(../images/butt_radio_searchnext_up.png);
+
+}
+
+.radio_pro>span:nth-child(3):hover {
+	background-image: url(../images/butt_radio_searchnext_down.png);
+
+}
+
+.radio_pro div {
+	width: 720px;
+	height: 106px;
+	overflow-x: auto;
+
+
+	margin-top: 30px;
+	overflow-y: hidden;
+
+}
+
+.radio_pro div::-webkit-scrollbar {
+	display: none
+}
+
+.radio_pro div>img {
+	margin-left: -568px;
+
+}
+
+.radio_pro::before,
+.radio_pro::after {
+	content: " ";
+	display: block;
+	position: absolute;
+	left: 166px;
+	width: 64px;
+	height: 106px;
+	background: url(../images/pict_radio_barmask_left.png) no-repeat;
+
+
+}
+
+.radio_pro::after {
+
+	background-image: url(../images/pict_radio_barmask_right.png);
+	left: auto;
+	right: 166px;
+	top: 0;
+}
+
+.radio_mark {
+	position: absolute;
+	display: block;
+	width: 8px;
+	height: 85px;
+	bottom: 43px;
+	left: 50%;
+	background: none;
+
+}
+
+.radio_btn {
+	width: 804px;
+	margin: 20px auto;
+
+}
+
+.radio_btn ul {
+
+	justify-content: space-between;
+
+}
+
+.radio_btn ul li:nth-child(1) {
+	background-image: url(../images/butt_radio_list_up.png);
+}
+
+.radio_btn ul li:nth-child(1):hover {
+	background-image: url(../images/butt_radio_list_down.png);
+}
+
+.radio_btn ul li:nth-child(2) {
+	background-image: url(../images/butt_radio_search_up.png);
+}
+
+.radio_btn ul li:nth-child(2):hover {
+	background-image: url(../images/butt_radio_search_down.png);
+}
+
+.radio_btn ul li:nth-child(4) {
+	background-image: url(../images/butt_music_collection_up.png);
+}
+
+.radio_btn ul li:nth-child(4):hover {
+	background-image: url(../images/butt_music_collection_down.png);
+}
+
+.radio_btn ul li:nth-child(5) {
+	background-image: url(../images/butt_music_scan_up.png);
+}
+
+.radio_btn ul li:nth-child(5):hover {
+	background-image: url(../images/butt_music_scan_down.png);
+}
+
+
+.radio_play_list {
+	width: 1118px;
+	margin: 16px auto;
+	overflow: auto;
+}
+
+.radio_play_list::-webkit-scrollbar {
+	display: none
+}
+
+.radio_play_list ul {
+	display: flex;
+	width: 1320px;
+	margin-left: -101px;
+}
+
+.radio_play_list li {
+	width: 150px;
+	height: 118px;
+	background: url(../images/radio_play_list_up.png);
+	font-size: 36px;
+	line-height: 118px;
+	text-align: center;
+
+}
+
+.radio_play_list li:hover,
+.radio_play_list li.radio_on {
+	background: url(../images/radio_play_list_down.png);
+	color: #00FAFF;
+}
+
+
+/*---音效选择--*/
+
+.radio_sound {
+	width: 696px;
+	margin: 150px auto 0;
+}
+
+.radio_sound ul {
+	height: 330px;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	align-content: space-around;
+}
+
+.radio_sound li {
+	width: 200px;
+	height: 78px;
+	font-size: 35px;
+	line-height: 76px;
+	text-align: center;
+	border: 1px solid #0068FF;
+}
+
+.radio_sound li:hover,
+.radio_sound li.on {
+	line-height: 74px;
+	border: 2px solid #00FAFF;
+}
+
+
+
+/*---电台列表--*/
+
+.radio_list_con {
+	width: 1060px;
+	margin: 16px auto;
+}
+
+.radio_list_con ul {
+	height: 424px;
+	width: 1060px;
+}
+
+.radio_list_con ul li {
+	width: 212px;
+	height: 212px;
+
+}
+
+.radio_list_con ul li {
+	background-image: url(../images/radio_list_up.png);
+}
+
+.radio_list_con ul li:hover {
+	background-image: url(../images/radio_list_down.png);
+}
+
+.radio_list_con ul li span {
+	font-size: 48px;
+	line-height: 48px;
+	text-align: center;
+	margin-top: 52px;
+
+}
+
+.radio_list_con ul li span:last-child {
+	font-size: 36px;
+	line-height: 36px;
+
+	margin-top: 24px;
+
+}
+
+.radio_search {
+	float: right;
+	height: 54px;
+	background: url(../images/butt_radiolist_search_up.png) no-repeat left center;
+	padding-left: 60px;
+	line-height: 54px;
+	font-size: 36px;
+	margin-right: 40px;
+
+}
+
+.radio_search:hover {
+
+	background: url(../images/butt_radiolist_search_down.png) no-repeat left center;
+	color: #00FAFF;
+
+}
+
+/*---电台搜索--*/
+.radio_search_con {
+	width: 816px;
+	margin: 75px auto;
+}
+
+.radio_search_con div {
+	position: relative;
+}
+
+.radio_search_con div input {
+	display: block;
+	width: 816px;
+	height: 72px;
+	border: 1px solid #0068FF;
+	color: #fff;
+	font-size: 48px;
+	padding-left: 88px;
+	background: url(../images/butt_radiolist_search_up.png) no-repeat 24px center;
+}
+
+.radio_search_con>div>span {
+	display: block;
+	width: 48px;
+	height: 48px;
+	background: url(../images/butt_radio_search_del_all_up.png) no-repeat;
+	position: absolute;
+	right: 24px;
+	top: 12px;
+}
+
+.radio_search_con>div>span:hover {
+	background: url(../images/butt_radio_search_del_all_down.png) no-repeat;
+}
+
+.radio_search_keybord {
+	display: flex;
+	padding-top: 8px;
+	justify-content: space-between;
+}
+
+.radio_search_keybord>ul {
+	width: 610px;
+	height: 400px;
+
+	display: flex;
+
+	flex-wrap: wrap;
+	align-content: space-between;
+	justify-content: space-between;
+}
+
+.radio_search_keybord>ul li {
+	width: 198px;
+	height: 94px;
+	border: 1px solid #0068FF;
+	text-align: center;
+	line-height: 92px;
+	font-size: 48px;
+	font-weight: bold;
+}
+
+.radio_search_keybord>ul li:hover {
+	border: 1px solid #00FAFF;
+	color: #00FAFF;
+}
+
+.radio_search_keybord>ul li:last-child {
+	background: url(../images/butt_radio_search_del_up.png) no-repeat center center;
+
+}
+
+.radio_search_keybord>ul li:last-child:hover {
+	background: url(../images/butt_radio_search_del_down.png) no-repeat center center;
+}
+
+.radio_search_keybord .radio_search_enter {
+	width: 198px;
+	height: 400px;
+	background: #0068FF;
+	text-align: center;
+	line-height: 400px;
+	font-size: 48px;
+	font-weight: bold;
+}
+
+.radio_search_keybord .radio_search_enter:hover {
+	background: #00FAFF;
+}
+
+/*-----------------------蓝牙电话-------------------------*/
+
+.phone_tab {
+	width: 488px;
+}
+
+.phone_tab li {
+	background: url(../images/butt_tab_center_down.png) no-repeat;
+	margin: 0 1px;
+}
+
+.phone_tab li.on {
+	background: url(../images/butt_tab_center_on.png) no-repeat;
+
+}
+
+.phone_tab li:first-child {
+	background: url(../images/butt_tab_left_down.png) no-repeat;
+}
+
+.phone_tab li.on:first-child {
+	background: url(../images/butt_tab_left_on.png) no-repeat;
+}
+
+.phone_tab li:last-child {
+	background: url(../images/butt_tab_right_down.png) no-repeat;
+}
+
+.phone_tab li.on:last-child {
+	background: url(../images/butt_tab_right_on.png) no-repeat;
+}
+
+.phone_dial_con {
+	margin-top: 24px;
+}
+
+.phone_dial_con .radio_search_keybord ul li span {
+	line-height: 48px;
+	margin-top: 11px;
+	font-weight: bold;
+	display: block;
+}
+
+.phone_dial_con .radio_search_keybord ul li span:last-child {
+	font-size: 22px;
+	line-height: 22px;
+	margin-top: 2px;
+	font-weight: normal;
+}
+
+.phone_dial_con .radio_search_keybord>ul li:last-child {
+	background: none;
+}
+
+.phone_dial_btn {
+	width: 198px;
+}
+
+.phone_dial_btn li {
+
+	height: 196px;
+	background: #0068FF;
+	text-align: center;
+	line-height: 198px;
+	font-size: 48px;
+	font-weight: bold;
+
+}
+
+.phone_dial_btn li:hover {
+	background: #00FAFF;
+}
+
+.phone_dial_btn li:first-child {
+	margin-bottom: 8px;
+
+	background: url(../images/butt_calling_del_up.png ) no-repeat;
+}
+
+.phone_dial_btn li:first-child:hover {
+
+	background: url(../images/butt_calling_del_down.png ) no-repeat;
+}
+
+/*---蓝牙电话呼入--*/
+
+.phone_calling_con {
+	width: 1200px;
+	height: 180px;
+	margin: 8px auto;
+	border: 1px solid #0068FF;
+	border-radius: 5px;
+	background: rgba(255, 255, 355, 0.1);
+	padding: 23px 96px;
+	display: flex;
+	justify-content: space-between;
+}
+
+.phone_calling_btn ul {
+	display: flex;
+	margin-left: -36px;
+}
+
+.phone_calling_btn ul li {
+	width: 84px;
+	text-align: center;
+	padding-top: 100px;
+	font-size: 32px;
+	background: url(../images/butt_calling_hangup_up.png ) no-repeat;
+	margin: 0 36px;
+	line-height: 32px;
+}
+
+.phone_calling_btn ul li:hover {
+	background: url(../images/butt_calling_hangup_down.png ) no-repeat;
+
+}
+
+.phone_calling_btn ul li:last-child {
+	background: url(../images/butt_calling_anwer_up.png ) no-repeat;
+
+}
+
+.phone_calling_btn ul li:last-child:hover {
+	background: url(../images/butt_calling_anwer_down.png ) no-repeat;
+
+}
+
+.phone_calling_msg dl {
+
+	display: flex;
+}
+
+.phone_calling_msg dd {
+	margin-left: 24px;
+}
+
+
+.phone_calling_msg dd p.num {
+
+
+
+	padding-top: 17px;
+	font-size: 48px;
+	line-height: 48px;
+	font-weight: bold;
+
+}
+
+.phone_calling_msg dd p.state {
+	margin-top: 20px;
+}
+
+.phone_calling_msg dd p span {
+	font-size: 30px;
+	line-height: 30px;
+	float: left;
+
+
+	font-weight: normal;
+}
+
+.phone_calling_msg dd p span:last-child {
+	float: right;
+}
+
+.phone_calling_bg {
+	height: 442px;
+	background: url(../images/pict_calling_phone_bg.png) no-repeat bottom center;
+}
+
+/*---蓝牙电话通话中--*/
+
+.phone_calling_on_btn {
+	margin-top: 82px;
+}
+
+.phone_calling_on_btn ul {
+	display: flex;
+	justify-content: center;
+}
+
+.phone_calling_on_btn ul li {
+	width: 84px;
+	padding-top: 100px;
+	background: url(../images/butt_calling_mute_up.png) no-repeat;
+	text-align: center;
+	font-size: 32px;
+	line-height: 32px;
+	margin: 0 92px;
+}
+
+.phone_calling_on_btn ul li:hover {
+	background-image: url(../images/butt_calling_mute_down.png);
+}
+
+
+.phone_calling_on_btn ul li:nth-child(2) {
+	background-image: url(../images/butt_calling_keyboard_up.png);
+}
+
+.phone_calling_on_btn ul li:nth-child(2):hover {
+	background-image: url(../images/butt_calling_keyboard_down.png);
+}
+
+.phone_calling_on_btn ul li:nth-child(3) {
+	background-image: url(../images/butt_calling_recording_up.png);
+}
+
+.phone_calling_on_btn ul li:nth-child(3):hover {
+	background-image: url(../images/butt_calling_recording_down.png);
+}
+
+/*---通话记录--*/
+
+.phone_callinglist_con {
+	width: 944px;
+	margin: 24px auto;
+}
+
+.phone_callinglist_con li {
+	background: rgba(255, 255, 255, .1);
+	height: 68px;
+	border-radius: 999px;
+	line-height: 60px;
+	font-size: 24px;
+	padding: 4px;
+	display: flex;
+	justify-content: space-between;
+	margin-bottom: 2px;
+}
+
+.phone_callinglist_con li .user {
+	font-size: 32px;
+}
+
+.phone_callinglist_con li img {
+	float: left;
+	margin-right: 24px;
+}
+
+.phone_callinglist_con li .num img {
+	margin-top: 12px;
+}
+
+.phone_callinglist_con li .time {
+	padding-right: 60px;
+	background: url(../images/butt_callinglist_detail_up.png) no-repeat right center;
+}
+
+.phone_callinglist_con li .time:hover {
+
+	background: url(../images/butt_callinglist_detail_down.png) no-repeat right center;
+}
+
+.phone_callingdetail_user {
+
+	width: 944px;
+	height: 60px;
+	margin: 30px auto 0;
+	display: flex;
+	justify-content: space-between;
+}
+
+.phone_callingdetail_user .user {
+	line-height: 60px;
+}
+
+.phone_callingdetail_user .user img,
+.phone_callingdetail_user .user span {
+	float: left;
+	margin-right: 12px;
+}
+
+.phone_callingdetail_user .user span {
+	margin-right: 12px;
+	font-size: 32px;
+}
+
+
+.phone_callingdetail_user .user span:last-child {
+	font-size: 24px;
+}
+
+.phone_callingdetail_user .btn {
+	width: 60px;
+	height: 60px;
+	background: url(../images/butt_calllinglist_answer_up.png) no-repeat center center;
+}
+
+.phone_callingdetail_user .btn:hover {
+	background-image: url(../images/butt_calllinglist_answer_down.png);
+}
+
+.phone_callingdetail_con li {
+	border-radius: 0;
+	padding: 4px 24px;
+
+}
+
+
+.phone_callingbook_con li .btn {
+	width: 60px;
+	height: 60px;
+	background: url(../images/butt_calllinglist_answer_up.png) no-repeat right center;
+}
+
+.phone_callingbook_con li .btn:hover {
+
+	background: url(../images/butt_calllinglist_answer_down.png) no-repeat right center;
+}
+
+
+/*-----------------------行车影像-------------------------*/
+
+.driving_image_con ul {
+	display: flex;
+	height: 720px;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	align-content: space-between;
+}
+
+.driving_image_con ul li {
+	width: 636px;
+	height: 356px;
+	background: url(../images/driving_image_1.png);
+}
+
+.driving_image_con ul li:nth-child(2) {
+	background: url(../images/driving_image_2.png);
+}
+
+.driving_image_con ul li:nth-child(3) {
+	background: url(../images/driving_image_3.png);
+}
+
+.driving_image_con ul li:nth-child(4) {
+	background: url(../images/driving_image_4.png);
+}
+
+.driving_image_con ul li span {
+	display: block;
+	width: 48px;
+	height: 48px;
+	font-size: 30px;
+	line-height: 48px;
+	text-align: center;
+	background: rgba(0, 0, 0, .5);
+	float: right;
+}
+
+.driving_image_con ul li.recording img {
+	float: right;
+	margin: 12px;
+}
+
+.driving_image_bottom {
+	height: 108px;
+}
+
+.driving_image_btn ul {
+	width: 510px;
+}
+
+.driving_image_btn ul li {
+	margin: 0;
+	background: url(../images/butt_driving_image_video_up.png);
+}
+
+.driving_image_btn ul li.on,
+.driving_image_btn ul li:hover {
+	background: url(../images/butt_driving_image_video_down.png);
+}
+
+.driving_image_btn ul li:nth-child(2) {
+	width: 60px;
+	height: 60px;
+	background: url(../images/butt_driving_image_setting_up.png);
+}
+
+.driving_image_btn ul li:nth-child(2).on,
+.driving_image_btn ul li:nth-child(2):hover {
+	background: url(../images/butt_driving_image_setting_down.png);
+}
+
+.driving_image_btn ul li:nth-child(3) {
+	background: url(../images/butt_driving_image_playback_up.png);
+}
+
+.driving_image_btn ul li:nth-child(3).on,
+.driving_image_btn ul li:nth-child(3):hover {
+	background: url(../images/butt_driving_image_playback_down.png);
+}
+
+
+
+.video_play_tips {
+	width: 60px;
+	height: 374px;
+	position: absolute;
+	top: 173px;
+	background: rgba(0, 0, 0, .5);
+	font-size: 30px;
+	line-height: 34px;
+	padding: 32px 8px;
+	text-align: center;
+	color: #E3D948;
+}
+
+.video_play_tips img {
+	margin-bottom: 27px;
+}
+
+.video_play_tips_r {
+	right: 0;
+}
+
+
+/*---行车模式--*/
+
+.driving_image_driving_con ul li {
+	width: 100%;
+	height: 100%;
+	background: url(../images/driving_image_driving.png);
+}
+
+
+/*---右转向模式--*/
+
+.driving_image_driving_right ul {
+	width: 392px;
+	float: left;
+}
+
+.driving_image_driving_right ul li {
+	width: 392px;
+	height: 356px;
+	background: url(../images/driving_image_driving_1.png);
+}
+
+.driving_image_driving_right ul:last-child {
+	width: 880px;
+	float: right;
+}
+
+.driving_image_driving_right ul:last-child li {
+	width: 880px;
+	height: 720px;
+	background: url(../images/driving_image_driving_3.png);
+}
+
+.driving_image_driving_right ul li:nth-child(2) {
+
+	background: url(../images/driving_image_driving_2.png);
+}
+
+
+/*---左转向模式--*/
+
+.driving_image_driving_left ul {
+	width: 392px;
+	float: right;
+}
+
+.driving_image_driving_left ul:first-child {
+	width: 880px;
+	float: left;
+}
+
+.driving_image_driving_left ul:first-child li {
+	width: 880px;
+	height: 720px;
+	background: url(../images/driving_image_driving_3.png);
+}
+
+.driving_image_driving_left ul:last-child li {
+	width: 392px;
+	height: 356px;
+	background: url(../images/driving_image_driving_1.png);
+}
+
+.driving_image_driving_left ul:last-child li:nth-child(2) {
+
+	background: url(../images/driving_image_driving_left.png);
+}
+
+/*---倒车模式--*/
+
+.driving_image_driving_behind ul li {
+	height: 240px;
+	background: url(../images/driving_image_driving_behind_1.png);
+}
+
+.driving_image_driving_behind ul li:nth-child(2) {
+
+	background: url(../images/driving_image_driving_behind_2.png);
+}
+
+.driving_image_driving_behind ul li:last-child {
+	width: 100%;
+	height: 472px;
+	background: url(../images/driving_image_driving_behind_3.png);
+}
+
+
+/*---行车影像设置--*/
+
+.driving_image_setting>div {
+	float: left;
+}
+
+.subnav {
+	margin-top: -8px;
+	width: 280px;
+	height: 538px;
+	background: rgba(0, 0, 0, .2);
+}
+
+.subnav li {
+	height: 90px;
+	font-size: 32px;
+	text-align: center;
+	line-height: 90px;
+}
+
+.subnav li.on {
+	background: url(../images/butt_subnav_on.png);
+	color: #00FAFF;
+}
+
+.driving_image_setting_con {
+	padding: 24px 80px;
+}
+
+.driving_image_setting_con .setting_list>li {
+	width: 840px;
+	font-size: 32px;
+	line-height: 72px;
+	border-bottom: 2px solid rgba(255, 255, 355, 0.1);
+	margin-bottom: 24px;
+}
+
+.driving_image_setting_con .setting_list>li>span {
+	display: block;
+	width: 88px;
+	height: 44px;
+	background: url(../images/butt_setting_close.png);
+	float: right;
+	margin-top: 14px;
+}
+
+.driving_image_setting_con .setting_list>li>span:hover {
+	background: url(../images/butt_setting_open.png);
+}
+
+
+.driving_image_setting_con .setting_direction li {
+	width: 161px;
+	height: 232px;
+	border: 1px solid #0068FF;
+	background: rgba(255, 255, 255, .1);
+	text-align: right;
+	padding: 8px;
+	font-size: 24px;
+	line-height: 24px;
+	position: relative;
+	float: left;
+	margin-left: -1px;
+}
+
+.driving_image_setting_con .setting_direction li span {
+	display: block;
+	width: 36px;
+	height: 36px;
+	background: url(../images/butt_setting_check_up.png);
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+}
+
+.driving_image_setting_con .setting_direction li span:hover,
+.driving_image_setting_con .setting_direction li.check span {
+	background: url(../images/butt_setting_check_down.png);
+}
+
+.driving_image_setting_con .setting_direction li:first-child {
+	margin-right: 72px;
+	margin-left: 76px;
+	width: 312px;
+}
+
+.driving_image_setting_con_format {
+	text-align: center;
+	margin-top: 138px;
+	width: 1000px;
+}
+
+.driving_image_setting_con_format p {
+
+	font-size: 32px;
+	line-height: 48px;
+
+
+}
+
+button.format_btn {
+	width: 192px;
+	height: 54px;
+	background: none;
+	border: 2px solid #0068FF;
+	margin-top: 55px;
+	color: #fff;
+	font-size: 24px;
+}
+
+button.format_btn:hover {
+	border: 2px solid #00FAFF;
+	color: #00FAFF;
+}
+
+/*---行车影像回放--*/
+
+.driving_image_palyback {
+	width: 872px;
+	margin: 48px auto;
+}
+
+
+.driving_image_palyback ul {
+	height: 344px;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	align-content: space-between;
+
+
+}
+
+.driving_image_palyback ul li {
+
+	width: 200px;
+	height: 160px;
+	text-align: center;
+	font-size: 18px;
+	line-height: 41px;
+	background: url(../images/butt_driving_image_playback_folder_up.png);
+	padding-top: 117px;
+}
+
+.driving_image_palyback ul li:hover {
+	background: url(../images/butt_driving_image_playback_folder_down.png);
+}
+
+.page_btn {
+	width: 597px;
+	text-align: center;
+	display: flex;
+	justify-content: space-between;
+	margin: 36px auto;
+
+}
+
+.driving_image_palyback button.format_btn {
+	width: 136px;
+	margin-top: 0;
+
+}
+
+.driving_image_palyback_file ul li {
+	background: url(../images/butt_driving_image_playback_filelist_up.png);
+}
+
+.driving_image_palyback_file ul li:hover {
+	background: url(../images/butt_driving_image_playback_filelist_down.png);
+}
+
+.video_playback_top {
+	position: absolute;
+	left: 24px;
+	top: 24px;
+	height: 72px;
+	line-height: 72px;
+}
+
+.video_playback_top span {
+	float: left;
+}
+
+.video_playback_top span.playback_back {
+	display: block;
+	width: 72px;
+	height: 72px;
+	background: url(../images/butt_driving_image_playback_vedio_back_up.png);
+	margin-right: 24px;
+}
+
+.video_playback_top span.playback_back:hover {
+	background: url(../images/butt_driving_image_playback_vedio_back_down.png)
+}
+
+.video_playback_top span.time {
+	font-size: 36px;
+	text-shadow: 0 2px 2px rgba(0, 0, 0, .5);
+}
+
+
+
+/*-----------------------系统设置-------------------------*/
+
+.system_setting .subnav {
+	height: 646px;
+}
+
+.system_setting_con {
+	margin-top: 24px
+}
+
+.system_setting_con .setting_list>li {
+
+	line-height: 48px;
+	margin-bottom: 0;
+	padding: 24px 0;
+	height: 98px;
+}
+
+.system_setting_con .setting_list>li.setting_brightness {
+	height: 172px;
+	padding: 0;
+}
+
+.setting_brightness>dl ul {
+	margin-bottom: 24px;
+}
+
+.system_setting_con .setting_list>li.setting_brightness dt {
+	line-height: 48px;
+	font-size: 32px;
+	float: left;
+
+}
+
+.system_setting_con dd {
+	float: right;
+	width: 648px;
+
+}
+
+
+.system_setting_con dd.setting_brightness {
+	margin-top: 0;
+}
+
+.setting_brightness_tab {
+
+	display: flex;
+	justify-content: flex-end;
+	overflow: hidden;
+
+
+}
+
+.setting_brightness_tab li {
+	width: 120px;
+	height: 44px;
+	font-size: 24px;
+	line-height: 44px;
+	text-align: center;
+	background: #3F3D52;
+	margin: 2px;
+}
+
+.setting_brightness_tab li.on,
+.setting_brightness_tab li:hover {
+	background: #0452CA;
+}
+
+.setting_brightness_tab li:last-child {
+	border-radius: 0 100px 100px 0;
+	margin-right: 0;
+}
+
+.setting_brightness_tab li:first-child {
+	border-radius: 100px 0 0 100px;
+}
+
+.system_setting_con .brightness_pro {
+	display: flex;
+	padding-top: 36px;
+	position: relative;
+}
+
+.system_setting_con .brightness_pro:before,
+.system_setting_con .brightness_pro:after {
+	display: block;
+	content: '';
+	width: 24px;
+	height: 24px;
+	background: url(../images/pict_brightness_low.png);
+	float: left;
+	margin-top: 6px;
+}
+
+.system_setting_con .brightness_pro:after {
+	width: 36px;
+	height: 36px;
+	background: url(../images/pict_brightness_high.png);
+	margin-top: 0;
+}
+
+.system_setting_con .brightness_pro>img {
+	height: 8px;
+	margin-top: 14px;
+	margin: 14px 12px 0;
+
+}
+
+.system_setting_con .brightness_pro span {
+	position: absolute;
+}
+
+.system_setting_con .brightness_pro span.mark {
+	top: 36px;
+	left: 284px;
+	display: block;
+	height: 44px;
+	line-height: 44px;
+}
+
+.system_setting_con .brightness_pro span.tips {
+	display: block;
+	width: 48px;
+	height: 38px;
+	background: url(../images/pict_brightness_tips.png);
+	left: 272px;
+	top: 0;
+	line-height: 28px;
+	font-size: 24px;
+	text-align: center;
+}
+
+
+
+.system_setting_con .setting_list>li dt {
+
+	float: left;
+}
+
+
+.system_setting_con .setting_list>li dd>span {
+
+	display: block;
+	width: 88px;
+	height: 44px;
+	background: url(../images/butt_setting_open.png);
+	float: right;
+	margin-top: 2px;
+}
+
+.system_setting_con .setting_list>li dd>span:hover {
+	background: url(../images/butt_setting_close.png);
+}
+
+.setting_btn {
+
+	width: 240px;
+	height: 44px;
+	float: right;
+	margin: 2px 0;
+	background: url(../images/butt_setting_choose_left.png);
+}
+
+.setting_btn li {
+	width: 120px;
+	height: 44px;
+	font-size: 24px;
+	line-height: 44px;
+	text-align: center;
+	float: left;
+}
+
+.setting_btn:hover {
+	background: url(../images/butt_setting_choose_right.png);
+}
+
+.system_setting_con .setting_list>li.setting_volume {
+	height: 122px;
+	margin: 32px 0 60px 0;
+}
+
+.system_setting_con .setting_list>li.setting_volume dt {
+	margin-top: 30px;
+}
+
+
+.system_setting_con .volume_pro {
+	float: right;
+}
+
+.system_setting_con .volume_pro:before {
+
+	width: 36px;
+	height: 36px;
+	margin-top: 0;
+	background: url(../images/pict_volume_low.png);
+
+}
+
+.system_setting_con .volume_pro:after {
+
+	background: url(../images/pict_volume_loud.png);
+
+}
+
+.system_setting_con .volume_pro span.mark {
+	left: 296px;
+}
+
+.system_setting_con .volume_pro span.tips {
+	left: 284px;
+}
+
+.system_setting_con .setting_list>li.setting_sound_field {
+	margin-top: 60px;
+}
+
+.system_setting_con .setting_list>li.setting_sound_field {
+	margin-top: 60px;
+}
+
+
+.system_setting_con .setting_list>li.setting_sound_field .setting_brightness_tab li:first-child {
+
+	border-radius: 100px;
+	width: 168px;
+	background: #0452CA;
+}
+
+.system_setting_con .setting_list>li.setting_sound_field .setting_brightness_tab li:first-child:hover {
+	background: #00FAFF;
+}
+
+
+.bluetooth_tab {
+	width: 648px;
+	margin-top: -30px;
+	margin-bottom: 68px;
+}
+
+.bluetooth_intro {
+	font-size: 28px;
+	line-height: 42px;
+	margin-top: 24px;
+}
+
+.bluetooth_intro a {
+	color: #00FAFF;
+}
+
+.bluetooth_intro a:hover {
+	color: #666;
+}
+
+.bluetooth_name_con {
+	width: 818px;
+}
+
+.bluetooth_name_con div input {
+	background: none;
+	padding-left: 24px;
+	width: 818px;
+}
+
+
+
+.bluetooth_name_keybord>ul li {
+	width: 110px;
+}
+
+.enter {
+	background: #0068FF;
+}
+
+.enter:hover {
+	background: #00FAFF;
+	color: #fff !important;
+}
+
+.bluetooth_name_keybord {
+	width: 818px;
+}
+
+.bluetooth_name_keybord>ul {
+	width: 818px;
+}
+
+.system_setting_con .bluetooth_list>li {
+	line-height: 60px;
+	height: 110px;
+}
+
+.system_setting_con .bluetooth_list dd {
+	width: 400px;
+}
+
+.system_setting_con .bluetooth_list dd li {
+
+	height: 60px;
+	border: 1px solid #0068FF;
+	background: rgba(255, 255, 255, .1);
+	text-align: center;
+	font-size: 28px;
+}
+
+.system_setting_con .bluetooth_list dd li:hover {
+
+	border: 2px solid #00FAFF;
+	color: #00FAFF;
+}
+
+.system_setting_con .bluetooth_list>li:last-child {
+	height: 290px;
+	border: none;
+}
+
+.system_setting_con .bluetooth_list>li:last-child dd li {
+	margin-bottom: 12px;
+}
+
+
+.bluetooth_list .page_btn {
+	width: 326px;
+	text-align: center;
+	display: flex;
+	justify-content: space-between;
+	margin: 0 auto;
+}
+
+button.bluetooth_btn {
+	width: 112px;
+	height: 54px;
+	background: none;
+	border: 2px solid #0068FF;
+	margin-top: 20px;
+	color: #fff;
+	font-size: 24px;
+}
+
+.bluetooth_passward {
+	margin-top: -44px;
+	margin-bottom: 0;
+	width: 840px;
+	padding: 0 12px;
+}
+
+.bluetooth_passward div input {
+	background: none;
+	padding-left: 24px;
+}
+
+.system_infor {
+	width: 1000px;
+
+}
+
+.system_infor_list {
+	width: 630px;
+	margin: 110px auto 0;
+}
+
+.system_infor_list li {
+	height: 60px;
+	border: 1px solid #0068FF;
+	background: rgba(255, 255, 255, .1);
+	line-height: 60px;
+	font-size: 28px;
+	padding-left: 24px;
+	margin-bottom: 24px;
+}
+
+.system_infor_list li span:first-child {
+	float: left;
+	width: 260px;
+}
+
+
+.system_update_select {
+	display: flex;
+}
+
+.system_update_select {
+	padding: 80px 168px 0;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	text-align: center;
+
+}
+
+.system_update_select li {
+	width: 160px;
+	height: 66px;
+	background: rgba(255, 255, 255, .2);
+	border-radius: 100px;
+	line-height: 66px;
+	font-size: 24px;
+	margin-bottom: 8px;
+}
+
+.system_update_select li.on,
+.system_update_select li:hover {
+	background: rgba(0, 104, 255, .75);
+}
+
+.system_update_intro {
+	margin-top: 56px;
+}
+
+.system_update_intro .format_btn {
+	margin-top: 72px;
+}
+
+.system_update_state p {
+	font-size: 48px;
+	line-height: 72px;
+	margin-bottom: 36px;
+}
+
+.system_update_pro {
+	display: flex;
+	line-height: 24px;
+	width: 664px;
+	margin: 0 auto;
+	justify-content: space-between;
+}
+
+
+.system_update_pro span {
+	font-size: 24px;
+
+}
+
+.system_update_pro img {
+	height: 8px;
+	margin-top: 8px;
+}
+
+.system_update_state .format_btn {
+	margin-top: 36px;
+}
+
+/*-----------------------弹出层-------------------------*/
+
+.popalert {
+	width: 530px;
+	height: 272px;
+	border: 1px solid #0068FF;
+	background: rgba(255, 255, 255, .1);
+	margin: 142px auto;
+	border-radius: 25px;
+	padding: 28px;
+}
+
+.popalert .top {
+	height: 104px;
+	padding-left: 124px;
+	background: url(../images/pict_popalert_icon.png) left top no-repeat;
+	font-size: 36px;
+	line-height: 96px;
+}
+
+
+.popalert .page_btn {
+	width: 392px;
+}
+
+.popalert .page_btn .format_btn {
+	margin-top: 12px;
+	width: 168px;
+	height: 64px;
+	font-size: 36px;
+}
+
+button.reset_btn {
+	border-color: #999;
+}
+
+/*-----------------------诊断维护-------------------------*/
+
+.diagnostic_maintenance_con {
+	margin-top: 146px;
+}
+
+.diagnostic_maintenance_con ul {
+	display: flex;
+	justify-content: center;
+}
+
+.diagnostic_maintenance_con ul li {
+	width: 192px;
+	padding-top: 208px;
+	background: url(../images/butt_diagnosis_fault_up.png) no-repeat top center;
+	text-align: center;
+	font-size: 24px;
+	line-height: 42px;
+	margin: 0 40px;
+}
+
+.diagnostic_maintenance_con ul li:hover {
+	background-image: url(../images/butt_diagnosis_fault_down.png);
+}
+
+.diagnostic_maintenance_con ul li:nth-child(2) {
+	background-image: url(../images/butt_diagnosis_maintenance_up.png);
+}
+
+.diagnostic_maintenance_con ul li:nth-child(2):hover {
+	background-image: url(../images/butt_diagnosis_maintenance_down.png);
+}
+
+
+
+/*--故障诊断--*/
+.diagnostic_fault_con {
+	margin-top: 207px;
+}
+
+.diagnostic_fault_con ul {
+	display: flex;
+	justify-content: center;
+}
+
+.diagnostic_fault_con ul li {
+	width: 124px;
+	padding-top: 108px;
+	background: url(../images/butt_diagnosis_abs_up.png) no-repeat top center;
+	text-align: center;
+	font-size: 24px;
+	line-height: 32px;
+	margin: 0 74px;
+}
+
+.diagnostic_fault_con ul li:hover {
+	background-image: url(../images/butt_diagnosis_abs_down.png);
+}
+
+.diagnostic_fault_con ul li:nth-child(2) {
+	background-image: url(../images/butt_diagnosis_warning_up.png);
+}
+
+.diagnostic_fault_con ul li:nth-child(2):hover {
+	background-image: url(../images/butt_diagnosis_warning_down.png);
+}
+
+.diagnostic_fault_con ul li:nth-child(3) {
+	background-image: url(../images/butt_diagnosis_controller_up.png);
+}
+
+.diagnostic_fault_con ul li:nth-child(3):hover {
+	background-image: url(../images/butt_diagnosis_controller_down.png);
+}
+
+.diagnostic_fault_con ul li.tips {
+	position: relative;
+}
+
+.diagnostic_fault_con ul li.tips span {
+	display: block;
+	position: absolute;
+	width: 32px;
+	height: 32px;
+	font-size: 24px;
+	line-height: 32px;
+	text-align: center;
+	background: #B82F2F;
+	border-radius: 100px;
+	top: -8px;
+	right: 15px;
+
+}
+
+.diagnostic_fault_detail {
+	width: 986px;
+	margin: 24px auto;
+}
+
+.diagnostic_fault_detail ul {
+	display: flex;
+	justify-content: space-between;
+	margin-bottom: 4px;
+
+}
+
+.diagnostic_fault_detail ul:nth-child(1) li {
+	font-weight: bold;
+}
+
+.diagnostic_fault_detail ul li {
+	width: 95px;
+	height: 60px;
+	line-height: 60px;
+	font-size: 20px;
+	border: 1px solid #0068FF;
+	background: rgba(255, 255, 255, .1);
+	padding-left: 24px;
+}
+
+.diagnostic_fault_detail ul li:nth-child(2) {
+	width: 88px;
+
+}
+
+.diagnostic_fault_detail ul li:nth-child(3) {
+	width: 395px;
+
+}
+
+.diagnostic_fault_detail ul li:nth-child(4) {
+	width: 396px;
+
+}
+
+/*--使用维护--*/
+
+.diagnostic_maintenance_book {
+	width: 944px;
+	margin: 24px auto;
+}
+
+.diagnostic_maintenance_book ul {
+	display: flex;
+	justify-content: space-between;
+	margin-bottom: 2px;
+	height: 68px;
+	background: rgba(255, 255, 255, .1);
+	padding: 0 24px;
+}
+
+.diagnostic_maintenance_book ul li {
+	font-size: 24px;
+	line-height: 68px;
+
+
+}
+
+.pdf_view_con {
+	background: #525659;
+}
+
+.pdf_view_top span:nth-child(3) {
+
+	width: 120px;
+
+	left: auto;
+	right: 12px;
+	top: 18px;
+
+	background: none;
+	font-size: 24px;
+	line-height: 36px;
+	text-align: right;
+}
+
+.pdf_view_paper {
+	width: 372px;
+	height: 500px;
+	margin: 0 auto;
+	box-shadow: 0px 4px 4px rgba(0, 0, 0, .25);
+	padding-top: 80px;
+}
+
+.pdf_view_btn li:last-child {
+	background: url(../images/butt_radio_search_up.png) no-repeat;
+}
+
+.pdf_view_btn li:last-child:hover {
+	background: url(../images/butt_radio_search_down.png) no-repeat;
+}
+
+.pdf_page_jump_con,
+.pdf_page_jump_keybord,
+.pdf_page_jump_con div input {
+	width: 610px;
+}
+
+.pdf_search_select {
+
+	width: 816px;
+	height: 72px;
+	border: 1px solid #0068FF;
+	color: #fff;
+	font-size: 48px;
+	padding: 1px 24px;
+	margin-top: 8px;
+
+
+}
+
+.pdf_search_select ul li {
+	float: left;
+	width: 68px;
+	height: 68px;
+	text-align: center;
+	line-height: 68px;
+	font-size: 48px;
+}
+
+.pdf_search_select ul li:first-child {
+	background-color: #00FAFF;
+}
+
+.pdf_serch_writearea {
+	width: 610px;
+	height: 400px;
+	background: url(../images/pict_pdf_serch_writearea.png);
+}
+
+.pdf_search_result_bottom {
+	padding: 30px;
+	display: flex;
+	
+	justify-content: center;
+
+}
+
+.pdf_search_result_bottom div:nth-child(1) {
+	width: 48px;
+	height: 48px;
+	background: url(../images/butt_radio_search_del_all_up.png);
+	margin-top: 12px;
+
+}
+
+.pdf_search_result_bottom div:nth-child(1):hover {
+	background: url(../images/butt_radio_search_del_all_down.png);
+}
+
+.pdf_search_result_bottom div:nth-child(2) {
+	width: 816px;
+	height: 72px;
+	border: 1px solid #0068FF;
+	color: #fff;
+	
+	margin:0 24px;
+	padding: 0 24px;
+	
+}
+
+.pdf_search_result_bottom div{
+	
+	font-size: 48px;
+	
+	line-height: 70px;
+}
+
+.pdf_search_result_bottom div:nth-child(3) {
+	display: flex;
+}
+.pdf_search_result_bottom div:nth-child(3) span:nth-child(2){
+	padding:0 12px;
+}
+.pdf_search_result_bottom div:nth-child(3) span:nth-child(1),.pdf_search_result_bottom div:nth-child(3) span:nth-child(3){
+	display: block;	
+	width: 48px;
+	height: 72px;
+	background: url(../images/butt_pdf_serch_result_pre_up.png) no-repeat center center;
+}
+.pdf_search_result_bottom div:nth-child(3) span:nth-child(3){
+	
+	background: url(../images/butt_pdf_serch_result_next_up.png) no-repeat center center;
+}
+
+
+.pdf_search_result_bottom div:nth-child(3) span:nth-child(1):hover {
+	background: url(../images/butt_pdf_serch_result_pre_down.png) no-repeat center center;
+}
+.pdf_search_result_bottom div:nth-child(3) span:nth-child(3):hover{
+	
+	background: url(../images/butt_pdf_serch_result_next_down.png) no-repeat center center;
+}
+
+.pdf_view_paper {
+	position: relative;
+}
+
+.pdf_view_paper img{
+	display: block;
+}
+.pdf_view_paper span {
+	position: absolute;
+	display: block;
+	width: 16px;
+	height:8px ;
+	left:56px;
+	top:182px;
+	background-color: rgba(0, 104, 255, .5);
+	
+}
+
+
+/*-----------------------开机页-------------------------*/
+
+#box.startup {
+	background: url(../images/power_on_bg.png);
+}
