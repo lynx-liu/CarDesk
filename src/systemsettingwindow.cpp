@@ -14,6 +14,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QProgressBar>
+#include <QProcess>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QSlider>
@@ -24,10 +25,22 @@
 #include <QVBoxLayout>
 #include <QDebug>
 #include <QApplication>
+#include <QDir>
+#include <QDirIterator>
+#include <QFileInfo>
 #include <QScreen>
 #include <QTime>
 #include <QVector>
 #include <QRegExp>
+
+namespace {
+QString shellQuote(const QString &s)
+{
+    QString out = s;
+    out.replace("'", "'\\''");
+    return "'" + out + "'";
+}
+}
 
 SystemSettingWindow::SystemSettingWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -98,10 +111,12 @@ void SystemSettingWindow::onStartUpdate()
     if (!m_updateStateLabel || !m_updateProgressText || !m_updateProgressBar) {
         return;
     }
+
     m_updateProgress = 0;
     m_updateProgressBar->setValue(0);
     m_updateProgressText->setText(QStringLiteral("0%"));
-    m_updateStateLabel->setText(QStringLiteral("正在更新模块 %1...").arg(m_selectedModule + 1));
+    m_updateStateLabel->setText(QStringLiteral("正在查找U盘升级包..."));
+
     if (m_updateIntroLabel) {
         m_updateIntroLabel->hide();
     }
@@ -117,7 +132,62 @@ void SystemSettingWindow::onStartUpdate()
     if (m_updateCancelBtn) {
         m_updateCancelBtn->show();
     }
-    m_updateTimer->start();
+
+    QString usbRoot;
+    const QString archivePath = findAppUpdateArchive(&usbRoot);
+    if (archivePath.isEmpty()) {
+        m_updateProgressBar->setValue(0);
+        m_updateProgressText->setText(QStringLiteral("0%"));
+        m_updateStateLabel->setText(QStringLiteral("未找到应用升级包\n请将 CarDesk_bundle*.tar.gz 放到U盘根目录"));
+        if (m_updateCancelBtn) {
+            m_updateCancelBtn->hide();
+        }
+        if (m_updateStartBtn) {
+            m_updateStartBtn->show();
+        }
+        return;
+    }
+
+    m_updateProgress = 20;
+    m_updateProgressBar->setValue(m_updateProgress);
+    m_updateProgressText->setText(QStringLiteral("%1%").arg(m_updateProgress));
+    const QString archiveName = QFileInfo(archivePath).fileName();
+    m_updateStateLabel->setText(QStringLiteral("已找到升级包，准备解压：\n%1").arg(archiveName));
+
+    QString error;
+    if (!applyAppUpdateFromArchive(archivePath, &error)) {
+        m_updateProgressBar->setValue(0);
+        m_updateProgressText->setText(QStringLiteral("0%"));
+        m_updateStateLabel->setText(QStringLiteral("应用升级失败：\n%1").arg(error));
+        if (m_updateCancelBtn) {
+            m_updateCancelBtn->hide();
+        }
+        if (m_updateStartBtn) {
+            m_updateStartBtn->show();
+        }
+        return;
+    }
+
+    m_updateProgress = 100;
+    m_updateProgressBar->setValue(m_updateProgress);
+    m_updateProgressText->setText(QStringLiteral("100%"));
+    m_updateStateLabel->setText(QStringLiteral("应用升级成功，正在自动重启程序..."));
+    if (m_updateCancelBtn) {
+        m_updateCancelBtn->hide();
+    }
+    if (m_updateStartBtn) {
+        m_updateStartBtn->show();
+    }
+
+    QTimer::singleShot(1200, this, []() {
+        bool started = QProcess::startDetached(QStringLiteral("/usr/bin/run.sh"));
+        if (!started) {
+            started = QProcess::startDetached(QApplication::applicationFilePath());
+        }
+        if (started) {
+            QApplication::quit();
+        }
+    });
 }
 
 void SystemSettingWindow::onCancelUpdate()
@@ -161,6 +231,137 @@ void SystemSettingWindow::onTickUpdate()
 
     m_updateProgressBar->setValue(m_updateProgress);
     m_updateProgressText->setText(QStringLiteral("%1%").arg(m_updateProgress));
+}
+
+QString SystemSettingWindow::findAppUpdateArchive(QString *usbRoot) const
+{
+    const QStringList usbPaths = {
+        QStringLiteral("/mnt/usb"),
+        QStringLiteral("/mnt/usb0"),
+        QStringLiteral("/media/usb"),
+        QStringLiteral("/media/usb0"),
+        QStringLiteral("/run/media"),
+        QStringLiteral("/mnt")
+    };
+
+    for (const QString &basePath : usbPaths) {
+        QDir baseDir(basePath);
+        if (!baseDir.exists()) {
+            continue;
+        }
+
+        QDirIterator it(basePath,
+                        QStringList() << QStringLiteral("CarDesk_bundle*.tar.gz") << QStringLiteral("CarDesk_bundle*.tgz"),
+                        QDir::Files,
+                        QDirIterator::Subdirectories);
+        if (it.hasNext()) {
+            const QString hit = it.next();
+            if (usbRoot) {
+                *usbRoot = basePath;
+            }
+            return hit;
+        }
+    }
+
+    return QString();
+}
+
+bool SystemSettingWindow::applyAppUpdateFromArchive(const QString &archivePath, QString *errorMessage)
+{
+    const QString tmpDir = QStringLiteral("/tmp/cardesk_app_update");
+
+    m_updateProgress = 40;
+    m_updateProgressBar->setValue(m_updateProgress);
+    m_updateProgressText->setText(QStringLiteral("%1%").arg(m_updateProgress));
+    m_updateStateLabel->setText(QStringLiteral("正在解压升级包..."));
+
+    {
+        QProcess cleanProc;
+        cleanProc.start(QStringLiteral("sh"), QStringList() << QStringLiteral("-c")
+            << QStringLiteral("rm -rf %1 && mkdir -p %1").arg(shellQuote(tmpDir)));
+        cleanProc.waitForFinished(-1);
+        if (cleanProc.exitStatus() != QProcess::NormalExit || cleanProc.exitCode() != 0) {
+            if (errorMessage) {
+                *errorMessage = QStringLiteral("无法创建临时目录 /tmp/cardesk_app_update");
+            }
+            return false;
+        }
+    }
+
+    {
+        auto runShell = [](const QString &cmd, QString *mergedOutput) -> bool {
+            QProcess proc;
+            proc.setProcessChannelMode(QProcess::MergedChannels);
+            proc.start(QStringLiteral("sh"), QStringList() << QStringLiteral("-c") << cmd);
+            proc.waitForFinished(-1);
+            if (mergedOutput) {
+                *mergedOutput = QString::fromLocal8Bit(proc.readAllStandardOutput()).trimmed();
+            }
+            return proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0;
+        };
+
+        QString errLog;
+        // BusyBox tar 不支持 -z，仅使用 gzip 管道解压 .tar.gz
+        const QString cmdGzipDc = QStringLiteral("gzip -dc %1 | tar -xf - -C %2")
+                                      .arg(shellQuote(archivePath), shellQuote(tmpDir));
+        const bool ok = runShell(cmdGzipDc, &errLog);
+
+        if (!ok) {
+            if (errorMessage) {
+                QString detail = errLog;
+                if (detail.isEmpty()) {
+                    detail = QStringLiteral("请确认系统包含 gzip，并检查升级包是否完整");
+                }
+                if (detail.size() > 180) {
+                    detail = detail.left(180) + QStringLiteral("...");
+                }
+                *errorMessage = QStringLiteral("解压失败：%1").arg(detail);
+            }
+            return false;
+        }
+    }
+
+    QString newBinary;
+    QDirIterator scanIt(tmpDir, QDir::Files, QDirIterator::Subdirectories);
+    while (scanIt.hasNext()) {
+        const QString filePath = scanIt.next();
+        const QFileInfo fi(filePath);
+        if (fi.fileName() == QStringLiteral("CarDesk") && newBinary.isEmpty()) {
+            newBinary = filePath;
+        }
+    }
+
+    if (newBinary.isEmpty()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("升级包中未找到 CarDesk 可执行文件");
+        }
+        return false;
+    }
+
+    m_updateProgress = 75;
+    m_updateProgressBar->setValue(m_updateProgress);
+    m_updateProgressText->setText(QStringLiteral("%1%").arg(m_updateProgress));
+    m_updateStateLabel->setText(QStringLiteral("正在替换系统程序..."));
+
+    const QFileInfo binInfo(newBinary);
+    const QString srcDir = binInfo.absolutePath();
+    const QString syncCmd = QStringLiteral("cp -af %1/. /usr/bin/").arg(shellQuote(srcDir));
+
+    QProcess syncProc;
+    syncProc.start(QStringLiteral("sh"), QStringList() << QStringLiteral("-c") << syncCmd);
+    syncProc.waitForFinished(-1);
+    if (syncProc.exitStatus() != QProcess::NormalExit || syncProc.exitCode() != 0) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("目录覆盖失败，请确认有 /usr/bin 写权限");
+        }
+        return false;
+    }
+
+    QProcess chmodProc;
+    chmodProc.start(QStringLiteral("chmod"), QStringList() << QStringLiteral("+x") << QStringLiteral("/usr/bin/CarDesk"));
+    chmodProc.waitForFinished(-1);
+
+    return true;
 }
 
 void SystemSettingWindow::onUpdateProgress(int percentage)

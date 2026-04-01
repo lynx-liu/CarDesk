@@ -42,6 +42,8 @@ private slots:
     void onFirmwareCheckUpdate();
 
 private:
+    QString findAppUpdateArchive(QString *usbRoot = nullptr) const;
+    bool applyAppUpdateFromArchive(const QString &archivePath, QString *errorMessage);
     void setupUI();
     QWidget *createDisplayPage();
     QWidget *createSoundPage();
