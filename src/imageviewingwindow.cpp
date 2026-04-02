@@ -2,7 +2,8 @@
 #include "devicedetect.h"
 
 #include <QCloseEvent>
-#include <QFrame>
+#include <QDir>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
@@ -13,7 +14,6 @@
 #include <QTransform>
 #include <QVBoxLayout>
 #include <QApplication>
-#include <QFileInfo>
 #include <QIcon>
 #include <QScreen>
 #include <QTime>
@@ -31,10 +31,16 @@ ImageViewingWindow::ImageViewingWindow(QWidget *parent)
     , m_rotateButton(nullptr)
     , m_currentIndex(0)
     , m_rotationAngle(0)
+    , m_currentPath(QStringLiteral("/mnt"))
+    , m_initialPath(QStringLiteral("/mnt"))
 {
     setWindowTitle(QStringLiteral("图片浏览"));
     setObjectName("imageViewingWindow");
     setFixedSize(1280, 720);
+
+    m_imageExtensions << QStringLiteral("*.jpg") << QStringLiteral("*.jpeg")
+                      << QStringLiteral("*.png") << QStringLiteral("*.bmp")
+                      << QStringLiteral("*.gif") << QStringLiteral("*.webp");
 
     const DeviceDetect &device = DeviceDetect::instance();
     if (device.getDeviceType() == DeviceDetect::DEVICE_TYPE_CARUNIT) {
@@ -44,7 +50,7 @@ ImageViewingWindow::ImageViewingWindow(QWidget *parent)
     }
 
     setupUI();
-    updateImageView();
+    loadDirectory(m_initialPath);
 }
 
 void ImageViewingWindow::closeEvent(QCloseEvent *event)
@@ -55,38 +61,22 @@ void ImageViewingWindow::closeEvent(QCloseEvent *event)
 
 void ImageViewingWindow::onPrevImage()
 {
-    if (!m_thumbnailList || m_thumbnailList->count() == 0) {
-        return;
-    }
-    m_currentIndex = (m_currentIndex + m_thumbnailList->count() - 1) % m_thumbnailList->count();
-    m_thumbnailList->setCurrentRow(m_currentIndex);
+    if (m_imageFiles.isEmpty()) return;
+    m_currentIndex = (m_currentIndex + m_imageFiles.count() - 1) % m_imageFiles.count();
     updateImageView();
 }
 
 void ImageViewingWindow::onNextImage()
 {
-    if (!m_thumbnailList || m_thumbnailList->count() == 0) {
-        return;
-    }
-    m_currentIndex = (m_currentIndex + 1) % m_thumbnailList->count();
-    m_thumbnailList->setCurrentRow(m_currentIndex);
-    updateImageView();
-}
-
-void ImageViewingWindow::onThumbnailChanged(int row)
-{
-    if (row < 0) {
-        return;
-    }
-    m_currentIndex = row;
+    if (m_imageFiles.isEmpty()) return;
+    m_currentIndex = (m_currentIndex + 1) % m_imageFiles.count();
     updateImageView();
 }
 
 void ImageViewingWindow::onOpenCurrentImage()
 {
-    if (!m_modeStack || !m_thumbnailList || m_thumbnailList->count() == 0) {
-        return;
-    }
+    if (!m_modeStack || m_imageFiles.isEmpty()) return;
+    m_rotationAngle = 0;
     m_modeStack->setCurrentIndex(1);
     updateImageView();
 }
@@ -180,14 +170,7 @@ void ImageViewingWindow::setupUI()
     );
     backBtn->setCursor(Qt::PointingHandCursor);
 
-    connect(backBtn, &QPushButton::clicked, this, [this]() {
-        if (m_modeStack && m_modeStack->currentIndex() == 1) {
-            onBackToList();
-            return;
-        }
-        emit requestReturnToMain();
-        hide();
-    });
+    connect(backBtn, &QPushButton::clicked, this, &ImageViewingWindow::onBackDirClicked);
 
     auto *contentLayout = new QVBoxLayout(listPage);
     contentLayout->setContentsMargins(168, 190, 168, 36);
@@ -198,66 +181,19 @@ void ImageViewingWindow::setupUI()
     m_thumbnailList->setMovement(QListView::Static);
     m_thumbnailList->setResizeMode(QListView::Adjust);
     m_thumbnailList->setWrapping(true);
-    m_thumbnailList->setSpacing(22);
-    m_thumbnailList->setIconSize(QSize(120, 120));
-    m_thumbnailList->setGridSize(QSize(160, 160));
+    m_thumbnailList->setSpacing(0);
+    m_thumbnailList->setIconSize(QSize(0, 0));        // 委托自己绘制，禁用内置图标
+    m_thumbnailList->setGridSize(QSize(188, 178));
     m_thumbnailList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_thumbnailList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_thumbnailList->setFixedHeight(356);
+    m_thumbnailList->setItemDelegate(new ImageListItemDelegate(m_thumbnailList));
     m_thumbnailList->setStyleSheet(
         "QListWidget{border:none;background:transparent;outline:none;}"
         "QListWidget::item{border:none;color:#eaf3ff;font-size:20px;text-align:center;}"
         "QListWidget::item:selected{color:#00faff;}"
         "QListWidget::item:hover{color:#dff9ff;}"
     );
-
-    const QStringList imageItems = {
-        QStringLiteral("图片"),
-        QStringLiteral("There"),
-        QStringLiteral("新建文件夹"),
-        QStringLiteral("浮夸"),
-        QStringLiteral("浮夸"),
-        QStringLiteral("浮夸"),
-        QStringLiteral("浮夸"),
-        QStringLiteral("浮夸"),
-        QStringLiteral("浮夸"),
-        QStringLiteral("浮夸")
-    };
-    for (int i = 0; i < imageItems.size(); ++i) {
-        const QString &name = imageItems.at(i);
-        auto *it = new QListWidgetItem(name, m_thumbnailList);
-        it->setSizeHint(QSize(160, 160));
-        it->setTextAlignment(Qt::AlignHCenter | Qt::AlignTop);
-        if (i < 3) {
-            it->setData(Qt::UserRole, true);
-        }
-        m_thumbnailList->addItem(it);
-    }
-
-    const QIcon folderUp(QStringLiteral(":/images/butt_driving_image_playback_folder_up.png"));
-    const QIcon folderDown(QStringLiteral(":/images/butt_driving_image_playback_folder_down.png"));
-    const QIcon fileUp(QStringLiteral(":/images/butt_driving_image_playback_filelist_up.png"));
-    const QIcon fileDown(QStringLiteral(":/images/butt_driving_image_playback_filelist_down.png"));
-
-    auto refreshListIcons = [this, folderUp, folderDown, fileUp, fileDown]() {
-        if (!m_thumbnailList) {
-            return;
-        }
-        const int currentRow = m_thumbnailList->currentRow();
-        for (int row = 0; row < m_thumbnailList->count(); ++row) {
-            QListWidgetItem *item = m_thumbnailList->item(row);
-            if (!item) {
-                continue;
-            }
-            const bool isFolder = item->data(Qt::UserRole).toBool();
-            const bool isCurrent = (row == currentRow);
-            if (isFolder) {
-                item->setIcon(isCurrent ? folderDown : folderUp);
-            } else {
-                item->setIcon(isCurrent ? fileDown : fileUp);
-            }
-        }
-    };
 
     m_detailLabel = new QLabel(listPage);
     m_detailLabel->setFixedHeight(50);
@@ -350,52 +286,107 @@ void ImageViewingWindow::setupUI()
 
     root->addWidget(m_modeStack, 1);
 
-    connect(m_thumbnailList, &QListWidget::currentRowChanged, this, &ImageViewingWindow::onThumbnailChanged);
-    connect(m_thumbnailList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *) {
-        onOpenCurrentImage();
-    });
-    connect(m_thumbnailList, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
-        if (!item) {
-            return;
-        }
-        if (!item->data(Qt::UserRole).toBool()) {
-            onOpenCurrentImage();
-        }
-    });
-    m_thumbnailList->setCurrentRow(0);
-    refreshListIcons();
-    connect(m_thumbnailList, &QListWidget::currentRowChanged, this, [refreshListIcons](int) {
-        refreshListIcons();
-    });
+    connect(m_thumbnailList, &QListWidget::itemClicked, this, &ImageViewingWindow::onItemClicked);
     m_modeStack->setCurrentIndex(0);
 }
 
 void ImageViewingWindow::updateImageView()
 {
-    if (!m_thumbnailList || !m_titleLabel || !m_detailLabel || m_thumbnailList->count() == 0) {
+    if (m_imageFiles.isEmpty() || m_currentIndex < 0 || m_currentIndex >= m_imageFiles.count())
         return;
-    }
 
-    const QString fileName = m_thumbnailList->item(m_currentIndex)->text();
-    m_titleLabel->setText(QStringLiteral("图片浏览"));
-    m_detailLabel->setText(QStringLiteral("USB > 图片 > 风景"));
+    const QString filePath = m_imageFiles.at(m_currentIndex);
+    const QFileInfo info(filePath);
 
-    if (m_viewTitleLabel) {
-        QFileInfo info(fileName);
-        m_viewTitleLabel->setText(info.completeBaseName().isEmpty() ? fileName : info.completeBaseName());
-    }
+    if (m_viewTitleLabel)
+        m_viewTitleLabel->setText(info.fileName());
 
     if (m_previewLabel) {
-        QPixmap source(":/images/image_view.png");
-        if (source.isNull()) {
-            source = QPixmap(":/images/background.png");
-        }
-
+        QPixmap source(filePath);
+        if (source.isNull())
+            source = QPixmap(QStringLiteral(":/images/image_view.png"));
         if (!source.isNull()) {
-            QTransform transform;
-            transform.rotate(m_rotationAngle);
-            const QPixmap rotated = source.transformed(transform, Qt::SmoothTransformation);
-            m_previewLabel->setPixmap(rotated.scaled(m_previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            if (m_rotationAngle != 0) {
+                QTransform transform;
+                transform.rotate(m_rotationAngle);
+                source = source.transformed(transform, Qt::SmoothTransformation);
+            }
+            m_previewLabel->setPixmap(source.scaled(m_previewLabel->size(),
+                Qt::KeepAspectRatio, Qt::SmoothTransformation));
         }
     }
+}
+
+void ImageViewingWindow::onItemClicked(QListWidgetItem *item)
+{
+    if (!item) return;
+    const bool isDir = item->data(Qt::UserRole + 1).toBool();
+    const QString path = item->data(Qt::UserRole).toString();
+    if (isDir) {
+        loadDirectory(path);
+    } else {
+        const int idx = m_imageFiles.indexOf(path);
+        m_currentIndex = (idx >= 0) ? idx : 0;
+        onOpenCurrentImage();
+    }
+}
+
+void ImageViewingWindow::onBackDirClicked()
+{
+    if (m_modeStack && m_modeStack->currentIndex() == 1) {
+        onBackToList();
+        return;
+    }
+    if (m_currentPath != m_initialPath) {
+        QDir dir(m_currentPath);
+        if (dir.cdUp())
+            loadDirectory(dir.absolutePath());
+    } else {
+        emit requestReturnToMain();
+        hide();
+    }
+}
+
+void ImageViewingWindow::loadDirectory(const QString &path)
+{
+    m_currentPath = path;
+    m_imageFiles.clear();
+    if (!m_thumbnailList) return;
+
+    m_thumbnailList->clear();
+
+    // 收集图片文件（供前后翻页）
+    QDir imgDir(path);
+    imgDir.setFilter(QDir::Files | QDir::NoDotAndDotDot);
+    imgDir.setNameFilters(m_imageExtensions);
+    imgDir.setSorting(QDir::Name);
+    const QFileInfoList imgInfos = imgDir.entryInfoList();
+    for (const QFileInfo &fi : imgInfos)
+        m_imageFiles << fi.absoluteFilePath();
+
+    // 先列目录
+    QDir dirList(path);
+    dirList.setFilter(QDir::AllDirs | QDir::NoDotAndDotDot);
+    dirList.setSorting(QDir::Name);
+    const QIcon folderIcon(QStringLiteral(":/images/butt_driving_image_playback_folder_up.png"));
+    const QIcon fileIcon(QStringLiteral(":/images/image_imagellist_up.png"));
+
+    for (const QFileInfo &fi : dirList.entryInfoList()) {
+        auto *it = new QListWidgetItem(fi.fileName(), m_thumbnailList);
+        it->setData(Qt::UserRole, fi.absoluteFilePath());
+        it->setData(Qt::UserRole + 1, true);
+        it->setSizeHint(QSize(188, 178));
+        it->setTextAlignment(Qt::AlignHCenter | Qt::AlignBottom);
+    }
+    // 再列图片文件
+    for (const QFileInfo &fi : imgInfos) {
+        auto *it = new QListWidgetItem(fi.baseName(), m_thumbnailList);
+        it->setData(Qt::UserRole, fi.absoluteFilePath());
+        it->setData(Qt::UserRole + 1, false);
+        it->setSizeHint(QSize(188, 178));
+        it->setTextAlignment(Qt::AlignHCenter | Qt::AlignBottom);
+    }
+
+    if (m_detailLabel)
+        m_detailLabel->setText(m_currentPath);
 }

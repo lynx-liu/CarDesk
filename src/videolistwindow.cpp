@@ -53,6 +53,7 @@ VideoListWindow::~VideoListWindow() {
 }
 
 void VideoListWindow::closeEvent(QCloseEvent *event) {
+    // 窗口真正关闭时（卖程应用等）才发信号
     emit requestReturnToMain();
     QMainWindow::closeEvent(event);
 }
@@ -322,7 +323,8 @@ void VideoListWindow::updatePath(const QString &path) {
 }
 
 void VideoListWindow::onHomeClicked() {
-    close();
+    emit requestReturnToMain();
+    hide();
 }
 
 void VideoListWindow::onBackClicked() {
@@ -333,8 +335,9 @@ void VideoListWindow::onBackClicked() {
             loadVideoFiles(dir.absolutePath());
         }
     } else {
-        // 在初始目录，关闭窗口
-        close();
+        // 在初始目录，回到主界面
+        emit requestReturnToMain();
+        hide();
     }
 }
 
@@ -368,16 +371,14 @@ void VideoListWindow::onItemClicked(QListWidgetItem *item) {
             }
         }
         
-        VideoPlayWindow *playWindow = new VideoPlayWindow(this);
-        playWindow->setAttribute(Qt::WA_DeleteOnClose);
-        playWindow->setVideoFiles(videoList, currentIdx);
-        connect(playWindow, &VideoPlayWindow::requestReturnToList, this, [this]() {
-            this->show();
-        });
-        connect(playWindow, &QObject::destroyed, this, [this]() {
-            this->show();
-        });
+        if (!m_playWindow) {
+            m_playWindow = new VideoPlayWindow(this);
+            connect(m_playWindow, &VideoPlayWindow::requestReturnToList, this, [this]() {
+                this->show();
+            });
+        }
+        m_playWindow->setVideoFiles(videoList, currentIdx);
         this->hide();
-        playWindow->show();
+        m_playWindow->show();
     }
 }
