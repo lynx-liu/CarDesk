@@ -8,6 +8,8 @@
 #include <QStyledItemDelegate>
 #include <QPainter>
 
+class VideoPlayWindow;
+
 // 自定义委托来绘制item背景（匹配HTML设计）
 class VideoListItemDelegate : public QStyledItemDelegate {
 public:
@@ -83,6 +85,8 @@ protected:
     QString m_currentPath;
     QString m_initialPath;
     QStringList m_videoExtensions;
+
+    VideoPlayWindow *m_playWindow = nullptr;
 };
 
 #endif // VIDEOLISTWINDOW_H

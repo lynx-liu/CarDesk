@@ -70,6 +70,50 @@ int sdkPlayerNotify(void *pUser, int msg, int ext1, void *para)
     return 0;
 }
 } // namespace
+
+// 全局 SDK 资源（进程生命周期）：只创建一次，复用于所有视频播放。
+// 避免多次 LayerCreate_DE + XPlayerDestroy 导致 HwDisplay 内部状态累积腐蚀崩溃。
+static XPlayer   *g_sdkPlayer    = nullptr;
+static LayerCtrl *g_sdkLayerCtrl = nullptr;
+static SoundCtrl *g_sdkSoundCtrl = nullptr;
+
+static bool ensureSdkResourcesCreated()
+{
+    if (g_sdkPlayer) return true;  // 已初始化
+
+    g_sdkLayerCtrl = LayerCreate_DE();
+    g_sdkSoundCtrl = SoundDeviceCreate();
+    if (!g_sdkLayerCtrl || !g_sdkSoundCtrl) {
+        qWarning() << "SdkResource: create sinks failed";
+        return false;
+    }
+
+    g_sdkPlayer = XPlayerCreate();
+    if (!g_sdkPlayer) {
+        qWarning() << "SdkResource: XPlayerCreate failed";
+        return false;
+    }
+
+    if (XPlayerInitCheck(g_sdkPlayer) != 0) {
+        qWarning() << "SdkResource: XPlayerInitCheck failed";
+        return false;
+    }
+
+    XPlayerSetAudioSink(g_sdkPlayer, g_sdkSoundCtrl);
+    XPlayerSetVideoSurfaceTexture(g_sdkPlayer, g_sdkLayerCtrl);
+
+    sc_param screenParam;
+    memset(&screenParam, 0, sizeof(screenParam));
+    screenParam.enable = 1;
+    screenParam.screen = 0;
+    screenParam.screenW = DeviceDetect::instance().getScreenWidth();
+    screenParam.screenH = DeviceDetect::instance().getScreenHeight();
+    screenParam.type = 1;
+    screenParam.mode = 4;
+    set_output(&screenParam);
+
+    return true;
+}
 #endif
 
 VideoPlayWindow::VideoPlayWindow(QWidget *parent)
@@ -140,8 +184,13 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     loadVideoFiles();
     
     connect(m_backButton, &QPushButton::clicked, this, [this]() {
+#ifdef CAR_DESK_USE_T507_SDK
+        if (m_useSdkPlayer) {
+            releaseSdkPlayer();
+        }
+#endif
         emit requestReturnToList();
-        close();
+        hide();
     });
     connect(m_playButton, &QPushButton::clicked, this, [this]() {
 #ifdef CAR_DESK_USE_T507_SDK
@@ -634,9 +683,9 @@ void VideoPlayWindow::onSdkPlaybackComplete()
     }
 
     m_sdkSwitching = true;
-    QTimer::singleShot(120, this, [this]() {
+    QTimer::singleShot(300, this, [this]() {
+        m_sdkSwitching = false;   // 先清标志，再执行切换，避免 initSdkPlayer 守卫误拦截
         onNextVideo();
-        m_sdkSwitching = false;
     });
 #endif
 }
@@ -644,56 +693,34 @@ void VideoPlayWindow::onSdkPlaybackComplete()
 #ifdef CAR_DESK_USE_T507_SDK
 bool VideoPlayWindow::initSdkPlayer(const QString &videoPath)
 {
-    if (m_sdkSwitching) {
+    // 确保全局 SDK 资源已创建（进程生命周期内只创建一次）
+    if (!ensureSdkResourcesCreated()) {
+        qWarning() << "Failed to create global SDK resources";
         return false;
     }
+
+    // 停止当前播放、解绑旧回调（releaseSdkPlayer 内调 XPlayerReset）
     releaseSdkPlayer();
 
-    m_sdkPlayer = XPlayerCreate();
-    if (!m_sdkPlayer) {
-        qWarning() << "XPlayerCreate failed";
-        return false;
-    }
+    // 复用全局播放器
+    m_sdkPlayer    = g_sdkPlayer;
+    m_sdkLayerCtrl = g_sdkLayerCtrl;
+    m_sdkSoundCtrl = g_sdkSoundCtrl;
 
+    // 绑定当前窗口回调
     XPlayerSetNotifyCallback(m_sdkPlayer, sdkPlayerNotify, this);
-    if (XPlayerInitCheck(m_sdkPlayer) != 0) {
-        qWarning() << "XPlayerInitCheck failed";
-        releaseSdkPlayer();
-        return false;
-    }
-
-    m_sdkLayerCtrl = LayerCreate_DE();
-    m_sdkSoundCtrl = SoundDeviceCreate();
-    if (!m_sdkLayerCtrl || !m_sdkSoundCtrl) {
-        qWarning() << "Create sdk sinks failed";
-        releaseSdkPlayer();
-        return false;
-    }
-
-    XPlayerSetAudioSink(m_sdkPlayer, m_sdkSoundCtrl);
-    XPlayerSetVideoSurfaceTexture(m_sdkPlayer, m_sdkLayerCtrl);
-
-    sc_param screenParam;
-    memset(&screenParam, 0, sizeof(screenParam));
-    screenParam.enable = 1;
-    screenParam.screen = 0;
-    // 先使用主屏参数，避免副屏配置导致的不稳定。
-    screenParam.screenW = DeviceDetect::instance().getScreenWidth();
-    screenParam.screenH = DeviceDetect::instance().getScreenHeight();
-    screenParam.type = 1;
-    screenParam.mode = 4;
-    set_output(&screenParam);
 
     const QByteArray pathBytes = videoPath.toLocal8Bit();
     if (XPlayerSetDataSourceUrl(m_sdkPlayer, pathBytes.constData(), nullptr, nullptr) != 0) {
         qWarning() << "XPlayerSetDataSourceUrl failed:" << videoPath;
-        releaseSdkPlayer();
+        XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
         return false;
     }
 
     if (XPlayerPrepare(m_sdkPlayer) != 0) {
         qWarning() << "XPlayerPrepare failed:" << videoPath;
-        releaseSdkPlayer();
+        XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
+        XPlayerReset(m_sdkPlayer);
         return false;
     }
 
@@ -707,7 +734,8 @@ bool VideoPlayWindow::initSdkPlayer(const QString &videoPath)
 
     if (XPlayerStart(m_sdkPlayer) != 0) {
         qWarning() << "XPlayerStart failed:" << videoPath;
-        releaseSdkPlayer();
+        XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
+        XPlayerReset(m_sdkPlayer);
         return false;
     }
 
@@ -723,10 +751,12 @@ void VideoPlayWindow::releaseSdkPlayer()
     m_sdkDurationMs = 0;
 
     if (m_sdkPlayer) {
-        // 销毁前先解绑回调，避免回调线程访问释放中的对象。
+        // 先解绑回调，防止停止过程中产生悬空回调。
         XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
-        XPlayerStop(m_sdkPlayer);
-        XPlayerDestroy(m_sdkPlayer);
+        // 只调 XPlayerReset：停止播放并释放帧缓冲。
+        // 全局 g_sdkPlayer / g_sdkLayerCtrl / g_sdkSoundCtrl 保持存活，供下次 initSdkPlayer 复用。
+        // 永不调用 XPlayerDestroy，彻底消除 __LayerDestroy 触发路径，根治多轮崩溃。
+        XPlayerReset(m_sdkPlayer);
         m_sdkPlayer = nullptr;
     }
 
