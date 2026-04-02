@@ -49,7 +49,7 @@ int sdkPlayerNotify(void *pUser, int msg, int ext1, void *para)
         break;
     case AWPLAYER_MEDIA_PLAYBACK_COMPLETE:
         qDebug() << "XPlayer playback complete";
-        QMetaObject::invokeMethod(window, "onNextVideo", Qt::QueuedConnection);
+        QMetaObject::invokeMethod(window, "onSdkPlaybackComplete", Qt::QueuedConnection);
         break;
     case AWPLAYER_MEDIA_SEEK_COMPLETE:
         qDebug() << "XPlayer seek complete";
@@ -97,6 +97,7 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     , m_sdkTimer(nullptr)
     , m_sdkDurationMs(0)
     , m_sdkPlaying(false)
+    , m_sdkSwitching(false)
 #endif
 {
     setWindowTitle("视频播放");
@@ -611,9 +612,41 @@ void VideoPlayWindow::onSdkTick()
 #endif
 }
 
+void VideoPlayWindow::onSdkPlaybackComplete()
+{
+#ifdef CAR_DESK_USE_T507_SDK
+    if (!m_useSdkPlayer) {
+        return;
+    }
+    if (m_sdkSwitching) {
+        return;
+    }
+
+    m_sdkPlaying = false;
+    setPlayButtonState(false);
+    if (m_sdkTimer) {
+        m_sdkTimer->stop();
+    }
+
+    // 没有下一条时只更新按钮状态，避免重复EOS回调触发重入。
+    if (m_currentIndex >= m_videoFiles.count() - 1) {
+        return;
+    }
+
+    m_sdkSwitching = true;
+    QTimer::singleShot(120, this, [this]() {
+        onNextVideo();
+        m_sdkSwitching = false;
+    });
+#endif
+}
+
 #ifdef CAR_DESK_USE_T507_SDK
 bool VideoPlayWindow::initSdkPlayer(const QString &videoPath)
 {
+    if (m_sdkSwitching) {
+        return false;
+    }
     releaseSdkPlayer();
 
     m_sdkPlayer = XPlayerCreate();
@@ -690,6 +723,8 @@ void VideoPlayWindow::releaseSdkPlayer()
     m_sdkDurationMs = 0;
 
     if (m_sdkPlayer) {
+        // 销毁前先解绑回调，避免回调线程访问释放中的对象。
+        XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
         XPlayerStop(m_sdkPlayer);
         XPlayerDestroy(m_sdkPlayer);
         m_sdkPlayer = nullptr;
