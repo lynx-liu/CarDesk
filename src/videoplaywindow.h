@@ -40,6 +40,7 @@ private slots:
     void onPositionChanged(qint64 position);
     void onDurationChanged(qint64 duration);
     void onSdkTick();
+    void onSdkPlaybackComplete();
 
 private:
     void setupUI();
@@ -80,6 +81,7 @@ private:
     QTimer *m_sdkTimer;
     qint64 m_sdkDurationMs;
     bool m_sdkPlaying;
+    bool m_sdkSwitching;
 #endif
 };
 

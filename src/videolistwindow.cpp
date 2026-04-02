@@ -24,8 +24,8 @@ VideoListWindow::VideoListWindow(QWidget *parent)
     , m_videoListWidget(new QListWidget(this))
     , m_pathLabel(new QLabel("USB > 电影 > 欧美", this))
     , m_timeLabel(new QLabel(QDateTime::currentDateTime().toString("hh:mm"), this))
-    , m_currentPath(QDir::homePath())
-    , m_initialPath(QDir::homePath())
+    , m_currentPath("/mnt")
+    , m_initialPath("/mnt")
 {
     setWindowTitle("视频播放");
     setFixedSize(1280, 720);
@@ -315,10 +315,8 @@ void VideoListWindow::loadVideoFiles(const QString &directory) {
 
 void VideoListWindow::updatePath(const QString &path) {
     QString displayPath = path;
-    if (displayPath == QDir::homePath()) {
-        displayPath = "首页";
-    } else {
-        displayPath = displayPath.replace(QDir::homePath(), "~");
+    if (displayPath == "/mnt") {
+        displayPath = "/mnt";
     }
     m_pathLabel->setText(displayPath);
 }
