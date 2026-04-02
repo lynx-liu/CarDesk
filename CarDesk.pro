@@ -35,6 +35,7 @@ contains(CONFIG, arm_build)|contains(CONFIG, arm64_build) {
         $$SDK_LIB/cedarx/include/libcore/parser/include \
         $$SDK_LIB/cedarx/include/libcore/playback/include \
         $$SDK_LIB/cedarx/include/libcore/stream/include \
+        $$SDK_LIB/cedarx/include/xplayer/include \
         $$SDK_LIB/cedarx/include/external/include \
         $$SDK_LIB/cedarx/include/external/include/adecoder \
         $$SDK_LIB/cedarx/include/external/include/aencoder \
@@ -56,14 +57,14 @@ contains(CONFIG, arm_build)|contains(CONFIG, arm64_build) {
     LIBS += -L$$SDK_LIB/cedarx/lib
     LIBS += -L$$T507_SYSROOT/usr/lib/aarch64-linux-gnu
     LIBS += -L$$T507_SYSROOT/lib/aarch64-linux-gnu
-    LIBS += -lsdk_camera -lsdk_disp -lsdk_g2d -lsdk_dvr -lsdk_player
+    LIBS += -lsdk_camera -lsdk_g2d -lsdk_dvr -lsdk_player
     LIBS += -lsdk_log -lsdk_memory -lsdk_sound -lsdk_storage
     LIBS += -lsdk_audenc -lsdk_cfg -lsdk_ctrl -lsdk_egl -lsdk_misc -lsdk_compose
     LIBS += -ladecoder -laencoder -lcdx_base -lcdx_common -lcdx_muxer -lcdx_parser
     LIBS += -lcdx_playback -lcdx_stream -lMemAdapter -lcdc_base -lsubdecoder
     LIBS += -lvdecoder -lvencoder -lVE -lvideoengine -lxmetadataretriever -lxplayer
     LIBS += -lvenc_base -lvenc_codec -lcdx_ion -lasound -ldbus-1
-    LIBS += -lrt -lpthread
+    LIBS += -lrt -Wl,--no-as-needed -lsdk_disp -Wl,--as-needed -lpthread
 } else {
     DEFINES += CAR_DESK_DEVICE_PC
     message("Building for x86/x64 (PC)")
