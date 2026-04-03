@@ -46,13 +46,10 @@ MusicPlayerWindow *MediaManager::musicWindow() const {
 
 void MediaManager::openMusicPlayer() {
     qDebug() << "Opening music player...";
-    
+
     if (!m_musicWindow) {
+        // 不使用 WA_DeleteOnClose：窗口复用，避免析构时 XPlayerReset 时序问题
         m_musicWindow = new MusicPlayerWindow();
-        m_musicWindow->setAttribute(Qt::WA_DeleteOnClose);
-        connect(m_musicWindow, &QObject::destroyed, this, [this]() {
-            m_musicWindow = nullptr;
-        });
     }
     m_musicWindow->showNormal();
     m_musicWindow->raise();
