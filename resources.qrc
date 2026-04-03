@@ -69,6 +69,15 @@
         <file alias="butt_radio_search_down.png">ui/images/butt_radio_search_down.png</file>
         <file alias="butt_radio_search_del_all_up.png">ui/images/butt_radio_search_del_all_up.png</file>
         <file alias="butt_radio_search_del_all_down.png">ui/images/butt_radio_search_del_all_down.png</file>
+        <file alias="butt_radio_search_del_up.png">ui/images/butt_radio_search_del_up.png</file>
+        <file alias="butt_radio_search_del_down.png">ui/images/butt_radio_search_del_down.png</file>
+        <file alias="butt_radiolist_search_up.png">ui/images/butt_radiolist_search_up.png</file>
+        <file alias="butt_radiolist_search_down.png">ui/images/butt_radiolist_search_down.png</file>
+        <file alias="radio_list_up.png">ui/images/radio_list_up.png</file>
+        <file alias="radio_list_down.png">ui/images/radio_list_down.png</file>
+        <file alias="butt_radio_search_enter_up.png">ui/images/butt_radio_search_enter_up.png</file>
+        <file alias="butt_radio_search_enter_down.png">ui/images/butt_radio_search_enter_down.png</file>
+        <file alias="pict_radio_search_input.png">ui/images/pict_radio_search_input.png</file>
         <file alias="pict_radio_fmbar.png">ui/images/pict_radio_fmbar.png</file>
         <file alias="pict_radio_mark.png">ui/images/pict_radio_mark.png</file>
         <file alias="butt_diagnosis_fault_up.png">ui/images/butt_diagnosis_fault_up.png</file>
