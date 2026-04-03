@@ -3,555 +3,916 @@
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
-#include <QListWidget>
-#include <QPushButton>
-#include <QLabel>
+#include <QScrollArea>
 #include <QDir>
-#include <QStandardPaths>
+#include <QFileInfo>
 #include <QDebug>
 #include <QScreen>
 #include <QApplication>
-#include <QFileInfo>
-#include <QProcess>
 #include <QTime>
+
+// ══════════════════════════════════════════════════════════════════════════════
+// T507 SDK 全局音频资源（进程内单例，只创建一次）
+// ══════════════════════════════════════════════════════════════════════════════
+#ifdef CAR_DESK_USE_T507_SDK
+
+static XPlayer   *g_sdkMusicPlayer    = nullptr;
+static SoundCtrl *g_sdkMusicSoundCtrl = nullptr;
+
+static int sdkMusicNotify(void *pUser, int msg, int /*ext1*/, void * /*para*/)
+{
+    MusicPlayerWindow *w = static_cast<MusicPlayerWindow *>(pUser);
+    if (!w) return 0;
+    switch (msg) {
+    case AWPLAYER_MEDIA_PLAYBACK_COMPLETE:
+        QMetaObject::invokeMethod(w, "onSdkPlaybackComplete", Qt::QueuedConnection);
+        break;
+    case AWPLAYER_MEDIA_ERROR:
+        qWarning() << "MusicSDK: playback error";
+        break;
+    default:
+        break;
+    }
+    return 0;
+}
+
+static bool ensureSdkMusicResourcesCreated()
+{
+    if (g_sdkMusicPlayer) return true;
+
+    g_sdkMusicSoundCtrl = SoundDeviceCreate();
+    if (!g_sdkMusicSoundCtrl) {
+        qWarning() << "MusicSDK: SoundDeviceCreate failed";
+        return false;
+    }
+    g_sdkMusicPlayer = XPlayerCreate();
+    if (!g_sdkMusicPlayer) {
+        qWarning() << "MusicSDK: XPlayerCreate failed";
+        return false;
+    }
+    if (XPlayerInitCheck(g_sdkMusicPlayer) != 0) {
+        qWarning() << "MusicSDK: XPlayerInitCheck failed";
+        return false;
+    }
+    XPlayerSetAudioSink(g_sdkMusicPlayer, g_sdkMusicSoundCtrl);
+    qDebug() << "MusicSDK: global audio resources created";
+    return true;
+}
+
+#endif // CAR_DESK_USE_T507_SDK
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 构造 / 析构
+// ══════════════════════════════════════════════════════════════════════════════
 
 MusicPlayerWindow::MusicPlayerWindow(QWidget *parent)
     : QMainWindow(parent)
-    , m_titleLabel(new QLabel("音频播放", this))
-    , m_nowPlayingLabel(new QLabel("未播放", this))
-    , m_playlistWidget(new QListWidget(this))
-    , m_homeButton(new QPushButton(this))
-    , m_usbTab(new QPushButton(this))
-    , m_btTab(new QPushButton(this))
-    , m_listButton(new QPushButton(this))
-    , m_prevButton(new QPushButton(this))
-    , m_playButton(new QPushButton(this))
-    , m_nextButton(new QPushButton(this))
-    , m_loopButton(new QPushButton(this))
-    , m_currentIndex(-1)
-    , m_playerProcess(nullptr)
-    , m_isUsbMode(true)
+    , m_currentBrowsePath("/mnt")
+    , m_mediaPlayer(new QMediaPlayer(this))
 {
     setWindowTitle("音乐播放");
     setFixedSize(1280, 720);
-    
+
     const DeviceDetect &device = DeviceDetect::instance();
     if (device.getDeviceType() == DeviceDetect::DEVICE_TYPE_CARUNIT) {
         setWindowState(Qt::WindowFullScreen);
     } else {
-        if (QApplication::primaryScreen()) {
+        if (QApplication::primaryScreen())
             move(QApplication::primaryScreen()->geometry().center() - rect().center());
-        }
     }
-    
+
+#ifdef CAR_DESK_USE_T507_SDK
+    m_useSdkPlayer = (device.getDeviceType() == DeviceDetect::DEVICE_TYPE_CARUNIT);
+    m_sdkTimer = new QTimer(this);
+    m_sdkTimer->setInterval(500);
+    connect(m_sdkTimer, &QTimer::timeout, this, &MusicPlayerWindow::onSdkTick);
+#endif
+
     setupUI();
-    loadMusicFiles();
-    
-    connect(m_homeButton, &QPushButton::clicked, this, [this]() {
-        close();
-    });
-    connect(m_listButton, &QPushButton::clicked, this, &MusicPlayerWindow::onListClicked);
-    connect(m_prevButton, &QPushButton::clicked, this, &MusicPlayerWindow::onPreviousMusic);
-    connect(m_playButton, &QPushButton::clicked, this, &MusicPlayerWindow::onPlayMusic);
-    connect(m_nextButton, &QPushButton::clicked, this, &MusicPlayerWindow::onNextMusic);
-    connect(m_loopButton, &QPushButton::clicked, this, [this]() {
-        // 切换循环模式图标
-        static bool isRandom = false;
-        isRandom = !isRandom;
-        if (isRandom) {
-            m_loopButton->setStyleSheet(
-                "QPushButton { border: none; background-image: url(:/images/butt_music_random_up.png); background-repeat: no-repeat; background-position: center; } "
-                "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_random_down.png); }"
-            );
-        } else {
-            m_loopButton->setStyleSheet(
-                "QPushButton { border: none; background-image: url(:/images/butt_music_circle_up.png); background-repeat: no-repeat; background-position: center; } "
-                "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_circle_down.png); }"
-            );
-        }
-    });
-    connect(m_usbTab, &QPushButton::clicked, this, &MusicPlayerWindow::onUsbTabClicked);
-    connect(m_btTab, &QPushButton::clicked, this, &MusicPlayerWindow::onBtTabClicked);
+
+    // ── QMediaPlayer 信号（PC 端）──
+    connect(m_mediaPlayer, &QMediaPlayer::positionChanged,
+            this, &MusicPlayerWindow::onMediaPositionChanged);
+    connect(m_mediaPlayer, &QMediaPlayer::durationChanged,
+            this, &MusicPlayerWindow::onMediaDurationChanged);
+    connect(m_mediaPlayer, &QMediaPlayer::mediaStatusChanged,
+            this, &MusicPlayerWindow::onMediaStatusChanged);
+    connect(m_mediaPlayer, &QMediaPlayer::stateChanged,
+            this, &MusicPlayerWindow::onMediaStateChanged);
+
+    // 初始扫描文件
+    scanFlatPlaylist();
+    refreshPlaylistWidget();
+
+    qDebug() << "MusicPlayerWindow created, found" << m_musicFiles.count() << "audio files";
 }
 
-MusicPlayerWindow::~MusicPlayerWindow() {
-    if (m_playerProcess) {
-        m_playerProcess->blockSignals(true);
-        m_playerProcess->disconnect(this);
-        if (m_playerProcess->state() != QProcess::NotRunning) {
-            m_playerProcess->terminate();
-            if (!m_playerProcess->waitForFinished(1500)) {
-                m_playerProcess->kill();
-                m_playerProcess->waitForFinished(1500);
-            }
-        }
-        delete m_playerProcess;
-        m_playerProcess = nullptr;
-    }
+MusicPlayerWindow::~MusicPlayerWindow()
+{
+    releaseAudioPlayer();
 }
 
-void MusicPlayerWindow::closeEvent(QCloseEvent *event) {
-    onStopMusic();
+void MusicPlayerWindow::closeEvent(QCloseEvent *event)
+{
+    releaseAudioPlayer();
     emit requestReturnToMain();
     QMainWindow::closeEvent(event);
 }
 
-void MusicPlayerWindow::setupUI() {
-    QWidget *centralWidget = new QWidget(this);
-    setCentralWidget(centralWidget);
-    centralWidget->setStyleSheet("background-image: url(:/images/inside_background.png);");
-    
-    QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);
-    mainLayout->setContentsMargins(0, 0, 0, 0);
-    mainLayout->setSpacing(0);
-    
-    // ===== 顶部栏：和主界面统一 (HTML: .top) =====
-    QWidget *topBar = new QWidget();
-    topBar->setFixedSize(1280, 82);
-    topBar->setStyleSheet("background: url(:/images/topbar.png) no-repeat;");
-    
-    // 返回主页按钮 (HTML: .top_icon_home)
-    m_homeButton->setParent(topBar);
+// ══════════════════════════════════════════════════════════════════════════════
+// setupUI — 创建两页 QStackedWidget
+// ══════════════════════════════════════════════════════════════════════════════
+
+void MusicPlayerWindow::setupUI()
+{
+    m_stackedWidget = new QStackedWidget(this);
+    m_stackedWidget->setGeometry(0, 0, 1280, 720);
+    setCentralWidget(m_stackedWidget);
+
+    QWidget *playerPage = new QWidget();
+    playerPage->setFixedSize(1280, 720);
+    setupPlayerPage(playerPage);
+    m_stackedWidget->addWidget(playerPage);   // index 0
+
+    QWidget *listPage = new QWidget();
+    listPage->setFixedSize(1280, 720);
+    setupListPage(listPage);
+    m_stackedWidget->addWidget(listPage);     // index 1
+
+    m_stackedWidget->setCurrentIndex(kPagePlayer);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// setupPlayerPage — 匹配 music_usb_play.html（绝对坐标）
+// ══════════════════════════════════════════════════════════════════════════════
+
+void MusicPlayerWindow::setupPlayerPage(QWidget *page)
+{
+    page->setStyleSheet("background-image: url(:/images/inside_background.png);");
+
+    // ── 顶部栏 (0,0,1280,82 topbar.png) ──────────────────────────────────
+    QWidget *topBar = new QWidget(page);
+    topBar->setGeometry(0, 0, 1280, 82);
+    topBar->setStyleSheet("background: url(:/images/topbar.png) no-repeat; background-size: cover;");
+
+    // HOME 按钮 (12,12,48,48)
+    m_homeButton = new QPushButton(topBar);
     m_homeButton->setGeometry(12, 12, 48, 48);
     m_homeButton->setStyleSheet(
-        "QPushButton { border: none; background-image: url(:/images/pict_home_up.png); background-repeat: no-repeat; } "
-        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/pict_home_down.png); }"
-    );
+        "QPushButton { border: none; background-image: url(:/images/pict_home_up.png); background-repeat: no-repeat; }"
+        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/pict_home_down.png); }");
     m_homeButton->setCursor(Qt::PointingHandCursor);
-    
-    // 标题 (HTML: .top h1)
-    m_titleLabel->setParent(topBar);
-    m_titleLabel->setGeometry(0, 0, 1280, 72);
-    m_titleLabel->setText("音频播放");
+
+    // 标题（居中，y:10, 字号:36）
+    m_titleLabel = new QLabel("音频播放", topBar);
+    m_titleLabel->setGeometry(0, 10, 1280, 54);
     m_titleLabel->setStyleSheet("color: #fff; font-size: 36px; font-weight: 700; background: transparent;");
     m_titleLabel->setAlignment(Qt::AlignCenter);
-    m_titleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);  // 让鼠标事件穿透到下层按钮
-    
-    // 右侧状态图标区域 (HTML: .top .top_icon)
-    QWidget *topIconWidget = new QWidget(topBar);
-    topIconWidget->setGeometry(1280 - 16 - 280, 12, 280, 48);
-    topIconWidget->setStyleSheet("background: transparent;");
-    
-    QHBoxLayout *topIconLayout = new QHBoxLayout(topIconWidget);
-    topIconLayout->setContentsMargins(0, 0, 0, 0);
-    topIconLayout->setSpacing(16);
-    
-    // 蓝牙图标
-    QLabel *btIcon = new QLabel();
-    btIcon->setFixedSize(48, 48);
-    btIcon->setPixmap(QPixmap(":/images/pict_buetooth.png"));
-    topIconLayout->addWidget(btIcon);
-    
-    // USB图标
-    QLabel *usbIcon = new QLabel();
-    usbIcon->setFixedSize(48, 48);
-    usbIcon->setPixmap(QPixmap(":/images/pict_usb.png"));
-    topIconLayout->addWidget(usbIcon);
-    
-    // 音量
-    QLabel *volIcon = new QLabel();
-    volIcon->setFixedSize(48, 48);
-    volIcon->setPixmap(QPixmap(":/images/pict_volume.png"));
-    QLabel *volLabel = new QLabel("10");
-    volLabel->setStyleSheet("color: #fff; font-size: 36px;");
-    topIconLayout->addWidget(volIcon);
-    topIconLayout->addWidget(volLabel);
-    
-    // 时间
-    QLabel *timeIcon = new QLabel(QTime::currentTime().toString("hh:mm"));
-    timeIcon->setStyleSheet("color: #fff; font-size: 36px;");
-    topIconLayout->addWidget(timeIcon);
-    
-    mainLayout->addWidget(topBar);
-    
-    // ===== Tab标签栏 (HTML: .tab) =====
-    QWidget *tabWidget = new QWidget();
-    tabWidget->setFixedHeight(66);
-    tabWidget->setStyleSheet("background: transparent;");
-    
-    QHBoxLayout *tabLayout = new QHBoxLayout(tabWidget);
-    tabLayout->setContentsMargins(480, 0, 0, 0);
-    tabLayout->setSpacing(0);
-    
-    m_usbTab->setText("USB音乐");
-    m_usbTab->setFixedSize(160, 66);
+    m_titleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+
+    // 状态图标区（蓝牙 930,12 | USB 994,12 | 音量 1058,12 | 音量值 1110,10 | 时间 1174,10）
+    auto makeLabel = [&](QWidget *parent, int x, int y, int w, int h, const QString &img) {
+        QLabel *l = new QLabel(parent);
+        l->setGeometry(x, y, w, h);
+        if (!img.isEmpty()) l->setPixmap(QPixmap(img));
+        l->setStyleSheet("background: transparent;");
+        return l;
+    };
+    makeLabel(topBar, 930, 12, 48, 48, ":/images/pict_buetooth.png");
+    makeLabel(topBar, 994, 12, 48, 48, ":/images/pict_usb.png");
+    makeLabel(topBar, 1058, 12, 48, 48, ":/images/pict_volume.png");
+
+    QLabel *volNum = makeLabel(topBar, 1110, 10, 60, 54, "");
+    volNum->setText("10");
+    volNum->setStyleSheet("color: #fff; font-size: 36px; background: transparent;");
+
+    QLabel *timeLbl = makeLabel(topBar, 1174, 10, 94, 54, "");
+    timeLbl->setText(QTime::currentTime().toString("hh:mm"));
+    timeLbl->setStyleSheet("color: #fff; font-size: 36px; background: transparent;");
+
+    // ── Tab 标签栏（y:100，USB:480,100,160×66 | BT:640,100,160×66）─────
+    m_usbTab = new QPushButton("USB音乐", page);
+    m_usbTab->setGeometry(480, 100, 160, 66);
     m_usbTab->setStyleSheet(
-        "QPushButton { border: none; background: url(:/images/butt_tab_left_on.png); "
-        "color: #fff; font-size: 28px; } "
-        "QPushButton:hover, QPushButton:pressed { border: none; background: url(:/images/butt_tab_left_on.png); "
-        "color: #fff; font-size: 28px; }"
-    );
+        "QPushButton { border: none; background: url(:/images/butt_tab_left_on.png); color: #fff; font-size: 28px; }"
+        "QPushButton:pressed { border: none; background: url(:/images/butt_tab_left_on.png); color: #fff; font-size: 28px; }");
     m_usbTab->setCursor(Qt::PointingHandCursor);
-    
-    m_btTab->setText("蓝牙音乐");
-    m_btTab->setFixedSize(160, 66);
+
+    m_btTab = new QPushButton("蓝牙音乐", page);
+    m_btTab->setGeometry(640, 100, 160, 66);
     m_btTab->setStyleSheet(
-        "QPushButton { border: none; background: url(:/images/butt_tab_right_down.png); "
-        "color: #fff; font-size: 28px; } "
-        "QPushButton:hover, QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_down.png); "
-        "color: #fff; font-size: 28px; }"
-    );
+        "QPushButton { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }"
+        "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }");
     m_btTab->setCursor(Qt::PointingHandCursor);
-    
-    tabLayout->addWidget(m_usbTab);
-    tabLayout->addWidget(m_btTab);
-    tabLayout->addStretch();
-    
-    mainLayout->addWidget(tabWidget);
-    
-    // ===== 音乐内容区 (HTML: .music_con width:1040px margin:16px auto) =====
-    QWidget *musicCon = new QWidget(centralWidget);
-    musicCon->setFixedWidth(1040);
-    musicCon->setStyleSheet("background: transparent;");
-    
-    QVBoxLayout *conLayout = new QVBoxLayout(musicCon);
-    conLayout->setContentsMargins(0, 16, 0, 0);
-    conLayout->setSpacing(0);
-    
-    // === 音乐详情 (HTML: .music_detail display:flex) ===
-    QWidget *detailWidget = new QWidget(musicCon);
-    QHBoxLayout *detailLayout = new QHBoxLayout(detailWidget);
-    detailLayout->setContentsMargins(0, 0, 0, 0);
-    detailLayout->setSpacing(0);
-    
-    // 专辑图 (HTML: .music_img width:210px)
-    QLabel *albumImg = new QLabel();
-    albumImg->setFixedSize(210, 210);
-    albumImg->setPixmap(QPixmap(":/images/music_show.png"));
-    detailLayout->addWidget(albumImg);
-    
-    // 歌曲信息 (HTML: .music_mes flex:1 padding-left:80px)
-    QWidget *mesWidget = new QWidget(detailWidget);
-    mesWidget->setStyleSheet("background: transparent;");
-    QVBoxLayout *mesLayout = new QVBoxLayout(mesWidget);
-    mesLayout->setContentsMargins(80, 0, 0, 0);
-    mesLayout->setSpacing(0);
-    
-    // 歌曲名 (HTML: .music_mes p font-size:48px line-height:72px)
-    m_nowPlayingLabel->setText("Different Word");
-    m_nowPlayingLabel->setStyleSheet(
-        "color: #fff; font-size: 48px; background: transparent;"
-    );
-    m_nowPlayingLabel->setFixedHeight(76);
-    mesLayout->addWidget(m_nowPlayingLabel);
-    
-    // 歌手 (HTML: .music_mes li background singer_icon padding-left:56px)
-    QLabel *singerLabel = new QLabel("Alan Walker");
-    singerLabel->setFixedHeight(64);  // 40px + 24px margin-top
-    singerLabel->setStyleSheet(
-        "color: #fff; font-size: 32px; line-height: 40px; padding-left: 56px; margin-top: 24px; "
-        "background: url(:/images/pict_music_singer_icon.png) no-repeat left center;"
-    );
-    mesLayout->addWidget(singerLabel);
-    
-    // 专辑 (HTML: .music_mes li:last-child background album_icon)
-    QLabel *albumLabel = new QLabel("Faded");
-    albumLabel->setFixedHeight(64);  // 40px + 24px margin-top
-    albumLabel->setStyleSheet(
-        "color: #fff; font-size: 32px; line-height: 40px; padding-left: 56px; margin-top: 24px; "
-        "background: url(:/images/pict_music_album_icon.png) no-repeat left center;"
-    );
-    mesLayout->addWidget(albumLabel);
-    mesLayout->addStretch();
-    
-    detailLayout->addWidget(mesWidget, 1);
-    
-    // 功能按钮 (HTML: .music_func width:80px)
-    QWidget *funcWidget = new QWidget(detailWidget);
-    funcWidget->setFixedWidth(80);
-    QVBoxLayout *funcLayout = new QVBoxLayout(funcWidget);
-    funcLayout->setContentsMargins(0, 8, 0, 8);
-    funcLayout->setSpacing(0);
-    
-    QPushButton *collectBtn = new QPushButton();
-    collectBtn->setFixedSize(60, 60);
+
+    // ── 专辑封面（120,182,210,210）────────────────────────────────────────
+    QLabel *albumImg = new QLabel(page);
+    albumImg->setGeometry(120, 182, 210, 210);
+    albumImg->setPixmap(QPixmap(":/images/music_show.png").scaled(210, 210, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+
+    // ── 歌曲名（x:410, y:183, 字号:48, 行高:72）─────────────────────────
+    m_nowPlayingLabel = new QLabel("未播放", page);
+    m_nowPlayingLabel->setGeometry(410, 183, 650, 72);
+    m_nowPlayingLabel->setStyleSheet("color: #fff; font-size: 48px; background: transparent;");
+    m_nowPlayingLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+    // ── 歌手（图标 410,283,40×40；文字 466,279,字号:32）─────────────────
+    QLabel *singerIcon = new QLabel(page);
+    singerIcon->setGeometry(410, 283, 40, 40);
+    singerIcon->setPixmap(QPixmap(":/images/pict_music_singer_icon.png").scaled(40, 40, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    singerIcon->setStyleSheet("background: transparent;");
+
+    QLabel *singerLbl = new QLabel("--", page);
+    singerLbl->setGeometry(466, 279, 600, 48);
+    singerLbl->setStyleSheet("color: #fff; font-size: 32px; background: transparent;");
+    singerLbl->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+    // ── 专辑（图标 410,347,40×40；文字 466,343,字号:32）─────────────────
+    QLabel *albumIcon = new QLabel(page);
+    albumIcon->setGeometry(410, 347, 40, 40);
+    albumIcon->setPixmap(QPixmap(":/images/pict_music_album_icon.png").scaled(40, 40, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    albumIcon->setStyleSheet("background: transparent;");
+
+    QLabel *albumLbl = new QLabel("--", page);
+    albumLbl->setGeometry(466, 343, 600, 48);
+    albumLbl->setStyleSheet("color: #fff; font-size: 32px; background: transparent;");
+    albumLbl->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+    // ── 功能按钮（收藏 1100,190,60×60；扫描 1100,324,60×60）─────────────
+    QPushButton *collectBtn = new QPushButton(page);
+    collectBtn->setGeometry(1100, 190, 60, 60);
     collectBtn->setStyleSheet(
-        "QPushButton { border: none; background-image: url(:/images/butt_music_collection_up.png); background-repeat: no-repeat; background-position: center; } "
-        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_collection_down.png); }"
-    );
+        "QPushButton { border: none; background-image: url(:/images/butt_music_collection_up.png); background-repeat: no-repeat; }"
+        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_collection_down.png); }");
     collectBtn->setCursor(Qt::PointingHandCursor);
-    
-    QPushButton *scanBtn = new QPushButton();
-    scanBtn->setFixedSize(60, 60);
+
+    QPushButton *scanBtn = new QPushButton(page);
+    scanBtn->setGeometry(1100, 324, 60, 60);
     scanBtn->setStyleSheet(
-        "QPushButton { border: none; background-image: url(:/images/butt_music_scan_up.png); background-repeat: no-repeat; background-position: center; } "
-        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_scan_down.png); }"
-    );
+        "QPushButton { border: none; background-image: url(:/images/butt_music_scan_up.png); background-repeat: no-repeat; }"
+        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_scan_down.png); }");
     scanBtn->setCursor(Qt::PointingHandCursor);
-    
-    funcLayout->addWidget(collectBtn);
-    funcLayout->addStretch();
-    funcLayout->addWidget(scanBtn);
-    
-    detailLayout->addWidget(funcWidget);
-    conLayout->addWidget(detailWidget);
-    
-    // === 音乐控制 (HTML: .music_control margin-top:16px) ===
-    QWidget *controlWidget = new QWidget(musicCon);
-    QVBoxLayout *controlLayout = new QVBoxLayout(controlWidget);
-    controlLayout->setContentsMargins(0, 16, 0, 0);
-    controlLayout->setSpacing(0);
-    
-    // 进度条 (HTML: .music_pro display:flex)
-    QWidget *proWidget = new QWidget(controlWidget);
-    QHBoxLayout *proLayout = new QHBoxLayout(proWidget);
-    proLayout->setContentsMargins(0, 0, 0, 0);
-    proLayout->setSpacing(0);
-    
-    QLabel *timeLabel = new QLabel("03:20");
-    timeLabel->setStyleSheet("color: #fff; font-size: 24px; line-height: 36px;");
-    
-    QLabel *progImg = new QLabel();
-    progImg->setFixedHeight(8);
-    progImg->setStyleSheet("padding: 14px 24px 0;");
-    progImg->setPixmap(QPixmap(":/images/prog_music.png"));
-    
-    QLabel *durationLabel = new QLabel("04:48");
-    durationLabel->setStyleSheet("color: #fff; font-size: 24px; line-height: 36px;");
-    
-    proLayout->addWidget(timeLabel);
-    proLayout->addWidget(progImg, 1);
-    proLayout->addWidget(durationLabel);
-    controlLayout->addWidget(proWidget);
-    
-    // 控制按钮 (HTML: .music_btn ul display:flex justify-content:space-around margin-top:10px)
-    QWidget *btnWidget = new QWidget(controlWidget);
-    btnWidget->setStyleSheet("background: transparent;");
-    btnWidget->raise();  // 确保在上层
-    QHBoxLayout *btnLayout = new QHBoxLayout(btnWidget);
-    btnLayout->setContentsMargins(0, 22, 0, 0);
-    btnLayout->setSpacing(0);
-    
-    // 列表按钮 60x60
-    m_listButton->setFixedSize(60, 60);
+    connect(scanBtn, &QPushButton::clicked, this, &MusicPlayerWindow::onRescan);
+
+    // ── 进度区域 ─────────────────────────────────────────────────────────
+    // 播放时间（x:120, y:408, 字号:24, 行高:36）
+    m_posLabel = new QLabel("00:00", page);
+    m_posLabel->setGeometry(120, 408, 80, 36);
+    m_posLabel->setStyleSheet("color: #fff; font-size: 24px; background: transparent;");
+    m_posLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+    // 总长时间（x:1100, y:408）
+    m_durLabel = new QLabel("00:00", page);
+    m_durLabel->setGeometry(1100, 408, 80, 36);
+    m_durLabel->setStyleSheet("color: #fff; font-size: 24px; background: transparent;");
+    m_durLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+    // 进度滑块（204,422,872×8 → slider 竖向居中）
+    m_progressSlider = new QSlider(Qt::Horizontal, page);
+    m_progressSlider->setGeometry(204, 414, 872, 22);
+    m_progressSlider->setMinimum(0);
+    m_progressSlider->setMaximum(1000);
+    m_progressSlider->setValue(0);
+    m_progressSlider->setStyleSheet(
+        "QSlider::groove:horizontal {"
+        "  border: none; height: 8px; margin: 7px 0;"
+        "  background: url(:/images/prog_music_back.png) no-repeat left center; }"
+        "QSlider::sub-page:horizontal {"
+        "  height: 8px; margin: 7px 0;"
+        "  background: url(:/images/prog_music_fore.png) no-repeat left center; }"
+        "QSlider::add-page:horizontal {"
+        "  height: 8px; margin: 7px 0; background: transparent; }"
+        "QSlider::handle:horizontal {"
+        "  background: #ffffff; border: none;"
+        "  width: 14px; height: 14px; border-radius: 7px; margin: -3px 0; }");
+
+    // ── 控制按钮（精确坐标）──────────────────────────────────────────────
+    // 列表 238,466,60×60
+    m_listButton = new QPushButton(page);
+    m_listButton->setGeometry(238, 466, 60, 60);
     m_listButton->setStyleSheet(
-        "QPushButton { border: none; background-image: url(:/images/butt_music_list_up.png); background-repeat: no-repeat; background-position: center; } "
-        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_list_down.png); }"
-    );
+        "QPushButton { border: none; background-image: url(:/images/butt_music_list_up.png); background-repeat: no-repeat; }"
+        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_list_down.png); }");
     m_listButton->setCursor(Qt::PointingHandCursor);
-    
-    // 上一首 60x60
-    m_prevButton->setFixedSize(60, 60);
+
+    // 上一首 418,466,60×60
+    m_prevButton = new QPushButton(page);
+    m_prevButton->setGeometry(418, 466, 60, 60);
     m_prevButton->setStyleSheet(
-        "QPushButton { border: none; background-image: url(:/images/butt_music_prev_up.png); background-repeat: no-repeat; background-position: center; } "
-        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_prev_down.png); }"
-    );
+        "QPushButton { border: none; background-image: url(:/images/butt_music_prev_up.png); background-repeat: no-repeat; }"
+        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_prev_down.png); }");
     m_prevButton->setCursor(Qt::PointingHandCursor);
-    
-    // 播放 84x84
-    m_playButton->setFixedSize(84, 84);
+
+    // 播放/暂停 598,454,84×84
+    m_playButton = new QPushButton(page);
+    m_playButton->setGeometry(598, 454, 84, 84);
     m_playButton->setStyleSheet(
-        "QPushButton { border: none; background-image: url(:/images/butt_music_play_up.png); background-repeat: no-repeat; background-position: center; } "
-        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_play_down.png); }"
-    );
+        "QPushButton { border: none; background-image: url(:/images/butt_music_play_up.png); background-repeat: no-repeat; }"
+        "QPushButton:pressed { background-image: url(:/images/butt_music_play_down.png); }");
     m_playButton->setCursor(Qt::PointingHandCursor);
-    
-    // 下一首 60x60
-    m_nextButton->setFixedSize(60, 60);
+
+    // 下一首 802,466,60×60
+    m_nextButton = new QPushButton(page);
+    m_nextButton->setGeometry(802, 466, 60, 60);
     m_nextButton->setStyleSheet(
-        "QPushButton { border: none; background-image: url(:/images/butt_music_next_up.png); background-repeat: no-repeat; background-position: center; } "
-        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_next_down.png); }"
-    );
+        "QPushButton { border: none; background-image: url(:/images/butt_music_next_up.png); background-repeat: no-repeat; }"
+        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_next_down.png); }");
     m_nextButton->setCursor(Qt::PointingHandCursor);
-    
-    // 循环模式 60x60
-    m_loopButton->setFixedSize(60, 60);
+
+    // 循环/随机 982,466,60×60
+    m_loopButton = new QPushButton(page);
+    m_loopButton->setGeometry(982, 466, 60, 60);
     m_loopButton->setStyleSheet(
-        "QPushButton { border: none; background-image: url(:/images/butt_music_circle_up.png); background-repeat: no-repeat; background-position: center; } "
-        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_circle_down.png); }"
-    );
+        "QPushButton { border: none; background-image: url(:/images/butt_music_circle_up.png); background-repeat: no-repeat; }"
+        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_circle_down.png); }");
     m_loopButton->setCursor(Qt::PointingHandCursor);
-    
-    btnLayout->addStretch();
-    btnLayout->addWidget(m_listButton);
-    btnLayout->addStretch();
-    btnLayout->addWidget(m_prevButton);
-    btnLayout->addStretch();
-    btnLayout->addWidget(m_playButton);
-    btnLayout->addStretch();
-    btnLayout->addWidget(m_nextButton);
-    btnLayout->addStretch();
-    btnLayout->addWidget(m_loopButton);
-    btnLayout->addStretch();
-    
-    controlLayout->addWidget(btnWidget);
-    conLayout->addWidget(controlWidget);
-    
-    // 播放列表 (HTML: .music_play_list)
-    m_playlistWidget->setFixedHeight(120);
-    m_playlistWidget->setStyleSheet(
-        "QListWidget { background: transparent; border: none; } "
-        "QListWidget::item { width: 120px; height: 120px; margin: 0 12px; }"
-    );
-    conLayout->addWidget(m_playlistWidget);
-    
-    // 居中music_con
-    QHBoxLayout *centerLayout = new QHBoxLayout();
-    centerLayout->addStretch();
-    centerLayout->addWidget(musicCon);
-    centerLayout->addStretch();
-    mainLayout->addLayout(centerLayout);
+
+    // ── 底部水平播放列表（120,562,1040×120）─────────────────────────────
+    m_playlistWidget = new QListWidget(page);
+    m_playlistWidget->setGeometry(120, 562, 1040, 120);
+    m_playlistWidget->setFlow(QListView::LeftToRight);
+    m_playlistWidget->setWrapping(false);
+    m_playlistWidget->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_playlistWidget->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_playlistWidget->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_playlistWidget->setGridSize(QSize(144, 120));
+    m_playlistWidget->setMovement(QListView::Static);
+    m_playlistWidget->setResizeMode(QListView::Fixed);
+    m_playlistWidget->setUniformItemSizes(true);
+    m_playlistWidget->setStyleSheet("QListWidget { background: transparent; border: none; outline: none; }");
+    m_playlistWidget->setItemDelegate(new MusicPlaylistDelegate(m_playlistWidget));
+
+    // ── 按钮信号 ─────────────────────────────────────────────────────────
+    connect(m_homeButton,     &QPushButton::clicked, this, [this]() {
+        releaseAudioPlayer();
+        emit requestReturnToMain();
+        hide();
+    });
+    connect(m_usbTab,         &QPushButton::clicked, this, &MusicPlayerWindow::onUsbTabClicked);
+    connect(m_btTab,          &QPushButton::clicked, this, &MusicPlayerWindow::onBtTabClicked);
+    connect(m_listButton,     &QPushButton::clicked, this, &MusicPlayerWindow::onOpenListPage);
+    connect(m_prevButton,     &QPushButton::clicked, this, &MusicPlayerWindow::onPreviousMusic);
+    connect(m_playButton,     &QPushButton::clicked, this, &MusicPlayerWindow::onPlayPause);
+    connect(m_nextButton,     &QPushButton::clicked, this, &MusicPlayerWindow::onNextMusic);
+    connect(m_playlistWidget, &QListWidget::itemClicked,
+            this, &MusicPlayerWindow::onPlaylistItemClicked);
+
+    connect(m_loopButton, &QPushButton::clicked, this, [this]() {
+        static bool isRandom = false;
+        isRandom = !isRandom;
+        m_loopButton->setStyleSheet(isRandom
+            ? "QPushButton { border: none; background-image: url(:/images/butt_music_random_up.png); background-repeat: no-repeat; }"
+              "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_random_down.png); }"
+            : "QPushButton { border: none; background-image: url(:/images/butt_music_circle_up.png); background-repeat: no-repeat; }"
+              "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_circle_down.png); }");
+    });
+
+    connect(m_progressSlider, &QSlider::sliderReleased, this, [this]() {
+#ifdef CAR_DESK_USE_T507_SDK
+        if (m_useSdkPlayer && m_sdkPlayer && m_sdkDurationMs > 0) {
+            qint64 posMs = (static_cast<qint64>(m_progressSlider->value()) * m_sdkDurationMs) / 1000;
+            XPlayerSeekTo(m_sdkPlayer, static_cast<int>(posMs), AW_SEEK_CLOSEST_SYNC);
+            return;
+        }
+#endif
+        if (m_mediaPlayer->duration() > 0) {
+            qint64 posMs = (static_cast<qint64>(m_progressSlider->value()) * m_mediaPlayer->duration()) / 1000;
+            m_mediaPlayer->setPosition(posMs);
+        }
+    });
 }
 
-void MusicPlayerWindow::loadMusicFiles() {
+// ══════════════════════════════════════════════════════════════════════════════
+// setupListPage — 匹配 music_usb_play_list.html（绝对坐标）
+// ══════════════════════════════════════════════════════════════════════════════
+
+void MusicPlayerWindow::setupListPage(QWidget *page)
+{
+    page->setStyleSheet("background-image: url(:/images/inside_background.png);");
+
+    // ── 顶部栏（与播放页完全相同）────────────────────────────────────────
+    QWidget *topBar = new QWidget(page);
+    topBar->setGeometry(0, 0, 1280, 82);
+    topBar->setStyleSheet("background: url(:/images/topbar.png) no-repeat; background-size: cover;");
+
+    // 标题
+    QLabel *titleLbl = new QLabel("音频播放", topBar);
+    titleLbl->setGeometry(0, 10, 1280, 54);
+    titleLbl->setStyleSheet("color: #fff; font-size: 36px; font-weight: 700; background: transparent;");
+    titleLbl->setAlignment(Qt::AlignCenter);
+    titleLbl->setAttribute(Qt::WA_TransparentForMouseEvents);
+
+    // 状态图标
+    auto makeTopIcon = [&](QWidget *parent, int x, const QString &img) {
+        QLabel *l = new QLabel(parent);
+        l->setGeometry(x, 12, 48, 48);
+        l->setPixmap(QPixmap(img));
+        l->setStyleSheet("background: transparent;");
+    };
+    makeTopIcon(topBar, 930, ":/images/pict_buetooth.png");
+    makeTopIcon(topBar, 994, ":/images/pict_usb.png");
+    makeTopIcon(topBar, 1058, ":/images/pict_volume.png");
+
+    QLabel *volNum = new QLabel("10", topBar);
+    volNum->setGeometry(1110, 10, 60, 54);
+    volNum->setStyleSheet("color: #fff; font-size: 36px; background: transparent;");
+
+    QLabel *timeLbl = new QLabel(QTime::currentTime().toString("hh:mm"), topBar);
+    timeLbl->setGeometry(1174, 10, 94, 54);
+    timeLbl->setStyleSheet("color: #fff; font-size: 36px; background: transparent;");
+
+    // ── 返回按钮（x:60, y:103, 60×60）───────────────────────────────────
+    m_backFromListButton = new QPushButton(page);
+    m_backFromListButton->setGeometry(60, 103, 60, 60);
+    m_backFromListButton->setStyleSheet(
+        "QPushButton { border: none; background-image: url(:/images/butt_back_up.png); background-repeat: no-repeat; }"
+        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_back_down.png); }");
+    m_backFromListButton->setCursor(Qt::PointingHandCursor);
+
+    // ── Tab 标签栏（我的收藏 480,100,160×66 | 歌曲列表 640,100,160×66）──
+    m_listFavTab = new QPushButton("我的收藏", page);
+    m_listFavTab->setGeometry(480, 100, 160, 66);
+    m_listFavTab->setStyleSheet(
+        "QPushButton { border: none; background: url(:/images/butt_tab_left_down.png); color: #fff; font-size: 28px; }"
+        "QPushButton:pressed { border: none; background: url(:/images/butt_tab_left_down.png); color: #fff; font-size: 28px; }");
+    m_listFavTab->setCursor(Qt::PointingHandCursor);
+
+    m_listSongsTab = new QPushButton("歌曲列表", page);
+    m_listSongsTab->setGeometry(640, 100, 160, 66);
+    m_listSongsTab->setStyleSheet(
+        "QPushButton { border: none; background: url(:/images/butt_tab_right_on.png); color: #fff; font-size: 28px; }"
+        "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_on.png); color: #fff; font-size: 28px; }");
+    m_listSongsTab->setCursor(Qt::PointingHandCursor);
+
+    // ── 音乐网格列表（x:168, y:190, 944×356，与视频列表相同布局）─────────
+    m_musicListWidget = new QListWidget(page);
+    m_musicListWidget->setGeometry(168, 190, 944, 356);
+    m_musicListWidget->setViewMode(QListView::IconMode);
+    m_musicListWidget->setMovement(QListView::Static);
+    m_musicListWidget->setResizeMode(QListView::Fixed);
+    m_musicListWidget->setSpacing(0);
+    m_musicListWidget->setGridSize(QSize(188, 178));
+    m_musicListWidget->setUniformItemSizes(true);
+    m_musicListWidget->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_musicListWidget->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_musicListWidget->setStyleSheet(
+        "QListWidget { background: transparent; border: none; outline: none; }"
+        "QListWidget::item { border: none; }");
+    m_musicListWidget->setItemDelegate(new MusicListItemDelegate(m_musicListWidget));
+
+    // ── 路径标签（x:168, y:590, 944×50）─────────────────────────────────
+    // 样式：rgba(255,255,255,.1) 背景 + 1px #0068FF border + border-radius:5px
+    m_listPathLabel = new QLabel("/mnt", page);
+    m_listPathLabel->setGeometry(168, 590, 944, 50);
+    m_listPathLabel->setStyleSheet(
+        "QLabel { background: rgba(255,255,255,0.1); border: 1px solid #0068FF; border-radius: 5px;"
+        "  color: #fff; font-size: 24px; padding-left: 24px; }");
+    m_listPathLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+    // ── 按钮信号 ─────────────────────────────────────────────────────────
+    connect(m_backFromListButton, &QPushButton::clicked, this, &MusicPlayerWindow::onBackFromListPage);
+    connect(m_listSongsTab, &QPushButton::clicked, this, &MusicPlayerWindow::onListSongsTabClicked);
+    connect(m_listFavTab,   &QPushButton::clicked, this, &MusicPlayerWindow::onListFavTabClicked);
+    connect(m_musicListWidget, &QListWidget::itemClicked,
+            this, &MusicPlayerWindow::onMusicListItemClicked);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 目录加载（列表页）
+// ══════════════════════════════════════════════════════════════════════════════
+
+void MusicPlayerWindow::loadDirectory(const QString &path)
+{
+    m_currentBrowsePath = path;
+    m_musicListWidget->clear();
+
+    QDir dir(path);
+    if (!dir.exists()) return;
+
+    dir.setFilter(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot | QDir::NoSymLinks);
+    dir.setSorting(QDir::DirsFirst | QDir::Name);
+
+    // 更新路径标签（USB > subdir 格式）
+    QString displayPath = path;
+    if (displayPath.startsWith("/mnt"))
+        displayPath = "USB" + displayPath.mid(4).replace('/', " > ");
+    m_listPathLabel->setText(displayPath.isEmpty() ? "USB" : displayPath);
+
+    for (const QFileInfo &fi : dir.entryInfoList()) {
+        bool isDir = fi.isDir();
+        bool isAudio = !isDir && m_audioExtensions.contains(fi.suffix().toLower());
+        if (!isDir && !isAudio) continue;
+
+        QListWidgetItem *item = new QListWidgetItem(fi.fileName(), m_musicListWidget);
+        item->setData(Qt::UserRole,     fi.absoluteFilePath());
+        item->setData(Qt::UserRole + 1, isDir);
+        m_musicListWidget->addItem(item);
+    }
+
+    qDebug() << "MusicList: loaded" << m_musicListWidget->count() << "items from" << path;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 递归扫描平铺播放列表（播放页用）
+// ══════════════════════════════════════════════════════════════════════════════
+
+void MusicPlayerWindow::scanFlatPlaylist()
+{
     m_musicFiles.clear();
+
+    QStringList scanRoots;
+    scanRoots << "/mnt";
+#ifndef CAR_DESK_DEVICE_CARUNIT
+    scanRoots << QDir::homePath() + "/Music"
+              << QDir::homePath() + "/music"
+              << QDir::homePath() + "/Downloads";
+#endif
+
+    for (const QString &root : scanRoots) {
+        if (!QDir(root).exists()) continue;
+        QList<QString> stack;
+        stack << root;
+        while (!stack.isEmpty()) {
+            QDir d(stack.takeFirst());
+            d.setFilter(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks);
+            for (const QFileInfo &fi : d.entryInfoList()) {
+                if (fi.isDir())
+                    stack << fi.absoluteFilePath();
+                else if (m_audioExtensions.contains(fi.suffix().toLower()))
+                    m_musicFiles << fi.absoluteFilePath();
+            }
+        }
+    }
+    qDebug() << "MusicPlayer: scanned" << m_musicFiles.count() << "audio files";
+}
+
+void MusicPlayerWindow::refreshPlaylistWidget()
+{
+    if (!m_playlistWidget) return;
     m_playlistWidget->clear();
-    scanMusicDirectories();
-    
-    for (const QString &file : m_musicFiles) {
-        QFileInfo fileInfo(file);
-        QListWidgetItem *item = new QListWidgetItem(m_playlistWidget);
-        item->setText(fileInfo.fileName());
+    for (const QString &f : m_musicFiles) {
+        QFileInfo fi(f);
+        QListWidgetItem *item = new QListWidgetItem(fi.baseName(), m_playlistWidget);
         m_playlistWidget->addItem(item);
     }
-    
-    qDebug() << "Loaded" << m_musicFiles.count() << "music files";
+    if (m_currentIndex >= 0 && m_currentIndex < m_playlistWidget->count())
+        m_playlistWidget->setCurrentRow(m_currentIndex);
 }
 
-void MusicPlayerWindow::scanMusicDirectories() {
-    QStringList searchDirs;
-    
-    searchDirs << QStandardPaths::writableLocation(QStandardPaths::MusicLocation);
-    searchDirs << QDir::homePath() + "/Music";
-    searchDirs << QDir::homePath() + "/music";
-    searchDirs << QDir::homePath() + "/Downloads";
-    searchDirs << "/tmp";
-    searchDirs << "/media";
-    searchDirs << "/mnt";
-    
-    QStringList musicExtensions = {"*.mp3", "*.flac", "*.wav", "*.aac", "*.ogg", "*.wma", "*.opus", "*.m4a"};
-    
-    for (const QString &dirPath : searchDirs) {
-        QDir dir(dirPath);
-        if (!dir.exists()) continue;
-        
-        dir.setFilter(QDir::Files | QDir::NoSymLinks);
-        dir.setNameFilters(musicExtensions);
-        
-        QFileInfoList fileInfos = dir.entryInfoList();
-        for (const QFileInfo &fileInfo : fileInfos) {
-            if (!m_musicFiles.contains(fileInfo.absoluteFilePath())) {
-                m_musicFiles << fileInfo.absoluteFilePath();
-            }
-        }
-    }
-}
+// ══════════════════════════════════════════════════════════════════════════════
+// 播放控制
+// ══════════════════════════════════════════════════════════════════════════════
 
-void MusicPlayerWindow::onPlayMusic() {
-    if (m_currentIndex < 0 || m_currentIndex >= m_musicFiles.count()) {
-        m_currentIndex = 0;
-    }
-    
-    if (m_currentIndex >= m_musicFiles.count()) {
-        return;
-    }
-    
-    QString musicPath = m_musicFiles[m_currentIndex];
-    qDebug() << "Playing music:" << musicPath;
+void MusicPlayerWindow::playMusic(int index)
+{
+    if (index < 0 || index >= m_musicFiles.count()) return;
+    m_currentIndex = index;
+
+    releaseAudioPlayer();
     updateNowPlaying();
-    
-    if (!m_playerProcess) {
-        m_playerProcess = new QProcess(this);
-        connect(m_playerProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-                this, &MusicPlayerWindow::onProcessFinished);
-    }
-    
-    QStringList players = {"audacious", "rhythmbox", "cmus", "mpv", "ffplay"};
-    
-    for (const QString &player : players) {
-        if (m_playerProcess->state() == QProcess::NotRunning) {
-            m_playerProcess->start(player, QStringList() << musicPath);
-            if (m_playerProcess->waitForStarted()) {
-                qDebug() << "Music player started:" << player;
-                return;
-            }
+    if (m_playlistWidget)
+        m_playlistWidget->setCurrentRow(m_currentIndex);
+
+    const QString musicPath = m_musicFiles[m_currentIndex];
+    qDebug() << "MusicPlayer: playing" << musicPath;
+
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        if (!ensureSdkMusicResourcesCreated()) return;
+
+        m_sdkPlayer    = g_sdkMusicPlayer;
+        m_sdkSoundCtrl = g_sdkMusicSoundCtrl;
+        XPlayerSetNotifyCallback(m_sdkPlayer, sdkMusicNotify, this);
+
+        const QByteArray pb = musicPath.toLocal8Bit();
+        if (XPlayerSetDataSourceUrl(m_sdkPlayer, pb.constData(), nullptr, nullptr) != 0) {
+            qWarning() << "MusicSDK: SetDataSourceUrl failed"; return;
         }
-    }
-}
-
-void MusicPlayerWindow::onStopMusic() {
-    if (m_playerProcess && m_playerProcess->state() == QProcess::Running) {
-        m_playerProcess->terminate();
-        if (!m_playerProcess->waitForFinished(1500)) {
-            m_playerProcess->kill();
-            m_playerProcess->waitForFinished(1500);
+        if (XPlayerPrepare(m_sdkPlayer) != 0) {
+            qWarning() << "MusicSDK: Prepare failed";
+            XPlayerReset(m_sdkPlayer); return;
         }
-    }
-}
+        int durMs = 0;
+        if (XPlayerGetDuration(m_sdkPlayer, &durMs) == 0) m_sdkDurationMs = durMs;
+        else m_sdkDurationMs = 0;
+        updateProgressBar(0, m_sdkDurationMs);
 
-void MusicPlayerWindow::onNextMusic() {
-    if (m_currentIndex < m_musicFiles.count() - 1) {
-        m_currentIndex++;
-        onPlayMusic();
-    }
-}
-
-void MusicPlayerWindow::onPreviousMusic() {
-    if (m_currentIndex > 0) {
-        m_currentIndex--;
-        onPlayMusic();
-    }
-}
-
-void MusicPlayerWindow::onListClicked() {
-    // 播放列表点击处理
-}
-
-void MusicPlayerWindow::onUsbTabClicked() {
-    if (m_isUsbMode) {
+        if (XPlayerStart(m_sdkPlayer) != 0) {
+            qWarning() << "MusicSDK: Start failed";
+            XPlayerReset(m_sdkPlayer); return;
+        }
+        m_sdkPlaying = true;
+        setPlayButtonState(true);
+        if (m_sdkTimer && !m_sdkTimer->isActive()) m_sdkTimer->start();
         return;
     }
+#endif
+
+    m_mediaPlayer->setMedia(QMediaContent(QUrl::fromLocalFile(musicPath)));
+    m_mediaPlayer->play();
+}
+
+void MusicPlayerWindow::releaseAudioPlayer()
+{
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        if (m_sdkTimer) m_sdkTimer->stop();
+        m_sdkPlaying = false;
+        m_sdkDurationMs = 0;
+        if (m_sdkPlayer) {
+            XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
+            XPlayerReset(m_sdkPlayer);  // 永不调 XPlayerDestroy
+            m_sdkPlayer = nullptr;
+            m_sdkSoundCtrl = nullptr;
+        }
+        setPlayButtonState(false);
+        updateProgressBar(0, 0);
+        return;
+    }
+#endif
+    if (m_mediaPlayer) m_mediaPlayer->stop();
+    updateProgressBar(0, 0);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 槽函数
+// ══════════════════════════════════════════════════════════════════════════════
+
+void MusicPlayerWindow::onPlayPause()
+{
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        if (m_sdkPlayer && m_sdkPlaying) {
+            XPlayerPause(m_sdkPlayer);
+            m_sdkPlaying = false;
+            if (m_sdkTimer) m_sdkTimer->stop();
+            setPlayButtonState(false);
+        } else if (m_sdkPlayer) {
+            XPlayerStart(m_sdkPlayer);
+            m_sdkPlaying = true;
+            if (m_sdkTimer) m_sdkTimer->start();
+            setPlayButtonState(true);
+        } else {
+            playMusic(m_currentIndex >= 0 ? m_currentIndex : 0);
+        }
+        return;
+    }
+#endif
+    if (!m_mediaPlayer) return;
+    if (m_mediaPlayer->state() == QMediaPlayer::PlayingState)
+        m_mediaPlayer->pause();
+    else if (m_mediaPlayer->state() == QMediaPlayer::PausedState)
+        m_mediaPlayer->play();
+    else
+        playMusic(m_currentIndex >= 0 ? m_currentIndex : 0);
+}
+
+void MusicPlayerWindow::onNextMusic()
+{
+    if (m_musicFiles.isEmpty()) return;
+    int next = (m_currentIndex + 1 >= m_musicFiles.count()) ? 0 : m_currentIndex + 1;
+    playMusic(next);
+}
+
+void MusicPlayerWindow::onPreviousMusic()
+{
+    if (m_musicFiles.isEmpty()) return;
+    int prev = (m_currentIndex <= 0) ? m_musicFiles.count() - 1 : m_currentIndex - 1;
+    playMusic(prev);
+}
+
+void MusicPlayerWindow::onPlaylistItemClicked(QListWidgetItem *item)
+{
+    int row = m_playlistWidget->row(item);
+    if (row >= 0 && row < m_musicFiles.count())
+        playMusic(row);
+}
+
+void MusicPlayerWindow::onMusicListItemClicked(QListWidgetItem *item)
+{
+    if (!item) return;
+    QString itemPath = item->data(Qt::UserRole).toString();
+    bool isDir = item->data(Qt::UserRole + 1).toBool();
+
+    if (isDir) {
+        // 进入子目录
+        loadDirectory(itemPath);
+    } else {
+        // 播放文件：以当前目录内所有音频组建播放列表，切换到播放页
+        QDir dir(m_currentBrowsePath);
+        dir.setFilter(QDir::Files | QDir::NoDotAndDotDot | QDir::NoSymLinks);
+        dir.setSorting(QDir::Name);
+        QStringList newPlaylist;
+        int playIndex = 0;
+        for (const QFileInfo &fi : dir.entryInfoList()) {
+            if (m_audioExtensions.contains(fi.suffix().toLower())) {
+                if (fi.absoluteFilePath() == itemPath)
+                    playIndex = newPlaylist.count();
+                newPlaylist << fi.absoluteFilePath();
+            }
+        }
+        if (newPlaylist.isEmpty()) {
+            newPlaylist << itemPath;
+            playIndex = 0;
+        }
+        m_musicFiles = newPlaylist;
+        refreshPlaylistWidget();
+
+        // 切换到播放页，然后播放
+        m_stackedWidget->setCurrentIndex(kPagePlayer);
+        playMusic(playIndex);
+    }
+}
+
+void MusicPlayerWindow::onUsbTabClicked()
+{
+    if (m_isUsbMode) return;
     m_isUsbMode = true;
     m_usbTab->setStyleSheet(
-        "QPushButton { border: none; background: url(:/images/butt_tab_left_on.png); "
-        "color: #fff; font-size: 28px; } "
-        "QPushButton:hover, QPushButton:pressed { border: none; background: url(:/images/butt_tab_left_on.png); "
-        "color: #fff; font-size: 28px; }"
-    );
+        "QPushButton { border: none; background: url(:/images/butt_tab_left_on.png); color: #fff; font-size: 28px; }"
+        "QPushButton:pressed { border: none; background: url(:/images/butt_tab_left_on.png); color: #fff; font-size: 28px; }");
     m_btTab->setStyleSheet(
-        "QPushButton { border: none; background: url(:/images/butt_tab_right_down.png); "
-        "color: #fff; font-size: 28px; } "
-        "QPushButton:hover, QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_down.png); "
-        "color: #fff; font-size: 28px; }"
-    );
-    loadMusicFiles();
+        "QPushButton { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }"
+        "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }");
+    scanFlatPlaylist();
+    refreshPlaylistWidget();
 }
 
-void MusicPlayerWindow::onBtTabClicked() {
-    if (!m_isUsbMode) {
-        return;
-    }
+void MusicPlayerWindow::onBtTabClicked()
+{
+    if (!m_isUsbMode) return;
     m_isUsbMode = false;
-    onStopMusic();
+    releaseAudioPlayer();
     m_usbTab->setStyleSheet(
-        "QPushButton { border: none; background: url(:/images/butt_tab_left_down.png); "
-        "color: #fff; font-size: 28px; } "
-        "QPushButton:hover, QPushButton:pressed { border: none; background: url(:/images/butt_tab_left_down.png); "
-        "color: #fff; font-size: 28px; }"
-    );
+        "QPushButton { border: none; background: url(:/images/butt_tab_left_down.png); color: #fff; font-size: 28px; }"
+        "QPushButton:pressed { border: none; background: url(:/images/butt_tab_left_down.png); color: #fff; font-size: 28px; }");
     m_btTab->setStyleSheet(
-        "QPushButton { border: none; background: url(:/images/butt_tab_right_on.png); "
-        "color: #fff; font-size: 28px; } "
-        "QPushButton:hover, QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_on.png); "
-        "color: #fff; font-size: 28px; }"
-    );
+        "QPushButton { border: none; background: url(:/images/butt_tab_right_on.png); color: #fff; font-size: 28px; }"
+        "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_on.png); color: #fff; font-size: 28px; }");
     m_musicFiles.clear();
-    m_playlistWidget->clear();
+    refreshPlaylistWidget();
     m_nowPlayingLabel->setText("蓝牙音乐");
+    updateProgressBar(0, 0);
+    setPlayButtonState(false);
 }
 
-void MusicPlayerWindow::updateNowPlaying() {
-    if (m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count()) {
-        QFileInfo fileInfo(m_musicFiles[m_currentIndex]);
-        m_nowPlayingLabel->setText(fileInfo.baseName());
+void MusicPlayerWindow::onRescan()
+{
+    releaseAudioPlayer();
+    m_currentIndex = -1;
+    updateNowPlaying();
+    updateProgressBar(0, 0);
+    setPlayButtonState(false);
+    scanFlatPlaylist();
+    refreshPlaylistWidget();
+}
+
+void MusicPlayerWindow::onOpenListPage()
+{
+    // 打开列表页时，加载当前浏览路径（默认 /mnt）
+    loadDirectory(m_currentBrowsePath);
+    m_stackedWidget->setCurrentIndex(kPageList);
+}
+
+void MusicPlayerWindow::onBackFromListPage()
+{
+    // 如果在子目录，先返回上一级；如果已经在根，返回播放页
+    QDir dir(m_currentBrowsePath);
+    if (dir.cdUp() && dir.absolutePath() != m_currentBrowsePath &&
+        m_currentBrowsePath != "/mnt" && m_currentBrowsePath != "/") {
+        loadDirectory(dir.absolutePath());
+    } else {
+        m_currentBrowsePath = "/mnt";
+        m_stackedWidget->setCurrentIndex(kPagePlayer);
     }
 }
 
-void MusicPlayerWindow::onGoBack() {
-    close();
+void MusicPlayerWindow::onListSongsTabClicked()
+{
+    m_listSongsTab->setStyleSheet(
+        "QPushButton { border: none; background: url(:/images/butt_tab_right_on.png); color: #fff; font-size: 28px; }"
+        "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_on.png); color: #fff; font-size: 28px; }");
+    m_listFavTab->setStyleSheet(
+        "QPushButton { border: none; background: url(:/images/butt_tab_left_down.png); color: #fff; font-size: 28px; }"
+        "QPushButton:pressed { border: none; background: url(:/images/butt_tab_left_down.png); color: #fff; font-size: 28px; }");
+    loadDirectory(m_currentBrowsePath);
 }
 
-void MusicPlayerWindow::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus) {
-    Q_UNUSED(exitStatus);
-    qDebug() << "Music player finished with exit code:" << exitCode;
+void MusicPlayerWindow::onListFavTabClicked()
+{
+    m_listFavTab->setStyleSheet(
+        "QPushButton { border: none; background: url(:/images/butt_tab_left_on.png); color: #fff; font-size: 28px; }"
+        "QPushButton:pressed { border: none; background: url(:/images/butt_tab_left_on.png); color: #fff; font-size: 28px; }");
+    m_listSongsTab->setStyleSheet(
+        "QPushButton { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }"
+        "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }");
+    // 收藏列表（暂为空）
+    m_musicListWidget->clear();
+    m_listPathLabel->setText("我的收藏");
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 辅助函数
+// ══════════════════════════════════════════════════════════════════════════════
+
+void MusicPlayerWindow::updateNowPlaying()
+{
+    if (!m_nowPlayingLabel) return;
+    if (m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count())
+        m_nowPlayingLabel->setText(QFileInfo(m_musicFiles[m_currentIndex]).baseName());
+    else
+        m_nowPlayingLabel->setText("未播放");
+}
+
+void MusicPlayerWindow::updateProgressBar(qint64 posMs, qint64 durMs)
+{
+    if (m_posLabel) m_posLabel->setText(formatTime(posMs));
+    if (m_durLabel) m_durLabel->setText(formatTime(durMs));
+    if (m_progressSlider && !m_progressSlider->isSliderDown()) {
+        if (durMs > 0)
+            m_progressSlider->setValue(static_cast<int>((posMs * 1000) / durMs));
+        else
+            m_progressSlider->setValue(0);
+    }
+}
+
+void MusicPlayerWindow::setPlayButtonState(bool playing)
+{
+    if (!m_playButton) return;
+    m_playButton->setStyleSheet(playing
+        ? "QPushButton { border: none; background-image: url(:/images/butt_music_stop_up.png); background-repeat: no-repeat; }"
+          "QPushButton:pressed { background-image: url(:/images/butt_music_stop_down.png); }"
+        : "QPushButton { border: none; background-image: url(:/images/butt_music_play_up.png); background-repeat: no-repeat; }"
+          "QPushButton:pressed { background-image: url(:/images/butt_music_play_down.png); }");
+}
+
+QString MusicPlayerWindow::formatTime(qint64 ms)
+{
+    int totalSec = static_cast<int>(ms / 1000);
+    return QString("%1:%2")
+        .arg(totalSec / 60, 2, 10, QChar('0'))
+        .arg(totalSec % 60, 2, 10, QChar('0'));
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// QMediaPlayer 回调（PC 端）
+// ══════════════════════════════════════════════════════════════════════════════
+
+void MusicPlayerWindow::onMediaPositionChanged(qint64 position)
+{
+    if (!m_progressSlider->isSliderDown())
+        updateProgressBar(position, m_mediaPlayer->duration());
+}
+
+void MusicPlayerWindow::onMediaDurationChanged(qint64 duration)
+{
+    updateProgressBar(m_mediaPlayer->position(), duration);
+}
+
+void MusicPlayerWindow::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
+{
+    if (status == QMediaPlayer::EndOfMedia) {
+        int next = m_currentIndex + 1;
+        if (next < m_musicFiles.count())
+            playMusic(next);
+        else
+            setPlayButtonState(false);
+    }
+}
+
+void MusicPlayerWindow::onMediaStateChanged(QMediaPlayer::State state)
+{
+    setPlayButtonState(state == QMediaPlayer::PlayingState);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// T507 SDK 回调
+// ══════════════════════════════════════════════════════════════════════════════
+
+#ifdef CAR_DESK_USE_T507_SDK
+
+void MusicPlayerWindow::onSdkTick()
+{
+    if (!m_sdkPlayer || !m_sdkPlaying) return;
+    int posMs = 0;
+    if (XPlayerGetCurrentPosition(m_sdkPlayer, &posMs) == 0)
+        updateProgressBar(posMs, m_sdkDurationMs);
+}
+
+void MusicPlayerWindow::onSdkPlaybackComplete()
+{
+    if (m_sdkSwitching) return;
+    m_sdkPlaying = false;
+    if (m_sdkTimer) m_sdkTimer->stop();
+    setPlayButtonState(false);
+
+    if (m_currentIndex < m_musicFiles.count() - 1) {
+        m_sdkSwitching = true;
+        QTimer::singleShot(300, this, [this]() {
+            m_sdkSwitching = false;
+            playMusic(m_currentIndex + 1);
+        });
+    }
+}
+
+#endif // CAR_DESK_USE_T507_SDK
