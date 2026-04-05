@@ -708,40 +708,40 @@ QWidget *SystemSettingWindow::createDisplayPage()
         row->setFixedHeight(98);
         row->setStyleSheet("QWidget{border-bottom:2px solid rgba(255,255,255,0.1);}");
         auto *h = new QHBoxLayout(row);
-        h->setContentsMargins(0, 24, 0, 24);
+        h->setContentsMargins(0, 27, 0, 27);
         h->setSpacing(16);
         auto *title = new QLabel(name, row);
         title->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;}");
         title->setFixedWidth(170);
         h->addWidget(title);
+        h->addStretch();
 
-        auto *btnBox = new QWidget(row);
-        auto *btnLayout = new QHBoxLayout(btnBox);
-        btnLayout->setContentsMargins(0, 0, 0, 0);
-        btnLayout->setSpacing(0);
-        auto *left = new QPushButton(l, btnBox);
-        auto *right = new QPushButton(r, btnBox);
-        left->setCheckable(true);
-        right->setCheckable(true);
-        left->setChecked(true);
-        auto *group = new QButtonGroup(row);
-        group->setExclusive(true);
-        group->addButton(left);
-        group->addButton(right);
-        left->setFixedSize(120, 44);
-        right->setFixedSize(120, 44);
-        left->setStyleSheet(
-            "QPushButton{border:none;background:url(:/images/butt_setting_choose_left.png);color:#fff;font-size:24px;}"
-            "QPushButton:checked{color:#fff;}"
-        );
-        right->setStyleSheet(
-            "QPushButton{border:none;background:url(:/images/butt_setting_choose_right.png);color:#fff;font-size:24px;}"
-            "QPushButton:checked{color:#fff;}"
-        );
-        btnLayout->addStretch();
-        btnLayout->addWidget(left);
-        btnLayout->addWidget(right);
-        h->addWidget(btnBox, 1);
+        // CSS .setting_btn: 整体 240×44 图片作容器背景，点选哪侧换图
+        auto *container = new QWidget(row);
+        container->setFixedSize(240, 44);
+        container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_left.png) no-repeat;}");
+
+        auto *leftBtn  = new QPushButton(l,  container);
+        auto *rightBtn = new QPushButton(r, container);
+        leftBtn->setGeometry(0,   0, 120, 44);
+        rightBtn->setGeometry(120, 0, 120, 44);
+        const QString btnBase =
+            "QPushButton{border:none;background:transparent;color:#fff;font-size:24px;}"
+            "QPushButton:hover{color:#00faff;}";
+        leftBtn->setStyleSheet(btnBase);
+        rightBtn->setStyleSheet(btnBase);
+        leftBtn->setCursor(Qt::PointingHandCursor);
+        rightBtn->setCursor(Qt::PointingHandCursor);
+
+        // 切换：点左 → butt_setting_choose_left.png；点右 → butt_setting_choose_right.png
+        QObject::connect(leftBtn,  &QPushButton::clicked, container, [container](){
+            container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_left.png) no-repeat;}");
+        });
+        QObject::connect(rightBtn, &QPushButton::clicked, container, [container](){
+            container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_right.png) no-repeat;}");
+        });
+
+        h->addWidget(container);
         return row;
     };
 
@@ -845,57 +845,89 @@ QWidget *SystemSettingWindow::createSoundPage()
     fieldTitle->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;}");
     fieldTitle->setFixedWidth(170);
     fieldLayout->addWidget(fieldTitle);
+    fieldLayout->addStretch();
 
+    // CSS .setting_sound_field .setting_brightness_tab li:first-child { border-radius:100px; w:168; bg:#0452CA }
+    // 使用专用图片（butt_setting_sound_field_up/down.png 168×44）
     auto *fieldBtn = new QPushButton(QStringLiteral("低音增强"), fieldRow);
     fieldBtn->setFixedSize(168, 44);
     fieldBtn->setStyleSheet(
-        "QPushButton{border:none;border-radius:22px;background:#0452ca;color:#fff;font-size:24px;padding:0 18px;}"
-        "QPushButton:hover{background:#00faff;color:#08324d;}"
+        "QPushButton{border:none;background:url(:/images/butt_setting_sound_field_up.png) no-repeat center;color:#fff;font-size:24px;}"
+        "QPushButton:hover{background:url(:/images/butt_setting_sound_field_down.png) no-repeat center;}"
     );
     connect(fieldBtn, &QPushButton::clicked, this, [this, fieldBtn]() {
+        // 声场模式选择：全屏对话框，匹配 system_setting_sound_field.html
+        // HTML: .radio_sound { width:696; margin:150px auto 0 }
+        //       ul { height:330; flex-wrap:wrap; justify-content:space-between; align-content:space-around }
+        //       li { width:200; height:78; border:1px solid #0068FF; font-size:35; line-height:76; text-align:center }
         QDialog dialog(this);
-        dialog.setWindowTitle(QStringLiteral("声场模式"));
-        dialog.setFixedSize(696, 480);
-        dialog.setStyleSheet("QDialog{background:#08142d;color:#fff;border:none;}");
+        dialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+        dialog.setFixedSize(1280, 720);
+        dialog.setStyleSheet("QDialog{background-image:url(:/images/inside_background.png);}");
 
-        auto *dLayout = new QVBoxLayout(&dialog);
-        dLayout->setContentsMargins(0, 150, 0, 0);
-        dLayout->setSpacing(0);
-        auto *list = new QListWidget(&dialog);
-        list->setStyleSheet(
-            "QListWidget{background:transparent;border:none;outline:none;font-size:35px;color:#fff;}"
-            "QListWidget::item{height:78px;border:1px solid #0068ff;background:transparent;text-align:center;}"
-            "QListWidget::item:selected{border:2px solid #00faff;color:#00faff;}"
-            "QListWidget::item:hover{border:2px solid #00faff;color:#00faff;}"
-        );
-        list->setFlow(QListView::LeftToRight);
-        list->setWrapping(true);
-        list->setResizeMode(QListView::Adjust);
-        list->setGridSize(QSize(200, 82));
-        list->setSpacing(8);
-        list->setFixedSize(696, 330);
+        // 顶部栏（同主界面：topbar.png + HOME 按钮 + TopBarRightWidget）
+        auto *topBar = new QWidget(&dialog);
+        topBar->setGeometry(0, 0, 1280, 82);
+        topBar->setStyleSheet("background-image:url(:/images/topbar.png);");
+        auto *dlgHomeBtn = new QPushButton(topBar);
+        dlgHomeBtn->setGeometry(12, 12, 48, 48);
+        dlgHomeBtn->setStyleSheet(
+            "QPushButton{border:none;background-image:url(:/images/pict_home_up.png);background-repeat:no-repeat;}"
+            "QPushButton:hover,QPushButton:pressed{background-image:url(:/images/pict_home_down.png);}");
+        dlgHomeBtn->setCursor(Qt::PointingHandCursor);
+        connect(dlgHomeBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
+        auto *dlgTitle = new QLabel(QStringLiteral("系统设置"), topBar);
+        dlgTitle->setGeometry(0, 0, 1280, 72);
+        dlgTitle->setStyleSheet("color:#fff;font-size:36px;font-weight:bold;background:transparent;");
+        dlgTitle->setAlignment(Qt::AlignCenter);
+        dlgTitle->setAttribute(Qt::WA_TransparentForMouseEvents);
+        auto *dlgTopBarRight = new TopBarRightWidget(topBar);
+        dlgTopBarRight->setGeometry(1280 - 16 - TopBarRightWidget::preferredWidth(), 17,
+                                    TopBarRightWidget::preferredWidth(), 48);
+
+        // 返回按钮：.back { left:60; top:103; 60×60 }
+        auto *backBtn = new QPushButton(&dialog);
+        backBtn->setGeometry(60, 103, 60, 60);
+        backBtn->setStyleSheet(
+            "QPushButton{border:none;background:url(:/images/butt_back_up.png) no-repeat;}"
+            "QPushButton:hover{background:url(:/images/butt_back_down.png) no-repeat;}");
+        backBtn->setCursor(Qt::PointingHandCursor);
+        connect(backBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
+
+        // .radio_sound { width:696; margin:150px auto 0 } → x=(1280-696)/2=292, y=82+150=232
+        // ul: height:330; items: width:200 height:78
+        // 9 items × 3 per row × space-between in 696px → items at 0,248,496 per row
         const QStringList modes = {
             QStringLiteral("立体声"), QStringLiteral("环绕声"), QStringLiteral("低音增强"),
             QStringLiteral("高音增强"), QStringLiteral("平衡音"), QStringLiteral("音场定位"),
             QStringLiteral("降噪音效"), QStringLiteral("虚拟声场"), QStringLiteral("响度补偿")
         };
-        list->addItems(modes);
-        const int idx = modes.indexOf(fieldBtn->text());
-        if (idx >= 0) {
-            list->setCurrentRow(idx);
-        }
-        dLayout->addWidget(list, 0, Qt::AlignHCenter);
+        const int currentIdx = modes.indexOf(fieldBtn->text());
 
-        connect(list, &QListWidget::itemClicked, &dialog, [&dialog, fieldBtn](QListWidgetItem *item) {
-            if (item) {
-                fieldBtn->setText(item->text());
+        // row heights: 330/3=110px each; space-around → top/bottom gap = (330-3×78)/(3×2)=16px
+        // 每行 y offset: 16, 16+78+32=126, 16+78+32+78+32=236
+        const int colXs[3] = {0, 248, 496};
+        const int rowYs[3] = {16, 126, 236};
+        for (int i = 0; i < modes.size(); ++i) {
+            const int col = i % 3;
+            const int row = i / 3;
+            auto *btn = new QPushButton(modes[i], &dialog);
+            btn->setGeometry(292 + colXs[col], 232 + rowYs[row], 200, 78);
+            const bool isActive = (i == currentIdx);
+            btn->setStyleSheet(isActive
+                ? "QPushButton{border:2px solid #00FAFF;background:rgba(0,250,255,0.08);color:#00FAFF;font-size:35px;}"
+                  "QPushButton:hover{border:2px solid #00FAFF;color:#00FAFF;}"
+                : "QPushButton{border:1px solid #0068FF;background:transparent;color:#fff;font-size:35px;}"
+                  "QPushButton:hover{border:2px solid #00FAFF;color:#00FAFF;}");
+            btn->setCursor(Qt::PointingHandCursor);
+            connect(btn, &QPushButton::clicked, &dialog, [&dialog, fieldBtn, text = modes[i]]() {
+                fieldBtn->setText(text);
                 dialog.accept();
-            }
-        });
+            });
+        }
         dialog.exec();
     });
     fieldLayout->addWidget(fieldBtn);
-    fieldLayout->addStretch();
 
     layout->addWidget(volumeRow);
     layout->addWidget(touchRow);
@@ -912,8 +944,8 @@ QWidget *SystemSettingWindow::createBluetoothPage()
     layout->setSpacing(0);
 
     auto *tabs = new QTabWidget(page);
-    tabs->setFixedWidth(648);
     tabs->tabBar()->setUsesScrollButtons(false);
+    tabs->tabBar()->setExpanding(false);
     tabs->setStyleSheet(
         "QTabWidget::pane{border:none;background:transparent;}"
         "QTabBar::tab{width:160px;height:66px;border:none;color:#fff;font-size:28px;padding:0;margin-right:1px;}"
@@ -960,20 +992,21 @@ QWidget *SystemSettingWindow::createBluetoothPage()
     switchRowLayout->addWidget(enableBtn);
     switchRowLayout->addStretch();
 
-    auto *intro = new QLabel(QStringLiteral("在移动设备上启动蓝牙，并搜索本设备name：wodelanya\n匹配密码：0000"), openTab);
-    intro->setStyleSheet("QLabel{font-size:28px;line-height:42px;color:#eaf2ff;}");
-    intro->setWordWrap(true);
-
-    auto *renameBtn = makeBlueBtn(QStringLiteral("修改名称"), 168);
-    auto *pwdBtn = makeBlueBtn(QStringLiteral("修改密码"), 168);
-    auto *openBtnRow = new QHBoxLayout();
-    openBtnRow->addWidget(renameBtn);
-    openBtnRow->addWidget(pwdBtn);
-    openBtnRow->addStretch();
-
+    // HTML: 在移动设备上启动蓝牙，并搜索本设备name：<a>wodelanya</a><br>匹配密码：0000
+    // CSS .bluetooth_intro a { color:#00FAFF }  设备名称不换行显示
     auto *deviceName = new QString(QStringLiteral("wodelanya"));
     auto *pairPwd = new QString(QStringLiteral("0000"));
-    connect(renameBtn, &QPushButton::clicked, this, [this, intro, deviceName, pairPwd]() {
+
+    auto *intro = new QLabel(openTab);
+    intro->setTextFormat(Qt::RichText);
+    intro->setText(QStringLiteral(
+        "在移动设备上启动蓝牙，并搜索本设备name：<a href='rename' style='color:#00FAFF;text-decoration:none;'>%1</a><br>匹配密码：%2"
+    ).arg(*deviceName, *pairPwd));
+    intro->setStyleSheet("QLabel{font-size:28px;line-height:42px;color:#eaf2ff;}");
+    intro->setOpenExternalLinks(false);
+    // 点击设备名称 → 重命名对话框
+    connect(intro, &QLabel::linkActivated, this, [this, intro, deviceName, pairPwd](const QString &link) {
+        if (link != QStringLiteral("rename")) return;
         QDialog dialog(this);
         dialog.setWindowTitle(QStringLiteral("蓝牙名称"));
         dialog.setFixedSize(680, 220);
@@ -985,165 +1018,320 @@ QWidget *SystemSettingWindow::createBluetoothPage()
         ok->setFixedSize(168, 54);
         ok->setStyleSheet("QPushButton{background:#0068ff;color:#fff;border:none;font-size:26px;}QPushButton:hover{background:#00a5ff;}");
         dLayout->addWidget(line);
-        auto *row = new QHBoxLayout();
-        row->addStretch();
-        row->addWidget(ok);
-        row->addStretch();
-        dLayout->addLayout(row);
+        auto *r = new QHBoxLayout(); r->addStretch(); r->addWidget(ok); r->addStretch();
+        dLayout->addLayout(r);
         connect(ok, &QPushButton::clicked, &dialog, &QDialog::accept);
         if (dialog.exec() == QDialog::Accepted && !line->text().trimmed().isEmpty()) {
             *deviceName = line->text().trimmed();
-            intro->setText(QStringLiteral("在移动设备上启动蓝牙，并搜索本设备name：%1\n匹配密码：%2").arg(*deviceName, *pairPwd));
-        }
-    });
-    connect(pwdBtn, &QPushButton::clicked, this, [this, intro, deviceName, pairPwd]() {
-        QDialog dialog(this);
-        dialog.setWindowTitle(QStringLiteral("密码设置"));
-        dialog.setFixedSize(680, 220);
-        dialog.setStyleSheet("QDialog{background:#0d1f3f;color:#fff;border:1px solid #0068ff;}");
-        auto *dLayout = new QVBoxLayout(&dialog);
-        auto *line = new QLineEdit(*pairPwd, &dialog);
-        line->setEchoMode(QLineEdit::Password);
-        line->setStyleSheet("QLineEdit{height:54px;background:rgba(255,255,255,0.08);border:1px solid #0068ff;color:#fff;font-size:28px;padding-left:16px;}");
-        auto *ok = new QPushButton(QStringLiteral("确认"), &dialog);
-        ok->setFixedSize(168, 54);
-        ok->setStyleSheet("QPushButton{background:#0068ff;color:#fff;border:none;font-size:26px;}QPushButton:hover{background:#00a5ff;}");
-        dLayout->addWidget(line);
-        auto *row = new QHBoxLayout();
-        row->addStretch();
-        row->addWidget(ok);
-        row->addStretch();
-        dLayout->addLayout(row);
-        connect(ok, &QPushButton::clicked, &dialog, &QDialog::accept);
-        if (dialog.exec() == QDialog::Accepted && !line->text().trimmed().isEmpty()) {
-            *pairPwd = line->text().trimmed();
-            intro->setText(QStringLiteral("在移动设备上启动蓝牙，并搜索本设备name：%1\n匹配密码：%2").arg(*deviceName, *pairPwd));
+            intro->setText(QStringLiteral(
+                "在移动设备上启动蓝牙，并搜索本设备name：<a href='rename' style='color:#00FAFF;text-decoration:none;'>%1</a><br>匹配密码：%2"
+            ).arg(*deviceName, *pairPwd));
         }
     });
 
     openLayout->addWidget(switchRow);
     openLayout->addWidget(intro);
-    openLayout->addLayout(openBtnRow);
     openLayout->addStretch();
 
     auto *pairTab = new QWidget();
     auto *pairLayout = new QVBoxLayout(pairTab);
     pairLayout->setContentsMargins(0, 0, 0, 0);
-    pairLayout->setSpacing(12);
-    auto *currentLabel = new QLabel(QStringLiteral("当前连接的设备"), pairTab);
-    currentLabel->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;}");
-    auto *currentDevice = new QLabel(QStringLiteral("手机：13723467654"), pairTab);
-    currentDevice->setStyleSheet("QLabel{height:60px;border:1px solid #0068ff;background:rgba(255,255,255,0.10);font-size:28px;padding-left:18px;color:#fff;}");
-    auto *chooseLabel = new QLabel(QStringLiteral("请选择需要连接的手机"), pairTab);
-    chooseLabel->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;margin-top:8px;}");
-    auto *pairList = new QListWidget(pairTab);
+    pairLayout->setSpacing(0);
+
+    // CSS .bluetooth_list>li { line-height:60; height:110 }  dt 左浮；dd { width:400 }
+    // ── 第一行：当前连接的设备 ──
+    auto *pairRow1 = new QWidget(pairTab);
+    pairRow1->setFixedHeight(110);
+    pairRow1->setStyleSheet("QWidget{border-bottom:2px solid rgba(255,255,255,0.08);}");
+    auto *pairRow1H = new QHBoxLayout(pairRow1);
+    pairRow1H->setContentsMargins(0, 25, 0, 25);
+    pairRow1H->setSpacing(0);
+    auto *pairDt1 = new QLabel(QStringLiteral("当前连接的设备"), pairRow1);
+    pairDt1->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;}");
+    pairRow1H->addWidget(pairDt1);
+    pairRow1H->addStretch();
+    auto *currentDevice = new QLabel(QStringLiteral("手机：13723467654"), pairRow1);
+    currentDevice->setFixedSize(400, 60);
+    currentDevice->setAlignment(Qt::AlignCenter);
+    currentDevice->setStyleSheet(
+        "QLabel{height:60px;border:1px solid #0068FF;background:rgba(255,255,255,0.10);font-size:28px;color:#fff;}");
+    pairRow1H->addWidget(currentDevice);
+
+    // ── 第二行：选择连接手机（last-child: height:290; border:none）──
+    auto *pairRow2 = new QWidget(pairTab);
+    auto *pairRow2H = new QHBoxLayout(pairRow2);
+    pairRow2H->setContentsMargins(0, 25, 0, 0);
+    pairRow2H->setSpacing(0);
+    auto *pairDt2 = new QLabel(QStringLiteral("请选择需要\n连接的手机"), pairRow2);
+    pairDt2->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;line-height:48px;}");
+    pairRow2H->addWidget(pairDt2);
+    pairRow2H->addStretch();
+
+    auto *pairDdWidget = new QWidget(pairRow2);
+    pairDdWidget->setFixedWidth(400);
+    auto *pairDdLayout = new QVBoxLayout(pairDdWidget);
+    pairDdLayout->setContentsMargins(0, 0, 0, 0);
+    pairDdLayout->setSpacing(0);
+
+    auto *pairList = new QListWidget(pairDdWidget);
     pairList->addItems({QStringLiteral("手机：13723467654"), QStringLiteral("手机：13723467655"), QStringLiteral("手机：13723467656")});
     pairList->setCurrentRow(0);
     pairList->setFixedHeight(192);
     pairList->setStyleSheet(
         "QListWidget{border:none;background:transparent;outline:none;font-size:28px;color:#fff;}"
-        "QListWidget::item{height:60px;border:1px solid #0068ff;background:rgba(255,255,255,0.10);margin-bottom:12px;padding-left:16px;}"
-        "QListWidget::item:selected{border:2px solid #00faff;color:#00faff;}"
-        "QListWidget::item:hover{border:2px solid #00faff;color:#00faff;}"
+        "QListWidget::item{height:60px;border:1px solid #0068FF;background:rgba(255,255,255,0.10);text-align:center;}"
+        "QListWidget::item:selected{border:2px solid #00FAFF;color:#00FAFF;}"
+        "QListWidget::item:hover{border:2px solid #00FAFF;color:#00FAFF;}"
+        "QScrollBar:vertical{width:6px;background:rgba(0,104,255,0.10);border-radius:3px;}"
+        "QScrollBar::handle:vertical{background:#0068FF;border-radius:3px;min-height:30px;}"
+        "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;background:none;}"
     );
-    auto *pairBtnRow = new QHBoxLayout();
+
+    // CSS .bluetooth_list .page_btn { width:326; justify-content:space-between; margin:0 auto }
+    // button.bluetooth_btn { w:112; h:54; border:2px solid #0068FF }
+    auto *pairBtnWrap = new QWidget(pairDdWidget);
+    pairBtnWrap->setFixedSize(326, 74);
+    auto *pairBtnH = new QHBoxLayout(pairBtnWrap);
+    pairBtnH->setContentsMargins(0, 20, 0, 0);
+    pairBtnH->setSpacing(0);
     auto *connectBtn = makeBlueBtn(QStringLiteral("连接"));
     auto *disconnectBtn = makeBlueBtn(QStringLiteral("断开"));
-    pairBtnRow->addStretch();
-    pairBtnRow->addWidget(connectBtn);
-    pairBtnRow->addSpacing(28);
-    pairBtnRow->addWidget(disconnectBtn);
-    pairBtnRow->addStretch();
+    pairBtnH->addWidget(connectBtn);
+    pairBtnH->addStretch();
+    pairBtnH->addWidget(disconnectBtn);
     connect(connectBtn, &QPushButton::clicked, this, [pairList, currentDevice]() {
-        if (pairList->currentItem()) {
+        if (pairList->currentItem())
             currentDevice->setText(pairList->currentItem()->text());
-        }
     });
     connect(disconnectBtn, &QPushButton::clicked, this, [currentDevice]() {
         currentDevice->setText(QStringLiteral("未连接"));
     });
 
-    pairLayout->addWidget(currentLabel);
-    pairLayout->addWidget(currentDevice);
-    pairLayout->addWidget(chooseLabel);
-    pairLayout->addWidget(pairList);
-    pairLayout->addLayout(pairBtnRow);
+    pairDdLayout->addWidget(pairList);
+    pairDdLayout->addWidget(pairBtnWrap, 0, Qt::AlignHCenter);
+    pairRow2H->addWidget(pairDdWidget);
+    pairLayout->addWidget(pairRow1);
+    pairLayout->addWidget(pairRow2);
     pairLayout->addStretch();
 
+    // ── 删除设备 Tab ──────────────────────────────────────────────────────────
+    // HTML: system_setting_bluetooth_device_del.html — 同样两行结构，确认按钮居中
     auto *removeTab = new QWidget();
     auto *removeLayout = new QVBoxLayout(removeTab);
     removeLayout->setContentsMargins(0, 0, 0, 0);
-    removeLayout->setSpacing(12);
-    auto *removeTitle = new QLabel(QStringLiteral("请选择需要连接的手机"), removeTab);
-    removeTitle->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;}");
-    auto *removeList = new QListWidget(removeTab);
+    removeLayout->setSpacing(0);
+
+    // 第一行：当前连接的设备
+    auto *delRow1 = new QWidget(removeTab);
+    delRow1->setFixedHeight(110);
+    delRow1->setStyleSheet("QWidget{border-bottom:2px solid rgba(255,255,255,0.08);}");
+    auto *delRow1H = new QHBoxLayout(delRow1);
+    delRow1H->setContentsMargins(0, 25, 0, 25);
+    delRow1H->setSpacing(0);
+    auto *delDt1 = new QLabel(QStringLiteral("当前连接的设备"), delRow1);
+    delDt1->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;}");
+    delRow1H->addWidget(delDt1);
+    delRow1H->addStretch();
+    auto *delCurrentDevice = new QLabel(QStringLiteral("手机：13723467654"), delRow1);
+    delCurrentDevice->setFixedSize(400, 60);
+    delCurrentDevice->setAlignment(Qt::AlignCenter);
+    delCurrentDevice->setStyleSheet(
+        "QLabel{height:60px;border:1px solid #0068FF;background:rgba(255,255,255,0.10);font-size:28px;color:#fff;}");
+    delRow1H->addWidget(delCurrentDevice);
+
+    // 第二行：选择要删除的设备
+    auto *delRow2 = new QWidget(removeTab);
+    auto *delRow2H = new QHBoxLayout(delRow2);
+    delRow2H->setContentsMargins(0, 25, 0, 0);
+    delRow2H->setSpacing(0);
+    auto *delDt2 = new QLabel(QStringLiteral("请选择需要\n删除的手机"), delRow2);
+    delDt2->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;line-height:48px;}");
+    delRow2H->addWidget(delDt2);
+    delRow2H->addStretch();
+
+    auto *delDdWidget = new QWidget(delRow2);
+    delDdWidget->setFixedWidth(400);
+    auto *delDdLayout = new QVBoxLayout(delDdWidget);
+    delDdLayout->setContentsMargins(0, 0, 0, 0);
+    delDdLayout->setSpacing(0);
+
+    auto *removeList = new QListWidget(delDdWidget);
     removeList->addItems({QStringLiteral("手机：13723467654"), QStringLiteral("手机：13723467655"), QStringLiteral("手机：13723467656")});
     removeList->setCurrentRow(0);
-    removeList->setFixedHeight(230);
+    removeList->setFixedHeight(216);
     removeList->setStyleSheet(
         "QListWidget{border:none;background:transparent;outline:none;font-size:28px;color:#fff;}"
-        "QListWidget::item{height:60px;border:1px solid #0068ff;background:rgba(255,255,255,0.10);margin-bottom:12px;padding-left:16px;}"
-        "QListWidget::item:selected{border:2px solid #00faff;color:#00faff;}"
-        "QListWidget::item:hover{border:2px solid #00faff;color:#00faff;}"
+        "QListWidget::item{height:60px;border:1px solid #0068FF;background:rgba(255,255,255,0.10);text-align:center;margin-bottom:12px;}"
+        "QListWidget::item:selected{border:2px solid #00FAFF;color:#00FAFF;}"
+        "QListWidget::item:hover{border:2px solid #00FAFF;color:#00FAFF;}"
+        "QScrollBar:vertical{width:6px;background:rgba(0,104,255,0.10);border-radius:3px;}"
+        "QScrollBar::handle:vertical{background:#0068FF;border-radius:3px;min-height:30px;}"
+        "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;background:none;}"
     );
+
+    // HTML: justify-content:center → 只有一个确认按钮居中
+    auto *delBtnWrap = new QWidget(delDdWidget);
+    delBtnWrap->setFixedSize(326, 74);
+    auto *delBtnH = new QHBoxLayout(delBtnWrap);
+    delBtnH->setContentsMargins(0, 20, 0, 0);
     auto *removeBtn = makeBlueBtn(QStringLiteral("确认"));
-    auto *removeBtnRow = new QHBoxLayout();
-    removeBtnRow->addStretch();
-    removeBtnRow->addWidget(removeBtn);
-    removeBtnRow->addStretch();
-    connect(removeBtn, &QPushButton::clicked, this, [removeList]() {
+    delBtnH->addStretch();
+    delBtnH->addWidget(removeBtn);
+    delBtnH->addStretch();
+    connect(removeBtn, &QPushButton::clicked, this, [removeList, delCurrentDevice]() {
         if (removeList->currentRow() >= 0) {
             delete removeList->takeItem(removeList->currentRow());
+            if (removeList->count() == 0)
+                delCurrentDevice->setText(QStringLiteral("未连接"));
         }
     });
-    removeLayout->addWidget(removeTitle);
-    removeLayout->addWidget(removeList);
-    removeLayout->addLayout(removeBtnRow);
+
+    delDdLayout->addWidget(removeList);
+    delDdLayout->addWidget(delBtnWrap, 0, Qt::AlignHCenter);
+    delRow2H->addWidget(delDdWidget);
+    removeLayout->addWidget(delRow1);
+    removeLayout->addWidget(delRow2);
     removeLayout->addStretch();
 
+    // ── 密码设置 Tab ──────────────────────────────────────────────────────────
+    // HTML: .bluetooth_passward { width:840px; padding:0 12px } → 816px 可用宽度
+    //   input: height:72px; font-size:48px; padding-left:24px; border:1px solid #0068FF
+    //   .radio_search_keybord ul (610px, 3×4, 198×94) + phone_dial_btn (198px)
+    //   justify-content:space-between → 610 + gap + 198 = 816px
     auto *passwordTab = new QWidget();
-    auto *passwordLayout = new QVBoxLayout(passwordTab);
-    passwordLayout->setContentsMargins(0, 0, 0, 0);
-    passwordLayout->setSpacing(8);
-    auto *pwdEdit = new QLineEdit(QStringLiteral("1234"), passwordTab);
+    // 外层：水平居中一个 840px 容器
+    auto *pwdOuterLayout = new QHBoxLayout(passwordTab);
+    pwdOuterLayout->setContentsMargins(0, 0, 0, 0);
+    pwdOuterLayout->setSpacing(0);
+    auto *pwdContainer = new QWidget();
+    pwdContainer->setFixedWidth(840);
+    auto *passwordLayout = new QVBoxLayout(pwdContainer);
+    // 12px padding 两侧 → 816px 内容宽
+    passwordLayout->setContentsMargins(12, 0, 12, 0);
+    passwordLayout->setSpacing(0);
+    pwdOuterLayout->addStretch();
+    pwdOuterLayout->addWidget(pwdContainer);
+    pwdOuterLayout->addStretch();
+
+    // ─ 输入框行：QLineEdit(816px, h:72) + 清除按钮绝对叠放在右端 ─
+    // CSS .bluetooth_passward div input { padding-left:24px; font-size:48px; height:72px }
+    //     .radio_search_con>div>span { right:24px; top:12px; 48×48 }
+    auto *pwdInputWrap = new QWidget(pwdContainer);
+    pwdInputWrap->setFixedHeight(80);
+    auto *pwdEdit = new QLineEdit(QStringLiteral("1234"), pwdInputWrap);
     pwdEdit->setReadOnly(true);
     pwdEdit->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    pwdEdit->setStyleSheet("QLineEdit{height:62px;background:rgba(255,255,255,0.08);border:1px solid #0068ff;color:#fff;font-size:34px;padding-left:24px;}");
-    auto *keypad = new QWidget(passwordTab);
-    auto *grid = new QGridLayout(keypad);
-    grid->setContentsMargins(0, 0, 0, 0);
-    grid->setHorizontalSpacing(10);
-    grid->setVerticalSpacing(10);
-    const QStringList keys = {"1","2","3","4","5","6","7","8","9","*","0","#"};
-    for (int i = 0; i < keys.size(); ++i) {
-        auto *btn = new QPushButton(keys[i], keypad);
-        btn->setFixedSize(120, 86);
-        btn->setStyleSheet("QPushButton{border:1px solid #0068ff;background:rgba(255,255,255,0.08);color:#fff;font-size:36px;}QPushButton:hover{border-color:#00faff;color:#00faff;}");
-        grid->addWidget(btn, i / 3, i % 3);
-        connect(btn, &QPushButton::clicked, this, [pwdEdit, btn]() {
-            pwdEdit->setText((pwdEdit->text() + btn->text()).right(8));
+    pwdEdit->setGeometry(0, 4, 816, 72);
+    pwdEdit->setStyleSheet(
+        "QLineEdit{height:72px;border:1px solid #0068FF;color:#fff;font-size:48px;"
+        "padding-left:24px;background:transparent;}");
+    // 清除按钮叠放：right:24px top:12px → x = 816-24-48=744, y = 4+12=16
+    auto *pwdClear = new QPushButton(pwdInputWrap);
+    pwdClear->setGeometry(744, 16, 48, 48);
+    pwdClear->setStyleSheet(
+        "QPushButton{border:none;background:url(:/images/butt_radio_search_del_all_up.png) no-repeat center;}"
+        "QPushButton:hover{background:url(:/images/butt_radio_search_del_all_down.png) no-repeat center;}");
+    connect(pwdClear, &QPushButton::clicked, this, [pwdEdit](){ pwdEdit->clear(); });
+
+    // ─ 键盘区域 (.radio_search_keybord padding-top:8px) ─
+    // 816px = 610(ul) + space-between + 198(phone_dial_btn)
+    auto *kbdArea = new QWidget(pwdContainer);
+    kbdArea->setFixedSize(816, 408);
+    auto *kbdH = new QHBoxLayout(kbdArea);
+    kbdH->setContentsMargins(0, 8, 0, 0);
+    kbdH->setSpacing(0);
+
+    // ─ 左侧 3×4 主键 (610×400, space-between) ─
+    // key 198×94; x=[0,206,412]; y=[0,102,204,306]
+    // 数字 span: font-size:48px bold, line-height:48px, margin-top:11px
+    // 字母 span: font-size:22px normal, line-height:22px, margin-top:2px
+    struct KeyDef { QString num; QString letters; };
+    const QList<KeyDef> keyDefs = {
+        {"1",""},{"2","ABC"},{"3","DEF"},
+        {"4","GHI"},{"5","JKL"},{"6","MNO"},
+        {"7","PQRS"},{"8","TUV"},{"9","WXYZ"},
+        {"*",""},{"0","+"},{"#",""}
+    };
+    auto *keysWidget = new QWidget(kbdArea);
+    keysWidget->setFixedSize(610, 400);
+    const int kxs[3] = {0, 206, 412};
+    const int kys[4] = {0, 102, 204, 306};
+    for (int i = 0; i < keyDefs.size(); ++i) {
+        const int col = i % 3;
+        const int krow = i / 3;
+        const bool isStar    = (keyDefs[i].num == QStringLiteral("*"));
+        const bool hasLetters = !keyDefs[i].letters.isEmpty();
+        auto *btn = new QPushButton(keysWidget);
+        btn->setGeometry(kxs[col], kys[krow], 198, 94);
+        // QPushButton 只提供边框和点击事件，文字由 QLabel 叠加渲染
+        btn->setStyleSheet(
+            "QPushButton{border:1px solid #0068FF;background:rgba(255,255,255,0.03);}"
+            "QPushButton:hover{border:1px solid #00FAFF;}");
+        if (isStar) {
+            // CSS inline: line-height:120px; font-size:64px
+            auto *lbl = new QLabel(QStringLiteral("*"), btn);
+            lbl->setGeometry(0, 0, 198, 94);
+            lbl->setAlignment(Qt::AlignCenter);
+            lbl->setStyleSheet("font-size:64px;color:#fff;background:transparent;");
+            lbl->setAttribute(Qt::WA_TransparentForMouseEvents);
+        } else if (hasLetters) {
+            // 上：数字 48px bold（margin-top:11, line-height:48）→ y=8, h=52
+            auto *numLbl = new QLabel(keyDefs[i].num, btn);
+            numLbl->setGeometry(0, 8, 198, 52);
+            numLbl->setAlignment(Qt::AlignCenter);
+            numLbl->setStyleSheet("font-size:48px;font-weight:bold;color:#fff;background:transparent;");
+            numLbl->setAttribute(Qt::WA_TransparentForMouseEvents);
+            // 下：字母 22px normal（margin-top:2）→ y=60, h=26
+            auto *letLbl = new QLabel(keyDefs[i].letters, btn);
+            letLbl->setGeometry(0, 60, 198, 26);
+            letLbl->setAlignment(Qt::AlignCenter);
+            letLbl->setStyleSheet("font-size:22px;color:#fff;background:transparent;");
+            letLbl->setAttribute(Qt::WA_TransparentForMouseEvents);
+        } else {
+            // 1, # ：单行数字居中 48px bold
+            auto *lbl = new QLabel(keyDefs[i].num, btn);
+            lbl->setGeometry(0, 0, 198, 94);
+            lbl->setAlignment(Qt::AlignCenter);
+            lbl->setStyleSheet("font-size:48px;font-weight:bold;color:#fff;background:transparent;");
+            lbl->setAttribute(Qt::WA_TransparentForMouseEvents);
+        }
+        connect(btn, &QPushButton::clicked, this, [pwdEdit, num=keyDefs[i].num](){
+            pwdEdit->setText((pwdEdit->text() + num).right(8));
         });
     }
-    auto *btnRow = new QHBoxLayout();
-    auto *backspace = makeBlueBtn(QStringLiteral("删除"));
-    auto *confirm = makeBlueBtn(QStringLiteral("确认"));
-    btnRow->addStretch();
-    btnRow->addWidget(backspace);
-    btnRow->addSpacing(28);
-    btnRow->addWidget(confirm);
-    btnRow->addStretch();
-    connect(backspace, &QPushButton::clicked, this, [pwdEdit]() {
-        pwdEdit->setText(pwdEdit->text().left(qMax(0, pwdEdit->text().size() - 1)));
+    kbdH->addWidget(keysWidget);
+    kbdH->addStretch();
+
+    // ─ 右侧 phone_dial_btn (198×400) ─
+    // li:first-child { h:196; margin-bottom:8px; bg:butt_calling_del_up.png }
+    // li:last-child  { h:196; bg:#0068FF; font-size:48px; line-height:198px(居中) }
+    auto *dialBtn = new QWidget(kbdArea);
+    dialBtn->setFixedSize(198, 400);
+    auto *backspaceBtn = new QPushButton(dialBtn);
+    backspaceBtn->setGeometry(0, 0, 198, 196);
+    backspaceBtn->setStyleSheet(
+        "QPushButton{border:none;background:url(:/images/butt_calling_del_up.png) no-repeat center;}"
+        "QPushButton:hover{background:url(:/images/butt_calling_del_down.png) no-repeat center;}");
+    connect(backspaceBtn, &QPushButton::clicked, this, [pwdEdit](){
+        pwdEdit->setText(pwdEdit->text().left(qMax(0, pwdEdit->text().size()-1)));
     });
-    connect(confirm, &QPushButton::clicked, this, [pairPwd, pwdEdit, intro, deviceName]() {
+    auto *confirmBtn = new QPushButton(QStringLiteral("确认"), dialBtn);
+    confirmBtn->setGeometry(0, 204, 198, 196);
+    confirmBtn->setStyleSheet(
+        "QPushButton{border:none;background:#0068FF;color:#fff;font-size:48px;font-weight:bold;}"
+        "QPushButton:hover{background:#00FAFF;}");
+    connect(confirmBtn, &QPushButton::clicked, this, [pairPwd, pwdEdit, intro, deviceName](){
         if (!pwdEdit->text().isEmpty()) {
             *pairPwd = pwdEdit->text();
-            intro->setText(QStringLiteral("在移动设备上启动蓝牙，并搜索本设备name：%1\n匹配密码：%2").arg(*deviceName, *pairPwd));
+            intro->setText(QStringLiteral(
+                "在移动设备上启动蓝牙，并搜索本设备name：<a href='rename' style='color:#00FAFF;text-decoration:none;'>%1</a><br>匹配密码：%2"
+            ).arg(*deviceName, *pairPwd));
         }
     });
-    passwordLayout->addWidget(pwdEdit);
-    passwordLayout->addWidget(keypad, 0, Qt::AlignHCenter);
-    passwordLayout->addLayout(btnRow);
+    kbdH->addWidget(dialBtn);
+
+    passwordLayout->addWidget(pwdInputWrap);
+    passwordLayout->addWidget(kbdArea);
     passwordLayout->addStretch();
 
     tabs->addTab(openTab, QStringLiteral("蓝牙开启"));
