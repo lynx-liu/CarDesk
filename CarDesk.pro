@@ -114,7 +114,9 @@ HEADERS += \
     src/t507sdkbridge.h \
     src/ahdmanager.h \
     src/otamanager.h \
-    src/progressmonitor.h
+    src/progressmonitor.h \
+    src/appsignals.h \
+    src/topbarwidget.h
 
 SOURCES += \
     src/main.cpp \
@@ -135,7 +137,9 @@ SOURCES += \
     src/t507sdkbridge.cpp \
     src/ahdmanager.cpp \
     src/otamanager.cpp \
-    src/progressmonitor.cpp
+    src/progressmonitor.cpp \
+    src/appsignals.cpp \
+    src/topbarwidget.cpp
 
 # 资源文件（如果存在）
 exists(resources.qrc) {

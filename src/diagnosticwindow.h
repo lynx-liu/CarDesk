@@ -19,9 +19,11 @@ signals:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 
 private slots:
     void onOpenFaultPage();
+    void onOpenFaultDetailPage();
     void onOpenMaintenanceBookPage();
     void onOpenPdfView();
     void onOpenPdfSearchPage();
@@ -37,6 +39,7 @@ private:
     void setupUI();
     QWidget *createMainMenuPage();
     QWidget *createFaultPage();
+    QWidget *createFaultDetailPage();
     QWidget *createMaintenanceBookPage();
     QWidget *createPdfPage();
     QWidget *createPdfSearchPage();

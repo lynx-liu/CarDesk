@@ -1,7 +1,10 @@
 #include "diagnosticwindow.h"
 #include "devicedetect.h"
+#include "topbarwidget.h"
 
 #include <QApplication>
+#include <QKeyEvent>
+#include <QProcess>
 #include <QCloseEvent>
 #include <QFrame>
 #include <QGridLayout>
@@ -68,6 +71,7 @@ void DiagnosticWindow::setupUI()
     m_pages->addWidget(createPdfPage());
     m_pages->addWidget(createPdfSearchPage());
     m_pages->addWidget(createPdfJumpPage());
+    m_pages->addWidget(createFaultDetailPage());  // index 6
 
     root->addWidget(m_pages, 1);
     openPage(0);
@@ -101,37 +105,13 @@ QWidget *DiagnosticWindow::createMainMenuPage()
     title->setAttribute(Qt::WA_TransparentForMouseEvents);
     homeBtn->raise();
 
-    QWidget *right = new QWidget(topBar);
-    right->setGeometry(1280 - 16 - 280, 12, 280, 48);
-    right->setStyleSheet("background:transparent;");
-    auto *rightLay = new QHBoxLayout(right);
-    rightLay->setContentsMargins(0, 0, 0, 0);
-    rightLay->setSpacing(16);
-
-    auto *btIcon = new QLabel(right);
-    btIcon->setFixedSize(48, 48);
-    btIcon->setPixmap(QPixmap(":/images/pict_buetooth.png"));
-    rightLay->addWidget(btIcon);
-
-    auto *usbIcon = new QLabel(right);
-    usbIcon->setFixedSize(48, 48);
-    usbIcon->setPixmap(QPixmap(":/images/pict_usb.png"));
-    rightLay->addWidget(usbIcon);
-
-    auto *volIcon = new QLabel(right);
-    volIcon->setFixedSize(48, 48);
-    volIcon->setPixmap(QPixmap(":/images/pict_volume.png"));
-    auto *volLabel = new QLabel(QStringLiteral("10"), right);
-    volLabel->setStyleSheet("QLabel{color:#fff;font-size:36px;}");
-    rightLay->addWidget(volIcon);
-    rightLay->addWidget(volLabel);
-
-    auto *timeLabel = new QLabel(QTime::currentTime().toString("hh:mm"), right);
-    timeLabel->setStyleSheet("QLabel{color:#fff;font-size:36px;}");
-    rightLay->addWidget(timeLabel);
+    auto *topBarRight = new TopBarRightWidget(topBar);
+    topBarRight->setGeometry(1280 - 16 - TopBarRightWidget::preferredWidth(), 17,
+                             TopBarRightWidget::preferredWidth(), 48);
 
     auto *menuWrap = new QWidget(page);
-    menuWrap->setGeometry(0, 146, 1280, 420);
+    // CSS .diagnostic_maintenance_con { margin-top:146px } => y = topbar(82) + 146 = 228
+    menuWrap->setGeometry(0, 228, 1280, 420);
     auto *menuLayout = new QHBoxLayout(menuWrap);
     menuLayout->setContentsMargins(408, 0, 408, 0);
     menuLayout->setSpacing(80);
@@ -190,6 +170,10 @@ QWidget *DiagnosticWindow::createFaultPage()
     title->setAttribute(Qt::WA_TransparentForMouseEvents);
     homeBtn->raise();
 
+    auto *topBarRight = new TopBarRightWidget(topBar);
+    topBarRight->setGeometry(1280 - 16 - TopBarRightWidget::preferredWidth(), 17,
+                             TopBarRightWidget::preferredWidth(), 48);
+
     auto *backBtn = new QPushButton(page);
     backBtn->setGeometry(60, 103, 60, 60);
     backBtn->setCursor(Qt::PointingHandCursor);
@@ -217,7 +201,10 @@ QWidget *DiagnosticWindow::createFaultPage()
 
     for (int i = 0; i < names.size(); ++i) {
         auto *btn = new QPushButton(names.at(i), page);
-        btn->setGeometry(328 + i * 272, 207, 124, 160);
+        // CSS .diagnostic_fault_con { margin-top:207px } => y = 82+207 = 289
+        // CSS ul { justify-content:center } li { width:124; margin:0 74px }
+        // => x_start = (1280 - 3*272)/2 = 232, item_x = 232+74 = 306, step = 272
+        btn->setGeometry(306 + i * 272, 289, 124, 140);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setStyleSheet(
             QString(
@@ -226,8 +213,10 @@ QWidget *DiagnosticWindow::createFaultPage()
             ).arg(up.at(i), down.at(i))
         );
         if (i == 0) {
+            // ABS 系统：有故障徽标，点击进入故障详情页
+            connect(btn, &QPushButton::clicked, this, &DiagnosticWindow::onOpenFaultDetailPage);
             auto *tips = new QLabel(QStringLiteral("1"), btn);
-            tips->setGeometry(78, -8, 32, 32);
+            tips->setGeometry(77, -8, 32, 32);
             tips->setAlignment(Qt::AlignCenter);
             tips->setStyleSheet("QLabel{background:#B82F2F;color:#fff;font-size:24px;border-radius:16px;}");
         }
@@ -264,6 +253,10 @@ QWidget *DiagnosticWindow::createMaintenanceBookPage()
     title->setAttribute(Qt::WA_TransparentForMouseEvents);
     homeBtn->raise();
 
+    auto *topBarRight = new TopBarRightWidget(topBar);
+    topBarRight->setGeometry(1280 - 16 - TopBarRightWidget::preferredWidth(), 17,
+                             TopBarRightWidget::preferredWidth(), 48);
+
     auto *backBtn = new QPushButton(page);
     backBtn->setGeometry(60, 103, 60, 60);
     backBtn->setCursor(Qt::PointingHandCursor);
@@ -274,7 +267,10 @@ QWidget *DiagnosticWindow::createMaintenanceBookPage()
     connect(backBtn, &QPushButton::clicked, this, [this]() { openPage(0); });
 
     auto *bookWrap = new QWidget(page);
-    bookWrap->setGeometry(168, 160, 944, 536);
+    // CSS .diagnostic_maintenance_book { width:944; margin:24px auto }
+    // => x=(1280-944)/2=168, y=topbar(82)+24=106
+    // 8 rows × 68px + 7 gaps × 2px = 558px
+    bookWrap->setGeometry(168, 106, 944, 558);
     auto *bookLayout = new QVBoxLayout(bookWrap);
     bookLayout->setContentsMargins(0, 0, 0, 0);
     bookLayout->setSpacing(2);
@@ -511,6 +507,10 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
     title->setAttribute(Qt::WA_TransparentForMouseEvents);
     homeBtn->raise();
 
+    auto *topBarRight = new TopBarRightWidget(topBar);
+    topBarRight->setGeometry(1280 - 16 - TopBarRightWidget::preferredWidth(), 17,
+                             TopBarRightWidget::preferredWidth(), 48);
+
     auto *backBtn = new QPushButton(page);
     backBtn->setGeometry(60, 103, 60, 60);
     backBtn->setCursor(Qt::PointingHandCursor);
@@ -631,6 +631,10 @@ QWidget *DiagnosticWindow::createPdfJumpPage()
     title->setAttribute(Qt::WA_TransparentForMouseEvents);
     homeBtn->raise();
 
+    auto *topBarRight = new TopBarRightWidget(topBar);
+    topBarRight->setGeometry(1280 - 16 - TopBarRightWidget::preferredWidth(), 17,
+                             TopBarRightWidget::preferredWidth(), 48);
+
     auto *backBtn = new QPushButton(page);
     backBtn->setGeometry(60, 103, 60, 60);
     backBtn->setCursor(Qt::PointingHandCursor);
@@ -702,6 +706,103 @@ QWidget *DiagnosticWindow::createPdfJumpPage()
     }
 
     return page;
+}
+
+QWidget *DiagnosticWindow::createFaultDetailPage()
+{
+    auto *page = new QWidget();
+    page->setStyleSheet("QWidget{background:transparent;}");
+
+    auto *topBar = new QWidget(page);
+    topBar->setGeometry(0, 0, 1280, 82);
+    topBar->setStyleSheet("background: url(:/images/topbar.png) no-repeat;");
+
+    auto *homeBtn = new QPushButton(topBar);
+    homeBtn->setGeometry(12, 12, 48, 48);
+    homeBtn->setCursor(Qt::PointingHandCursor);
+    homeBtn->setStyleSheet(
+        "QPushButton{border:none;background-image:url(:/images/pict_home_up.png);background-repeat:no-repeat;}"
+        "QPushButton:hover{background-image:url(:/images/pict_home_down.png);}"
+    );
+    connect(homeBtn, &QPushButton::clicked, this, [this]() {
+        emit requestReturnToMain();
+        hide();
+    });
+
+    auto *title = new QLabel(QStringLiteral("诊断维护"), topBar);
+    title->setGeometry(0, 0, 1280, 72);
+    title->setAlignment(Qt::AlignCenter);
+    title->setStyleSheet("QLabel{color:#fff;font-size:36px;font-weight:700;background:transparent;}");
+    title->setAttribute(Qt::WA_TransparentForMouseEvents);
+    homeBtn->raise();
+
+    auto *topBarRight = new TopBarRightWidget(topBar);
+    topBarRight->setGeometry(1280 - 16 - TopBarRightWidget::preferredWidth(), 17,
+                             TopBarRightWidget::preferredWidth(), 48);
+
+    // .back { left:60; top:103; w:60; h:60 }  → 返回故障列表
+    auto *backBtn = new QPushButton(page);
+    backBtn->setGeometry(60, 103, 60, 60);
+    backBtn->setCursor(Qt::PointingHandCursor);
+    backBtn->setStyleSheet(
+        "QPushButton{border:none;background:url(:/images/butt_back_up.png) no-repeat;}"
+        "QPushButton:hover{background:url(:/images/butt_back_down.png) no-repeat;}"
+    );
+    connect(backBtn, &QPushButton::clicked, this, [this]() { openPage(1); });
+
+    // CSS .diagnostic_fault_detail { width:986; margin:24px auto }
+    // => x=(1280-986)/2=147, y=82+24=106
+    // 列宽(含border): 95 | 88 | 395 | 396，gap=4px → 95+88+395+396+3×4 = 986 ✓
+    // 1行表头 + 8行数据，行高60px，行间距4px => 9×60+8×4=572px
+    auto *detailWrap = new QWidget(page);
+    detailWrap->setGeometry(147, 106, 986, 572);
+    detailWrap->setStyleSheet("QWidget{background:transparent;}");
+    auto *detailLayout = new QVBoxLayout(detailWrap);
+    detailLayout->setContentsMargins(0, 0, 0, 0);
+    detailLayout->setSpacing(4);
+
+    struct RowData { QString c1, c2, c3, c4; };
+    const QList<RowData> rows = {
+        {"SPN",  "FMI", "车身控制器",      "维修建议"},
+        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
+        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
+        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
+        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
+        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
+        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
+        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
+        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
+    };
+    const int colWidths[] = {95, 88, 395, 396};
+
+    for (int r = 0; r < rows.size(); ++r) {
+        auto *rowWidget = new QWidget(detailWrap);
+        rowWidget->setFixedHeight(60);
+        auto *rowLayout = new QHBoxLayout(rowWidget);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(4);
+
+        const QStringList texts = {rows[r].c1, rows[r].c2, rows[r].c3, rows[r].c4};
+        const QString baseStyle = r == 0
+            ? "QLabel{border:1px solid #0068FF;background:rgba(255,255,255,0.1);color:#fff;font-size:20px;padding-left:24px;font-weight:bold;line-height:60px;}"
+            : "QLabel{border:1px solid #0068FF;background:rgba(255,255,255,0.1);color:#fff;font-size:20px;padding-left:24px;line-height:60px;}";
+
+        for (int c = 0; c < 4; ++c) {
+            auto *cell = new QLabel(texts[c], rowWidget);
+            cell->setFixedSize(colWidths[c], 60);
+            cell->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+            cell->setStyleSheet(baseStyle);
+            rowLayout->addWidget(cell);
+        }
+        detailLayout->addWidget(rowWidget);
+    }
+
+    return page;
+}
+
+void DiagnosticWindow::onOpenFaultDetailPage()
+{
+    openPage(6);
 }
 
 void DiagnosticWindow::onOpenFaultPage()
@@ -841,4 +942,52 @@ void DiagnosticWindow::updateSearchResultHeader()
         return;
     }
     m_pdfSearchResultLabel->setText(QStringLiteral("%1/%2").arg(m_resultIndex).arg(m_resultTotal));
+}
+
+void DiagnosticWindow::keyPressEvent(QKeyEvent *event)
+{
+    switch (event->key()) {
+    case Qt::Key_VolumeUp:
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%+"});
+        break;
+    case Qt::Key_VolumeDown:
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%-"});
+        break;
+    case Qt::Key_HomePage:
+        emit requestReturnToMain();
+        hide();
+        break;
+    case Qt::Key_Back:
+    case Qt::Key_Escape:
+        // 按当前页分层回退，而非直接跳到首页：
+        //   页面索引：0=主菜单, 1=故障查询, 2=维护资料列表, 3=PDF阅读,
+        //             4=PDF搜索, 5=PDF跳页, 6=故障详情
+        if (!m_pages) break;
+        switch (m_pages->currentIndex()) {
+        case 0:  // 主菜单 → 返回应用主界面
+            emit requestReturnToMain();
+            hide();
+            break;
+        case 1:  // 故障列表 → 主菜单
+        case 2:  // 维护资料列表 → 主菜单
+            openPage(0);
+            break;
+        case 3:  // PDF阅读 → 维护资料列表
+            openPage(2);
+            break;
+        case 4:  // PDF搜索 → PDF阅读
+        case 5:  // PDF跳页 → PDF阅读
+            openPage(3);
+            break;
+        case 6:  // 故障详情 → 故障列表
+            openPage(1);
+            break;
+        default:
+            openPage(0);
+            break;
+        }
+        break;
+    default:
+        QMainWindow::keyPressEvent(event);
+    }
 }

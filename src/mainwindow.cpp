@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "devicedetect.h"
+#include "appsignals.h"
 #include "bluetoothmanager.h"
 #include "mediamanager.h"
 #include "phonewindow.h"
@@ -29,6 +30,8 @@ MainWindow::MainWindow(QWidget *parent)
     , m_clockLabel(nullptr)
     , m_volumeLabel(nullptr)
     , m_volumeWidget(nullptr)
+    , m_volBtn(nullptr)
+    , m_isMuted(false)
     , m_transitionOverlay(nullptr)
     , m_bluetoothManager(new BluetoothManager(this))
     , m_mediaManager(new MediaManager(this))
@@ -122,12 +125,14 @@ void MainWindow::applyIndexStyle() {
 
         QLabel#clockLabel {
             color: #ffffff;
-            font-size: 18px;
+            font-size: 36px;
+            background: transparent;
         }
 
         QLabel#volumeLabel {
             color: #ffffff;
-            font-size: 18px;
+            font-size: 36px;
+            background: transparent;
         }
 
         QPushButton#btBtn {
@@ -148,16 +153,6 @@ void MainWindow::applyIndexStyle() {
         }
         QPushButton#usbBtn:hover {
             background-image: url(:/images/pict_usb_on.png);
-        }
-
-        QPushButton#volBtn {
-            border: none;
-            width: 48px;
-            height: 48px;
-            background-image: url(:/images/pict_volume.png);
-        }
-        QPushButton#volBtn:hover {
-            background-image: url(:/images/pict_volume_mute.png);
         }
 
         QPushButton[nav="true"] {
@@ -217,19 +212,24 @@ void MainWindow::createTopBar() {
     volLayout->setContentsMargins(0, 0, 0, 0);
     volLayout->setSpacing(6);
 
-    QPushButton *volBtn = new QPushButton(this);
-    volBtn->setObjectName("volBtn");
-    volBtn->setCursor(Qt::PointingHandCursor);
-    volBtn->setToolTip("音量");
-    connect(volBtn, &QPushButton::clicked, this, &MainWindow::onVolumeClicked);
-    volLayout->addWidget(volBtn);
-    
+    m_volBtn = new QPushButton(this);
+    m_volBtn->setObjectName("volBtn");
+    m_volBtn->setFixedSize(48, 48);
+    m_volBtn->setStyleSheet(
+        "QPushButton { border: none; background-image: url(:/images/pict_volume.png); "
+        "background-repeat: no-repeat; background-position: center; }");
+    m_volBtn->setCursor(Qt::PointingHandCursor);
+    m_volBtn->setToolTip("音量");
+    connect(m_volBtn, &QPushButton::clicked, this, &MainWindow::onVolumeClicked);
+    volLayout->addWidget(m_volBtn);
+
     m_volumeLabel = new QLabel("10", this);
     m_volumeLabel->setObjectName("volumeLabel");
+    m_volumeLabel->setFixedWidth(52);  // 固定宽度，静音切换不移位图标
     volLayout->addWidget(m_volumeLabel);
 
     iconLayout->addWidget(m_volumeWidget);
-    
+
     m_clockLabel = new QLabel(this);
     m_clockLabel->setObjectName("clockLabel");
     iconLayout->addWidget(m_clockLabel);
@@ -299,6 +299,28 @@ void MainWindow::adjustForDevice() {
 void MainWindow::setupConnections() {
     // 时钟更新
     connect(m_clockTimer, &QTimer::timeout, this, &MainWindow::onUpdateClock);
+
+    // 硬件音量键实时同步主界面音量标签（非静音状态下）
+    connect(AppSignals::instance(), &AppSignals::volumeLevelChanged, this, [this](int level) {
+        const int bounded = qBound(0, level, 10);
+        if (bounded == 0) {
+            m_isMuted = true;
+            if (m_volBtn) {
+                m_volBtn->setStyleSheet(
+                    "QPushButton { border: none; background-image: url(:/images/pict_volume_mute.png); "
+                    "background-repeat: no-repeat; background-position: center; }");
+            }
+            if (m_volumeLabel) m_volumeLabel->setText("");
+        } else {
+            m_isMuted = false;
+            if (m_volBtn) {
+                m_volBtn->setStyleSheet(
+                    "QPushButton { border: none; background-image: url(:/images/pict_volume.png); "
+                    "background-repeat: no-repeat; background-position: center; }");
+            }
+            if (m_volumeLabel) m_volumeLabel->setText(QString::number(bounded));
+        }
+    });
 }
 
 void MainWindow::setupSystemInfo() {
@@ -308,9 +330,10 @@ void MainWindow::setupSystemInfo() {
     // 启动时钟定时器（每秒更新）
     m_clockTimer->start(1000);
     
-    // 设置初始音量
+    // 设置初始音量（从系统读取实际等级）
     if (m_volumeLabel) {
-        m_volumeLabel->setText("10");
+        const QVariant vp = qApp->property("appVolumeLevel");
+        m_volumeLabel->setText(QString::number(vp.isValid() ? vp.toInt() : 10));
     }
 }
 
@@ -334,8 +357,24 @@ void MainWindow::onUSBClicked() {
 
 void MainWindow::onVolumeClicked() {
     qDebug() << "Volume button clicked";
+    m_isMuted = !m_isMuted;
+    // 切换图标
+    if (m_volBtn) {
+        const QString icon = m_isMuted
+            ? QStringLiteral(":/images/pict_volume_mute.png")
+            : QStringLiteral(":/images/pict_volume.png");
+        m_volBtn->setStyleSheet(
+            QString("QPushButton { border: none; background-image: url(%1); "
+                    "background-repeat: no-repeat; background-position: center; }").arg(icon));
+    }
+    // 静音时隐藏数字（固定宽度保持布局稳定）；取消静音时显示实际等级
     if (m_volumeLabel) {
-        m_volumeLabel->setText(m_volumeLabel->text() == "50" ? "MUTE" : "50");
+        if (m_isMuted) {
+            m_volumeLabel->setText("");
+        } else {
+            const QVariant vp = qApp->property("appVolumeLevel");
+            m_volumeLabel->setText(QString::number(vp.isValid() ? vp.toInt() : 10));
+        }
     }
 }
 

@@ -25,6 +25,7 @@ signals:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 
 private slots:
     void onSubnavChanged(int index);

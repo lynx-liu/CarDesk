@@ -1,8 +1,10 @@
 #include "videolistwindow.h"
 #include "videoplaywindow.h"
 #include "devicedetect.h"
+#include "topbarwidget.h"
 
 #include <QVBoxLayout>
+#include <QKeyEvent>
 #include <QHBoxLayout>
 #include <QGridLayout>
 #include <QDir>
@@ -23,7 +25,7 @@ VideoListWindow::VideoListWindow(QWidget *parent)
     , m_backDirButton(new QPushButton(this))
     , m_videoListWidget(new QListWidget(this))
     , m_pathLabel(new QLabel("USB > 电影 > 欧美", this))
-    , m_timeLabel(new QLabel(QDateTime::currentDateTime().toString("hh:mm"), this))
+    , m_timeLabel(new QLabel(this))
     , m_currentPath("/mnt")
     , m_initialPath("/mnt")
 {
@@ -114,65 +116,9 @@ void VideoListWindow::setupUI() {
     iconLayout->setContentsMargins(0, 0, 0, 0);
     iconLayout->setSpacing(16);
     
-    // BT 图标
-    QPushButton *btBtn = new QPushButton(this);
-    btBtn->setFixedSize(48, 48);
-    btBtn->setStyleSheet(
-        "QPushButton { "
-        "  border: none; "
-        "  background-image: url(:/images/pict_buetooth.png); "
-        "} "
-        "QPushButton:hover { "
-        "  background-image: url(:/images/pict_buetooth_on.png); "
-        "}"
-    );
-    iconLayout->addWidget(btBtn);
-    
-    // USB 图标
-    QPushButton *usbBtn = new QPushButton(this);
-    usbBtn->setFixedSize(48, 48);
-    usbBtn->setStyleSheet(
-        "QPushButton { "
-        "  border: none; "
-        "  background-image: url(:/images/pict_usb.png); "
-        "} "
-        "QPushButton:hover { "
-        "  background-image: url(:/images/pict_usb_on.png); "
-        "}"
-    );
-    iconLayout->addWidget(usbBtn);
-    
-    // 音量
-    QWidget *volWidget = new QWidget();
-    QHBoxLayout *volLayout = new QHBoxLayout(volWidget);
-    volLayout->setContentsMargins(0, 0, 0, 0);
-    volLayout->setSpacing(6);
-    
-    QPushButton *volBtn = new QPushButton(this);
-    volBtn->setFixedSize(48, 48);
-    volBtn->setStyleSheet(
-        "QPushButton { "
-        "  border: none; "
-        "  background-image: url(:/images/pict_volume.png); "
-        "} "
-        "QPushButton:hover { "
-        "  background-image: url(:/images/pict_volume_mute.png); "
-        "}"
-    );
-    volLayout->addWidget(volBtn);
-    
-    QLabel *volumeLabel = new QLabel("10", this);
-    volumeLabel->setStyleSheet("color: #fff; font-size: 18px;");
-    volLayout->addWidget(volumeLabel);
-    
-    iconLayout->addWidget(volWidget);
-    
-    // 时间
-    m_timeLabel->setStyleSheet("color: #fff; font-size: 18px;");
-    m_timeLabel->setFixedWidth(100);
-    iconLayout->addWidget(m_timeLabel);
-    
-    topLayout->addWidget(iconWidget, 0, 2, Qt::AlignRight);
+    // 右侧状态图标（TopBarRightWidget 自动同步音量和时钟）
+    auto *topBarRight = new TopBarRightWidget(topBar);
+    topLayout->addWidget(topBarRight, 0, 2, Qt::AlignRight | Qt::AlignVCenter);
     
     mainLayout->addWidget(topBar);
     
@@ -341,6 +287,36 @@ void VideoListWindow::onBackClicked() {
     }
 }
 
+void VideoListWindow::keyPressEvent(QKeyEvent *event)
+{
+    switch (event->key()) {
+    case Qt::Key_VolumeUp:
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%+"});
+        break;
+    case Qt::Key_VolumeDown:
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%-"});
+        break;
+    case Qt::Key_HomePage:
+        onHomeClicked();
+        break;
+    case Qt::Key_Back:
+    case Qt::Key_Escape:
+        onBackClicked();
+        break;
+    default:
+        QMainWindow::keyPressEvent(event);
+    }
+}
+
+bool VideoListWindow::tryResumeVideo()
+{
+    if (m_playWindow && m_playWindow->isPausedForHome()) {
+        m_playWindow->show();
+        return true;
+    }
+    return false;
+}
+
 void VideoListWindow::onItemClicked(QListWidgetItem *item) {
     QString itemPath = item->data(Qt::UserRole).toString();
     bool isDirectory = item->data(Qt::UserRole + 1).toBool();
@@ -375,6 +351,10 @@ void VideoListWindow::onItemClicked(QListWidgetItem *item) {
             m_playWindow = new VideoPlayWindow(this);
             connect(m_playWindow, &VideoPlayWindow::requestReturnToList, this, [this]() {
                 this->show();
+            });
+            connect(m_playWindow, &VideoPlayWindow::requestReturnToMain, this, [this]() {
+                emit requestReturnToMain();
+                this->hide();
             });
         }
         m_playWindow->setVideoFiles(videoList, currentIdx);

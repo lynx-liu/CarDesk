@@ -1,7 +1,10 @@
 #include "musicplayerwindow.h"
 #include "devicedetect.h"
+#include "topbarwidget.h"
 
 #include <QVBoxLayout>
+#include <QKeyEvent>
+#include <QProcess>
 #include <QHBoxLayout>
 #include <QScrollArea>
 #include <QDir>
@@ -183,7 +186,8 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
     makeLabel(topBar, 1058, 12, 48, 48, ":/images/pict_volume.png");
 
     QLabel *volNum = makeLabel(topBar, 1110, 10, 60, 54, "");
-    volNum->setText("10");
+    volNum->setText(QString::number(qApp->property("appVolumeLevel").isValid()
+        ? qApp->property("appVolumeLevel").toInt() : 10));
     volNum->setStyleSheet("color: #fff; font-size: 36px; background: transparent;");
 
     QLabel *timeLbl = makeLabel(topBar, 1174, 10, 94, 54, "");
@@ -395,31 +399,31 @@ void MusicPlayerWindow::setupListPage(QWidget *page)
     topBar->setGeometry(0, 0, 1280, 82);
     topBar->setStyleSheet("background: url(:/images/topbar.png) no-repeat; background-size: cover;");
 
+    // HOME 按钮（标题栏内 x:12, y:17）
+    auto *listTopHomeBtn = new QPushButton(topBar);
+    listTopHomeBtn->setGeometry(12, 17, 48, 48);
+    listTopHomeBtn->setStyleSheet(
+        "QPushButton { border: none; background-image: url(:/images/pict_home_up.png); background-repeat: no-repeat; }"
+        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/pict_home_down.png); }");
+    listTopHomeBtn->setCursor(Qt::PointingHandCursor);
+    connect(listTopHomeBtn, &QPushButton::clicked, this, [this]() {
+        releaseAudioPlayer();
+        emit requestReturnToMain();
+        hide();
+    });
+
     // 标题
     QLabel *titleLbl = new QLabel("音频播放", topBar);
     titleLbl->setGeometry(0, 10, 1280, 54);
     titleLbl->setStyleSheet("color: #fff; font-size: 36px; font-weight: 700; background: transparent;");
     titleLbl->setAlignment(Qt::AlignCenter);
     titleLbl->setAttribute(Qt::WA_TransparentForMouseEvents);
+    listTopHomeBtn->raise();
 
-    // 状态图标
-    auto makeTopIcon = [&](QWidget *parent, int x, const QString &img) {
-        QLabel *l = new QLabel(parent);
-        l->setGeometry(x, 12, 48, 48);
-        l->setPixmap(QPixmap(img));
-        l->setStyleSheet("background: transparent;");
-    };
-    makeTopIcon(topBar, 930, ":/images/pict_buetooth.png");
-    makeTopIcon(topBar, 994, ":/images/pict_usb.png");
-    makeTopIcon(topBar, 1058, ":/images/pict_volume.png");
-
-    QLabel *volNum = new QLabel("10", topBar);
-    volNum->setGeometry(1110, 10, 60, 54);
-    volNum->setStyleSheet("color: #fff; font-size: 36px; background: transparent;");
-
-    QLabel *timeLbl = new QLabel(QTime::currentTime().toString("hh:mm"), topBar);
-    timeLbl->setGeometry(1174, 10, 94, 54);
-    timeLbl->setStyleSheet("color: #fff; font-size: 36px; background: transparent;");
+    // 状态图标（TopBarRightWidget 自动同步音量和时钟）
+    auto *topBarRight = new TopBarRightWidget(topBar);
+    topBarRight->setGeometry(1280 - 16 - TopBarRightWidget::preferredWidth(), 17,
+                             TopBarRightWidget::preferredWidth(), 48);
 
     // ── 返回按钮（x:60, y:103, 60×60）───────────────────────────────────
     m_backFromListButton = new QPushButton(page);
@@ -428,6 +432,7 @@ void MusicPlayerWindow::setupListPage(QWidget *page)
         "QPushButton { border: none; background-image: url(:/images/butt_back_up.png); background-repeat: no-repeat; }"
         "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_back_down.png); }");
     m_backFromListButton->setCursor(Qt::PointingHandCursor);
+
 
     // ── Tab 标签栏（我的收藏 480,100,160×66 | 歌曲列表 640,100,160×66）──
     m_listFavTab = new QPushButton("我的收藏", page);
@@ -916,3 +921,30 @@ void MusicPlayerWindow::onSdkPlaybackComplete()
 }
 
 #endif // CAR_DESK_USE_T507_SDK
+
+void MusicPlayerWindow::keyPressEvent(QKeyEvent *event)
+{
+    switch (event->key()) {
+    case Qt::Key_VolumeUp:
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%+"});
+        break;
+    case Qt::Key_VolumeDown:
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%-"});
+        break;
+    case Qt::Key_HomePage:
+        emit requestReturnToMain();
+        close();
+        break;
+    case Qt::Key_Back:
+    case Qt::Key_Escape:
+        if (m_stackedWidget && m_stackedWidget->currentIndex() == kPageList) {
+            onBackFromListPage();
+        } else {
+            emit requestReturnToMain();
+            close();
+        }
+        break;
+    default:
+        QMainWindow::keyPressEvent(event);
+    }
+}

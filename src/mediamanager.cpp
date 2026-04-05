@@ -31,6 +31,11 @@ void MediaManager::openVideoList() {
             m_videoListWindow = nullptr;
         });
     }
+    // 若视频播放器处于 HOME 键暂停状态，直接恢复播放，跳过文件列表界面
+    // 避免在 showEvent 内 hide() 后再 raise() 引发的窗口状态混乱
+    if (m_videoListWindow->tryResumeVideo()) {
+        return;
+    }
     m_videoListWindow->showNormal();
     m_videoListWindow->raise();
     m_videoListWindow->activateWindow();

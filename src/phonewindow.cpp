@@ -1,6 +1,9 @@
 #include "phonewindow.h"
+#include "topbarwidget.h"
 
 #include <QApplication>
+#include <QKeyEvent>
+#include <QProcess>
 #include <QCloseEvent>
 #include <QDateTime>
 #include <QGridLayout>
@@ -76,9 +79,8 @@ void PhoneWindow::setupUI() {
     title->setStyleSheet("color:#fff;font-size:36px;font-weight:bold;background:transparent;");
     top->addWidget(title, 0, 1, Qt::AlignCenter);
 
-    QLabel *clock = new QLabel(QDateTime::currentDateTime().toString("hh:mm"), this);
-    clock->setStyleSheet("color:#fff;font-size:18px;");
-    top->addWidget(clock, 0, 2, Qt::AlignRight | Qt::AlignVCenter);
+    auto *topBarRight = new TopBarRightWidget(topBar);
+    top->addWidget(topBarRight, 0, 2, Qt::AlignRight | Qt::AlignVCenter);
 
     main->addWidget(topBar);
 
@@ -717,5 +719,32 @@ void PhoneWindow::showContactDetail(const QString &name, const QString &number) 
 void PhoneWindow::hideContactDetail() {
     if (m_detailOverlay) {
         m_detailOverlay->hide();
+    }
+}
+
+void PhoneWindow::keyPressEvent(QKeyEvent *event)
+{
+    switch (event->key()) {
+    case Qt::Key_VolumeUp:
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%+"});
+        break;
+    case Qt::Key_VolumeDown:
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%-"});
+        break;
+    case Qt::Key_HomePage:
+        emit requestReturnToMain();
+        close();
+        break;
+    case Qt::Key_Back:
+    case Qt::Key_Escape:
+        if (m_detailOverlay && m_detailOverlay->isVisible()) {
+            hideContactDetail();
+        } else {
+            emit requestReturnToMain();
+            close();
+        }
+        break;
+    default:
+        QMainWindow::keyPressEvent(event);
     }
 }

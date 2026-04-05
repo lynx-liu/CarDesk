@@ -2,6 +2,7 @@
 #include "devicedetect.h"
 
 #include <QVBoxLayout>
+#include <QKeyEvent>
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QLabel>
@@ -53,6 +54,7 @@ int sdkPlayerNotify(void *pUser, int msg, int ext1, void *para)
         break;
     case AWPLAYER_MEDIA_SEEK_COMPLETE:
         qDebug() << "XPlayer seek complete";
+        QMetaObject::invokeMethod(window, "onSdkSeekComplete", Qt::QueuedConnection);
         break;
     case AWPLAYER_MEDIA_SET_VIDEO_SIZE:
         if (para) {
@@ -132,6 +134,8 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     , m_mediaPlayer(nullptr)
     , m_videoWidget(nullptr)
     , m_useSdkPlayer(false)
+    , m_pausedForHome(false)
+    , m_resumePositionMs(0)
 #ifdef CAR_DESK_USE_T507_SDK
     , m_sdkPlayer(nullptr)
     , m_sdkSoundCtrl(nullptr)
@@ -142,6 +146,8 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     , m_sdkDurationMs(0)
     , m_sdkPlaying(false)
     , m_sdkSwitching(false)
+    , m_sdkSeeking(false)
+    , m_pendingRelease(false)
 #endif
 {
     setWindowTitle("视频播放");
@@ -549,6 +555,9 @@ void VideoPlayWindow::updateTitle() {
 }
 
 void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex) {
+    m_pausedForHome = false;  // 选择了新视频，放弃原暂停状态
+    m_resumePath.clear();
+    m_resumePositionMs = 0;
     m_videoFiles = files;
     m_currentIndex = currentIndex;
     if (m_currentIndex >= 0 && m_currentIndex < m_videoFiles.count()) {
@@ -690,12 +699,33 @@ void VideoPlayWindow::onSdkPlaybackComplete()
 #endif
 }
 
+void VideoPlayWindow::onSdkSeekComplete()
+{
+    // 由 sdkPlayerNotify 经 QueuedConnection 在 Qt 主线程调用。
+    // seek 已完成，清除标志；若此时 player 已被 releaseSdkPlayer 释放则为无效操作。
+#ifdef CAR_DESK_USE_T507_SDK
+    m_sdkSeeking = false;
+    if (m_pendingRelease) {
+        // releaseSdkPlayer 在 seek 期间被推迟了。
+        // seek 已安全结束，现在执行真正的 Pause + Reset。
+        releaseSdkPlayer();
+    }
+#endif
+}
+
 #ifdef CAR_DESK_USE_T507_SDK
 bool VideoPlayWindow::initSdkPlayer(const QString &videoPath)
 {
     // 确保全局 SDK 资源已创建（进程生命周期内只创建一次）
     if (!ensureSdkResourcesCreated()) {
         qWarning() << "Failed to create global SDK resources";
+        return false;
+    }
+
+    // 若上一次 seek 仍在进行（pendingRelease），禁止重新初始化，
+    // 避免在 seek 活跃期间操作 XPlayer 导致状态错乱。
+    if (m_pendingRelease) {
+        qWarning() << "initSdkPlayer: deferred release pending, cannot init now";
         return false;
     }
 
@@ -751,18 +781,124 @@ void VideoPlayWindow::releaseSdkPlayer()
     m_sdkDurationMs = 0;
 
     if (m_sdkPlayer) {
+        if (m_sdkSeeking) {
+            // XPlayerReset（及 XPlayerPause）在 seek 进行中调用会导致 SDK 内部崩溃。
+            // 保留回调和 m_sdkPlayer 存活，待 onSdkSeekComplete 确认 seek
+            // 安全结束后再执行真正的 Pause + Reset。
+            m_pendingRelease = true;
+            m_sdkSoundCtrl = nullptr;
+            m_sdkLayerCtrl = nullptr;
+            m_sdkSubCtrl = nullptr;
+            m_sdkDi = nullptr;
+            return;  // 提前返回，不 Reset，不 null m_sdkPlayer
+        }
         // 先解绑回调，防止停止过程中产生悬空回调。
         XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
-        // 只调 XPlayerReset：停止播放并释放帧缓冲。
-        // 全局 g_sdkPlayer / g_sdkLayerCtrl / g_sdkSoundCtrl 保持存活，供下次 initSdkPlayer 复用。
-        // 永不调用 XPlayerDestroy，彻底消除 __LayerDestroy 触发路径，根治多轮崩溃。
+        XPlayerPause(m_sdkPlayer);
         XPlayerReset(m_sdkPlayer);
         m_sdkPlayer = nullptr;
     }
-
+    m_sdkSeeking = false;
+    m_pendingRelease = false;
     m_sdkSoundCtrl = nullptr;
     m_sdkLayerCtrl = nullptr;
     m_sdkSubCtrl = nullptr;
     m_sdkDi = nullptr;
 }
 #endif
+
+void VideoPlayWindow::keyPressEvent(QKeyEvent *event)
+{
+    switch (event->key()) {
+    case Qt::Key_VolumeUp:
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%+"});
+        break;
+    case Qt::Key_VolumeDown:
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%-"});
+        break;
+    case Qt::Key_HomePage:
+        // 保存当前位置 + 完整释放 SDK（XPlayerReset 清除硬件叠加层）
+        // m_sdkSeeking 标志保护 releaseSdkPlayer：seek 进行中时跳过 XPlayerPause 直接 Reset
+        m_pausedForHome = false;
+        m_resumePath.clear();
+        m_resumePositionMs = 0;
+#ifdef CAR_DESK_USE_T507_SDK
+        if (m_useSdkPlayer && m_sdkPlayer) {
+            int curPos = 0;
+            if (XPlayerGetCurrentPosition(m_sdkPlayer, &curPos) == 0) {
+                m_resumePositionMs = curPos;
+            }
+            m_resumePath = m_videoFiles.value(m_currentIndex);
+            m_pausedForHome = !m_resumePath.isEmpty();
+            releaseSdkPlayer();  // XPlayerReset 清除叠加层；hideEvent 中 m_sdkPlayer==nullptr 为空操作
+        }
+#endif
+        if (!m_useSdkPlayer && m_mediaPlayer) {
+            if (m_mediaPlayer->state() == QMediaPlayer::PlayingState
+                    || m_mediaPlayer->state() == QMediaPlayer::PausedState) {
+                m_resumePath = m_videoFiles.value(m_currentIndex);
+                m_resumePositionMs = static_cast<int>(m_mediaPlayer->position());
+                m_pausedForHome = !m_resumePath.isEmpty();
+                m_mediaPlayer->pause();
+            }
+        }
+        emit requestReturnToMain();
+        hide();
+        break;
+    case Qt::Key_Back:
+    case Qt::Key_Escape:
+        emit requestReturnToList();
+        hide();  // hideEvent 负责 releaseSdkPlayer()
+        break;
+    default:
+        QMainWindow::keyPressEvent(event);
+    }
+}
+
+void VideoPlayWindow::hideEvent(QHideEvent *event)
+{
+    QMainWindow::hideEvent(event);
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        releaseSdkPlayer();  // HOME 路径已由 keyPressEvent 释放，m_sdkPlayer==nullptr 此处为空操作
+    }
+#endif
+}
+
+void VideoPlayWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+    if (!m_pausedForHome || m_resumePath.isEmpty()) {
+        return;
+    }
+    const QString path = m_resumePath;
+    const int posMs = m_resumePositionMs;
+    m_pausedForHome = false;
+    m_resumePath.clear();
+    m_resumePositionMs = 0;
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        if (initSdkPlayer(path)) {
+            m_sdkPlaying = true;
+            setPlayButtonState(true);
+            if (posMs > 0) {
+                // 给解码器 400ms 启动时间后 Seek 到 HOME 前的位置
+                // m_sdkSeeking 标志由此进入，SEEK_COMPLETE 后由 onSdkSeekComplete 清除
+                QTimer::singleShot(400, this, [this, posMs]() {
+                    if (m_sdkPlayer && m_sdkPlaying) {
+                        m_sdkSeeking = true;
+                        XPlayerSeekTo(m_sdkPlayer, posMs, AW_SEEK_CLOSEST_SYNC);
+                    }
+                });
+            }
+            if (m_sdkTimer && !m_sdkTimer->isActive()) {
+                m_sdkTimer->start();
+            }
+        }
+        return;
+    }
+#endif
+    if (!m_useSdkPlayer && m_mediaPlayer) {
+        m_mediaPlayer->play();  // PC 路径：媒体仍在暂停状态，直接恢复
+    }
+}
