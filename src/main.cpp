@@ -15,11 +15,48 @@
 #include <QDialog>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
+#include <linux/fb.h>
 #include <QSocketNotifier>
 #include <linux/input.h>
 #include "mainwindow.h"
 #include "devicedetect.h"
 #include "appsignals.h"
+
+// ── Power 键关屏 / 亮屏（FBIOBLANK on /dev/fb0）──────────────────────────
+class ScreenBlanker : public QObject {
+public:
+    static ScreenBlanker *instance() {
+        static ScreenBlanker s;
+        return &s;
+    }
+    bool isBlanked() const { return m_blanked; }
+
+    void blank() {
+        if (m_blanked) return;
+        m_blanked = true;
+        setFbBlank(FB_BLANK_POWERDOWN);
+    }
+    void unblank() {
+        if (!m_blanked) return;
+        m_blanked = false;
+        setFbBlank(FB_BLANK_UNBLANK);
+    }
+    void toggle() {
+        if (m_blanked) unblank(); else blank();
+    }
+
+private:
+    bool m_blanked = false;
+
+    static void setFbBlank(int value) {
+        int fd = ::open("/dev/fb0", O_RDWR | O_CLOEXEC);
+        if (fd >= 0) {
+            ::ioctl(fd, FBIOBLANK, value);
+            ::close(fd);
+        }
+    }
+};
 
 // ── 音量浮动指示条 ────────────────────────────────────────────────────────────
 // 按下音量键时显示在屏幕左侧，2 秒无操作后自动隐藏
@@ -135,7 +172,20 @@ public:
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override {
-        if (event->type() == QEvent::KeyPress) {
+        // 任意按键或触摸 → 完成亮屏
+        const QEvent::Type t = event->type();
+        if (t == QEvent::MouseButtonPress || t == QEvent::TouchBegin) {
+            if (ScreenBlanker::instance()->isBlanked()) {
+                ScreenBlanker::instance()->unblank();
+                return true;  // 吸收事件，防止触发底层操作
+            }
+        }
+        if (t == QEvent::KeyPress) {
+            // 任意按键亮屏（Power 键已在 InputNotifier 处理切换，此处仅做亮屏）
+            if (ScreenBlanker::instance()->isBlanked()) {
+                ScreenBlanker::instance()->unblank();
+                return true;
+            }
             QKeyEvent *ke = static_cast<QKeyEvent *>(event);
             qDebug() << "[GlobalKey] type=KeyPress"
                      << "key=" << ke->key()
@@ -333,6 +383,10 @@ int main(int argc, char *argv[]) {
                     switch (ev.code) {
                     case KEY_HOMEPAGE: qtKey = Qt::Key_HomePage; break;
                     case KEY_BACK:     qtKey = Qt::Key_Back;     break;
+                    case KEY_POWER:
+                        qDebug() << "[InputNotifier] ev.code=116 => Power toggle blank";
+                        ScreenBlanker::instance()->toggle();
+                        break;
                     default: break;
                     }
                     if (qtKey == 0) continue;
