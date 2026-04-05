@@ -1,7 +1,10 @@
 #include "imageviewingwindow.h"
 #include "devicedetect.h"
+#include "topbarwidget.h"
 
 #include <QCloseEvent>
+#include <QKeyEvent>
+#include <QProcess>
 #include <QDir>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -124,7 +127,7 @@ void ImageViewingWindow::setupUI()
     homeBtn->setCursor(Qt::PointingHandCursor);
     connect(homeBtn, &QPushButton::clicked, this, [this]() {
         emit requestReturnToMain();
-        hide();
+        hide();   // ★ 不 close()，保留当前目录路径
     });
 
     m_titleLabel = new QLabel(QStringLiteral("图片浏览"), topBar);
@@ -133,34 +136,9 @@ void ImageViewingWindow::setupUI()
     m_titleLabel->setAlignment(Qt::AlignCenter);
     m_titleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
 
-    QWidget *right = new QWidget(topBar);
-    right->setGeometry(1280 - 16 - 280, 12, 280, 48);
-    right->setStyleSheet("background:transparent;");
-    auto *rightLay = new QHBoxLayout(right);
-    rightLay->setContentsMargins(0, 0, 0, 0);
-    rightLay->setSpacing(16);
-
-    auto *btIcon = new QLabel(right);
-    btIcon->setFixedSize(48, 48);
-    btIcon->setPixmap(QPixmap(":/images/pict_buetooth.png"));
-    rightLay->addWidget(btIcon);
-
-    auto *usbIcon = new QLabel(right);
-    usbIcon->setFixedSize(48, 48);
-    usbIcon->setPixmap(QPixmap(":/images/pict_usb.png"));
-    rightLay->addWidget(usbIcon);
-
-    auto *volIcon = new QLabel(right);
-    volIcon->setFixedSize(48, 48);
-    volIcon->setPixmap(QPixmap(":/images/pict_volume.png"));
-    auto *volLabel = new QLabel(QStringLiteral("10"), right);
-    volLabel->setStyleSheet("QLabel{color:#fff;font-size:36px;}");
-    rightLay->addWidget(volIcon);
-    rightLay->addWidget(volLabel);
-
-    auto *timeLabel = new QLabel(QTime::currentTime().toString("hh:mm"), right);
-    timeLabel->setStyleSheet("QLabel{color:#fff;font-size:36px;}");
-    rightLay->addWidget(timeLabel);
+    auto *topBarRight = new TopBarRightWidget(topBar);
+    topBarRight->setGeometry(1280 - 16 - TopBarRightWidget::preferredWidth(), 17,
+                             TopBarRightWidget::preferredWidth(), 48);
 
     auto *backBtn = new QPushButton(listPage);
     backBtn->setGeometry(60, 103, 60, 60);
@@ -389,4 +367,27 @@ void ImageViewingWindow::loadDirectory(const QString &path)
 
     if (m_detailLabel)
         m_detailLabel->setText(m_currentPath);
+}
+
+void ImageViewingWindow::keyPressEvent(QKeyEvent *event)
+{
+    switch (event->key()) {
+    case Qt::Key_VolumeUp:
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%+"});
+        break;
+    case Qt::Key_VolumeDown:
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%-"});
+        break;
+    case Qt::Key_HomePage:
+        emit requestReturnToMain();
+        hide();   // ★ 不 close()，保留当前目录路径
+        break;
+    case Qt::Key_Back:
+    case Qt::Key_Escape:
+        // onBackDirClicked 已处理：查看页→列表页；子目录→上级；根目录→返回主界面
+        onBackDirClicked();
+        break;
+    default:
+        QMainWindow::keyPressEvent(event);
+    }
 }

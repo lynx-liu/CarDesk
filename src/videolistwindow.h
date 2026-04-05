@@ -60,6 +60,9 @@ public:
     explicit VideoListWindow(QWidget *parent = nullptr);
     ~VideoListWindow();
 
+    // 若视频播放器处于 HOME 键暂停状态，直接恢复播放并返回 true
+    bool tryResumeVideo();
+
 signals:
     void requestReturnToMain();
 
@@ -75,6 +78,7 @@ private:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 
     QPushButton *m_homeButton;
     QPushButton *m_backDirButton;

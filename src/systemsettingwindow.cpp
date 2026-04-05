@@ -1,8 +1,10 @@
 #include "systemsettingwindow.h"
 #include "otamanager.h"
 #include "devicedetect.h"
+#include "topbarwidget.h"
 
 #include <QButtonGroup>
+#include <QKeyEvent>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QDialog>
@@ -545,34 +547,9 @@ void SystemSettingWindow::setupUI()
     title->setAlignment(Qt::AlignCenter);
     title->setAttribute(Qt::WA_TransparentForMouseEvents);
 
-    auto *right = new QWidget(topBar);
-    right->setGeometry(1280 - 16 - 280, 12, 280, 48);
-    right->setStyleSheet("background:transparent;");
-    auto *rightLay = new QHBoxLayout(right);
-    rightLay->setContentsMargins(0, 0, 0, 0);
-    rightLay->setSpacing(16);
-
-    auto *btIcon = new QLabel();
-    btIcon->setFixedSize(48, 48);
-    btIcon->setPixmap(QPixmap(":/images/pict_bluetooth.png"));
-    rightLay->addWidget(btIcon);
-
-    auto *usbIcon = new QLabel();
-    usbIcon->setFixedSize(48, 48);
-    usbIcon->setPixmap(QPixmap(":/images/pict_usb.png"));
-    rightLay->addWidget(usbIcon);
-
-    auto *volIcon = new QLabel();
-    volIcon->setFixedSize(48, 48);
-    volIcon->setPixmap(QPixmap(":/images/pict_volume.png"));
-    auto *volLabel = new QLabel(QStringLiteral("10"));
-    volLabel->setStyleSheet("QLabel{color:#fff;font-size:36px;}");
-    rightLay->addWidget(volIcon);
-    rightLay->addWidget(volLabel);
-
-    auto *timeLabel = new QLabel(QTime::currentTime().toString("hh:mm"));
-    timeLabel->setStyleSheet("QLabel{color:#fff;font-size:36px;}");
-    rightLay->addWidget(timeLabel);
+    auto *topBarRight = new TopBarRightWidget(topBar);
+    topBarRight->setGeometry(1280 - 16 - TopBarRightWidget::preferredWidth(), 17,
+                             TopBarRightWidget::preferredWidth(), 48);
 
     auto *content = new QFrame(central);
     content->setStyleSheet("QFrame{background:transparent;border:none;}");
@@ -1478,4 +1455,24 @@ QWidget *SystemSettingWindow::createUpdatePage()
 
     layout->addWidget(m_updateTabWidget, 0, Qt::AlignHCenter);
     return page;
+}
+
+void SystemSettingWindow::keyPressEvent(QKeyEvent *event)
+{
+    switch (event->key()) {
+    case Qt::Key_VolumeUp:
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%+"});
+        break;
+    case Qt::Key_VolumeDown:
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%-"});
+        break;
+    case Qt::Key_HomePage:
+    case Qt::Key_Back:
+    case Qt::Key_Escape:
+        emit requestReturnToMain();
+        close();
+        break;
+    default:
+        QMainWindow::keyPressEvent(event);
+    }
 }

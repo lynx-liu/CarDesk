@@ -63,6 +63,8 @@ private:
     // UI 组件
     QLabel *m_clockLabel;
     QLabel *m_volumeLabel;
+    QPushButton *m_volBtn;
+    bool m_isMuted;
     QWidget *m_topBar;
     QWidget *m_navBar;
     QWidget *m_centralWidget;

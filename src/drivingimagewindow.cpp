@@ -7,6 +7,7 @@
 #include <QFrame>
 #include <QFontMetrics>
 #include <QHideEvent>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QResizeEvent>
@@ -321,6 +322,19 @@ QRect DrivingImageWindow::previewRectOnScreen() const
                  winGlobal.y() + inWindowPos.y(),
                  target->width(),
                  target->height());
+}
+
+void DrivingImageWindow::keyPressEvent(QKeyEvent *event)
+{
+    switch (event->key()) {
+    case Qt::Key_HomePage:
+    case Qt::Key_Back:
+    case Qt::Key_Escape:
+        returnToMainSafely();
+        break;
+    default:
+        QMainWindow::keyPressEvent(event);
+    }
 }
 
 void DrivingImageWindow::showEvent(QShowEvent *event)

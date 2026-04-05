@@ -1,8 +1,11 @@
 #include "radiowindow.h"
 #include "devicedetect.h"
+#include "topbarwidget.h"
 
 #include <QApplication>
 #include <QCloseEvent>
+#include <QKeyEvent>
+#include <QProcess>
 #include <QDateTime>
 #include <QDialog>
 #include <QGridLayout>
@@ -17,6 +20,7 @@
 #include <QFrame>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QMouseEvent>
 #include <QStyledItemDelegate>
 #include <QVBoxLayout>
 #include <QDebug>
@@ -85,6 +89,44 @@ public:
 };
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── 底部电台条 Delegate ────────────────────────────────────────────────────────
+// CSS: .radio_play_list li { width:150; height:118; bg:radio_play_list_up/down.png;
+//                             font-size:36px; line-height:118px; text-align:center }
+//      li:hover,.radio_on { background:down; color:#00FAFF }
+class StationStripDelegate : public QStyledItemDelegate {
+public:
+    explicit StationStripDelegate(QObject *parent = nullptr)
+        : QStyledItemDelegate(parent) {}
+
+    void paint(QPainter *painter, const QStyleOptionViewItem &option,
+               const QModelIndex &index) const override
+    {
+        painter->save();
+        const QRect r = option.rect;  // 150×118
+
+        const bool active = (option.state & QStyle::State_Selected) ||
+                            (option.state & QStyle::State_MouseOver);
+        const QPixmap bg(active
+            ? QStringLiteral(":/images/radio_play_list_down.png")
+            : QStringLiteral(":/images/radio_play_list_up.png"));
+        if (!bg.isNull())
+            painter->drawPixmap(r, bg);
+
+        // font-size:36px; line-height:118px → AlignVCenter
+        QFont f = painter->font();
+        f.setPixelSize(36);
+        painter->setFont(f);
+        painter->setPen(active ? QColor(0x00, 0xFA, 0xFF) : Qt::white);
+        painter->drawText(r, Qt::AlignHCenter | Qt::AlignVCenter,
+                          index.data(Qt::DisplayRole).toString());
+        painter->restore();
+    }
+
+    QSize sizeHint(const QStyleOptionViewItem &, const QModelIndex &) const override
+    { return QSize(150, 118); }
+};
+// ─────────────────────────────────────────────────────────────────────────────
+
 RadioWindow::RadioWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_fd(-1)
@@ -104,10 +146,15 @@ RadioWindow::RadioWindow(QWidget *parent)
     , m_amStations({"554", "639", "756", "855", "937", "955", "981", "1008", "1143"})
     , m_isFM(true)
     , m_frequency(95.9)
+    , m_tunerCapLow(true)
+    , m_tunerIndex(0)
     , m_favorite(false)
     , m_scanMode(false)
     , m_playing(false)
-    , m_scanTimer(new QTimer(this)) {
+    , m_scanTimer(new QTimer(this))
+    , m_barDragging(false)
+    , m_barDragStartX(0)
+    , m_barDragStartScroll(0) {
 
     m_scanTimer->setInterval(300);
     connect(m_scanTimer, &QTimer::timeout, this, &RadioWindow::onScanTick);
@@ -127,10 +174,23 @@ RadioWindow::RadioWindow(QWidget *parent)
     if (openDevice()) {
         // 静音先关掉，等用户点播放再开
         setMute(true);
-        // 读回硬件当前频率作为初始值
+        // tea685x 通过频率值自动切换 FM/AM，无需 VIDIOC_S_TUNER
+        // 读回硬件当前频率；验证是否在当前频段有效范围内
         quint32 v = getFrequencyHz();
-        if (v > 0)
-            m_frequency = m_isFM ? v4l2ToMhz(v) : v4l2ToKhz(v);
+        if (v > 0) {
+            double freq = m_isFM ? v4l2ToMhz(v) : v4l2ToKhz(v);
+            const double minFreq = m_isFM ? 87.0 : 522.0;
+            const double maxFreq = m_isFM ? 108.0 : 1710.0;
+            if (freq >= minFreq && freq <= maxFreq) {
+                m_frequency = freq;   // 驱动频率与当前频段一致，直接使用
+            } else {
+                // 驱动处于另一频段，强制写入目标频段默认频率（驱动自动切换）
+                setFrequencyHz(m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency));
+            }
+        } else {
+            // 硬件未返回频率，主动写入当前默认频率
+            setFrequencyHz(m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency));
+        }
     }
 
     updateFrequencyView();
@@ -149,6 +209,63 @@ void RadioWindow::closeEvent(QCloseEvent *event) {
     closeDevice();
     emit requestReturnToMain();
     QMainWindow::closeEvent(event);
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 鼠标拖拽事件过滤器：使频率条 QScrollArea 可手动拖动
+// ──────────────────────────────────────────────────────────────────────────────
+bool RadioWindow::eventFilter(QObject *obj, QEvent *event)
+{
+    if (m_barScrollArea && obj == m_barScrollArea->viewport()) {
+        QMouseEvent *me = static_cast<QMouseEvent *>(event);
+        switch (event->type()) {
+        case QEvent::MouseButtonPress:
+            if (me->button() == Qt::LeftButton) {
+                m_barDragging = true;
+                m_barDragStartX = me->x();
+                m_barDragStartScroll = m_barScrollArea->horizontalScrollBar()->value();
+                m_barScrollArea->viewport()->setCursor(Qt::ClosedHandCursor);
+                return true;
+            }
+            break;
+        case QEvent::MouseMove:
+            if (m_barDragging) {
+                // 向左拖 → 滚动条增大 → 频率升高（与 HTML 拖动一致）
+                const int delta = m_barDragStartX - me->x();
+                QScrollBar *sb = m_barScrollArea->horizontalScrollBar();
+                sb->setValue(qBound(0, m_barDragStartScroll + delta, sb->maximum()));
+                // 实时更新频率显示（不向驱动写入，避免过多 ioctl）
+                const int barWidth   = m_isFM ? 2160 : 2480;
+                const double minFreq = m_isFM ? 87.0  : 522.0;
+                const double maxFreq = m_isFM ? 108.0 : 1710.0;
+                const double pix     = sb->value() + 347.0;
+                double freq = minFreq + pix / barWidth * (maxFreq - minFreq);
+                freq = qBound(minFreq, freq, maxFreq);
+                if (m_freqLabel)
+                    m_freqLabel->setText(m_isFM ? QString::number(freq, 'f', 1)
+                                                : QString::number(freq, 'f', 0));
+                m_frequency = freq;
+                return true;
+            }
+            break;
+        case QEvent::MouseButtonRelease:
+            if (m_barDragging && me->button() == Qt::LeftButton) {
+                m_barDragging = false;
+                m_barScrollArea->viewport()->setCursor(Qt::OpenHandCursor);
+                // 松手时向驱动写入最终频率
+                if (m_fd >= 0) {
+                    quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
+                    setFrequencyHz(fhz);
+                }
+                updateFrequencyView();
+                return true;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    return QMainWindow::eventFilter(obj, event);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -176,6 +293,95 @@ bool RadioWindow::openDevice()
         return false;
     }
     qDebug() << "RadioWindow: opened /dev/radio0, driver=" << reinterpret_cast<const char*>(cap.driver);
+
+    // 查询调谐器能力 —— 确定频率单位是否为 62.5 Hz（LOW）还是 62.5 kHz
+    struct v4l2_tuner tuner;
+    memset(&tuner, 0, sizeof(tuner));
+    tuner.index = 0;
+    tuner.type  = V4L2_TUNER_RADIO;
+    if (::ioctl(m_fd, VIDIOC_G_TUNER, &tuner) == 0) {
+        m_tunerCapLow = (tuner.capability & V4L2_TUNER_CAP_LOW) != 0;
+        qDebug() << "RadioWindow: tuner" << reinterpret_cast<const char*>(tuner.name)
+                 << "cap_low=" << m_tunerCapLow
+                 << "range=" << tuner.rangelow << "-" << tuner.rangehigh;
+    } else {
+        qWarning() << "RadioWindow: VIDIOC_G_TUNER failed, assuming cap_low=true";
+        m_tunerCapLow = true;
+    }
+
+    // ── 枚举驱动所有支持的 V4L2 控制，便于诊断频段切换机制 ──────────────
+    {
+        struct v4l2_queryctrl qc;
+        memset(&qc, 0, sizeof(qc));
+        qc.id = V4L2_CTRL_FLAG_NEXT_CTRL;
+        qDebug() << "RadioWindow: enumerating V4L2 controls...";
+        while (::ioctl(m_fd, VIDIOC_QUERYCTRL, &qc) == 0) {
+            if (!(qc.flags & V4L2_CTRL_FLAG_DISABLED)) {
+                qDebug("RadioWindow:   ctrl id=0x%08X name='%s' type=%d min=%d max=%d def=%d",
+                       qc.id, qc.name, qc.type, qc.minimum, qc.maximum, qc.default_value);
+            }
+            qc.id |= V4L2_CTRL_FLAG_NEXT_CTRL;
+        }
+        // 单独探测 V4L2_CID_BAND_STOP_FILTER（某些 BSP 驱动将其复用为 AM/FM 频段选择器）
+        struct v4l2_queryctrl bsf;
+        memset(&bsf, 0, sizeof(bsf));
+        bsf.id = V4L2_CID_BAND_STOP_FILTER;   // V4L2_CID_BASE + 33
+        if (::ioctl(m_fd, VIDIOC_QUERYCTRL, &bsf) == 0)
+            qDebug("RadioWindow: V4L2_CID_BAND_STOP_FILTER(0x%08X) min=%d max=%d def=%d",
+                   bsf.id, bsf.minimum, bsf.maximum, bsf.default_value);
+        else
+            qDebug() << "RadioWindow: V4L2_CID_BAND_STOP_FILTER not supported";
+    }
+
+    // ── 探测额外 tuner 索引（部分驱动将 AM 暴露为 tuner[1]）────────────────────
+    for (int ti = 1; ti <= 3; ++ti) {
+        struct v4l2_tuner t2;
+        memset(&t2, 0, sizeof(t2));
+        t2.index = static_cast<__u32>(ti);
+        t2.type  = V4L2_TUNER_RADIO;
+        if (::ioctl(m_fd, VIDIOC_G_TUNER, &t2) != 0) break;
+        qDebug("RadioWindow: tuner[%d] '%s' cap=0x%X range=%u-%u",
+               ti, reinterpret_cast<const char*>(t2.name),
+               t2.capability, t2.rangelow, t2.rangehigh);
+    }
+
+    // ── 探测频段列表（VIDIOC_ENUM_FREQ_BANDS，Linux ≥ 3.14）────────────────────
+    for (int bi = 0; bi <= 7; ++bi) {
+        struct v4l2_frequency_band fb;
+        memset(&fb, 0, sizeof(fb));
+        fb.tuner = 0;
+        fb.type  = V4L2_TUNER_RADIO;
+        fb.index = static_cast<__u32>(bi);
+        if (::ioctl(m_fd, VIDIOC_ENUM_FREQ_BANDS, &fb) != 0) {
+            if (!bi) qDebug() << "RadioWindow: VIDIOC_ENUM_FREQ_BANDS not supported";
+            break;
+        }
+        qDebug("RadioWindow: freq_band[%d] mod=0x%X range=%u-%u cap=0x%X",
+               bi, fb.modulation, fb.rangelow, fb.rangehigh, fb.capability);
+    }
+
+    // ── 探测音频输入（VIDIOC_ENUMAUDIO，某些驱动用音频输入选择频段）──────────────
+    for (int ai = 0; ai <= 3; ++ai) {
+        struct v4l2_audio audio;
+        memset(&audio, 0, sizeof(audio));
+        audio.index = static_cast<__u32>(ai);
+        if (::ioctl(m_fd, VIDIOC_ENUMAUDIO, &audio) != 0) {
+            if (!ai) qDebug() << "RadioWindow: VIDIOC_ENUMAUDIO not supported";
+            break;
+        }
+        qDebug("RadioWindow: audio_input[%d] '%s' cap=0x%X mode=0x%X",
+               ai, reinterpret_cast<const char*>(audio.name),
+               audio.capability, audio.mode);
+    }
+
+    // ── sysfs 设备路径（BSP 驱动可能在此暴露 band 切换属性文件）──────────────────
+    {
+        char syspath[512] = {};
+        ssize_t n = readlink("/sys/class/video4linux/radio0", syspath, sizeof(syspath)-1);
+        if (n > 0)
+            qDebug("RadioWindow: sysfs radio0 -> %s", syspath);
+    }
+
     return true;
 }
 
@@ -190,12 +396,16 @@ void RadioWindow::closeDevice()
 bool RadioWindow::setFrequencyHz(quint32 freqHz)
 {
     if (m_fd < 0) return false;
+    // freqHz 内部单位为 1/16 kHz（V4L2 LOW = 62.5 Hz）
+    // 若驱动不支持 CAP_LOW，需转换为 62.5 kHz 单位（÷ 1000）
     struct v4l2_frequency vf;
-    vf.tuner = 0;
-    vf.type  = V4L2_TUNER_RADIO;
-    vf.frequency = freqHz;
+    memset(&vf, 0, sizeof(vf));
+    vf.tuner    = static_cast<__u32>(m_tunerIndex);
+    vf.type     = V4L2_TUNER_RADIO;
+    vf.frequency = m_tunerCapLow ? freqHz : (freqHz / 1000u);
     if (::ioctl(m_fd, VIDIOC_S_FREQUENCY, &vf) < 0) {
-        qWarning() << "RadioWindow: VIDIOC_S_FREQUENCY failed:" << strerror(errno);
+        qWarning() << "RadioWindow: VIDIOC_S_FREQUENCY failed (value=" << vf.frequency
+                   << "):" << strerror(errno);
         return false;
     }
     return true;
@@ -205,13 +415,15 @@ quint32 RadioWindow::getFrequencyHz() const
 {
     if (m_fd < 0) return 0;
     struct v4l2_frequency vf;
-    vf.tuner = 0;
+    memset(&vf, 0, sizeof(vf));
+    vf.tuner = static_cast<__u32>(m_tunerIndex);
     vf.type  = V4L2_TUNER_RADIO;
     if (::ioctl(m_fd, VIDIOC_G_FREQUENCY, &vf) < 0) {
         qWarning() << "RadioWindow: VIDIOC_G_FREQUENCY failed:" << strerror(errno);
         return 0;
     }
-    return vf.frequency;
+    // 统一将驱动返回值转换为内部单位（LOW = 1/16 kHz）
+    return m_tunerCapLow ? vf.frequency : (vf.frequency * 1000u);
 }
 
 bool RadioWindow::setMute(bool mute)
@@ -232,12 +444,17 @@ bool RadioWindow::startAutoSeek(bool upward)
     if (m_fd < 0) return false;
     struct v4l2_hw_freq_seek seek;
     memset(&seek, 0, sizeof(seek));
-    seek.tuner    = 0;
+    seek.tuner    = static_cast<__u32>(m_tunerIndex);
     seek.type     = V4L2_TUNER_RADIO;
     seek.seek_upward   = upward ? 1 : 0;
     seek.wrap_around   = 1;
     seek.spacing  = 0;   // 驱动自行决定步进
     if (::ioctl(m_fd, VIDIOC_S_HW_FREQ_SEEK, &seek) < 0) {
+        if (errno == EAGAIN) {
+            // O_NONBLOCK 模式下，EAGAIN 表示 seek 已成功启动（非错误）
+            // 调用方通过 timer 轮询 getFrequencyHz() 感知 seek 结束
+            return true;
+        }
         qWarning() << "RadioWindow: VIDIOC_S_HW_FREQ_SEEK failed:" << strerror(errno);
         return false;
     }
@@ -261,7 +478,7 @@ void RadioWindow::setupUI() {
     topBar->setStyleSheet("background-image:url(:/images/topbar.png);");
 
     QPushButton *homeBtn = new QPushButton(topBar);
-    homeBtn->setGeometry(12, 12, 48, 48);
+    homeBtn->setGeometry(12, 17, 48, 48);
     homeBtn->setStyleSheet(
         "QPushButton{border:none;background-image:url(:/images/pict_home_up.png);}"
         "QPushButton:hover{background-image:url(:/images/pict_home_down.png);}");
@@ -342,10 +559,11 @@ void RadioWindow::setupUI() {
     prev->setCursor(Qt::PointingHandCursor);
     connect(prev, &QPushButton::clicked, this, &RadioWindow::onPrev);
 
-    // barArea: CSS .radio_pro div { width:720; height:106; overflow-x:auto; overflow-y:hidden }
-    //           ::-webkit-scrollbar { display:none } → QScrollArea with AlwaysOff
+    // barArea: CSS .radio_pro div { width:720; height:106; margin-top:30 }
+    //  space-between: prev(120)+gap48+div(720)+gap48+next(120)=1056
+    //  div absolute x = 112+120+48 = 280, y=326+30=356
     m_barScrollArea = new QScrollArea(central);
-    m_barScrollArea->setGeometry(232, 356, 720, 106);
+    m_barScrollArea->setGeometry(280, 356, 720, 106);
     m_barScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_barScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_barScrollArea->setFrameShape(QFrame::NoFrame);
@@ -358,9 +576,12 @@ void RadioWindow::setupUI() {
     m_barLabel->setStyleSheet("background:transparent;");
     m_barScrollArea->setWidget(m_barLabel);
     m_barScrollArea->setWidgetResizable(false);
+    // 安装鼠标拖拽事件过滤器，使频率条可手动拖动（模拟 HTML overflow-x:auto 效果）
+    m_barScrollArea->viewport()->installEventFilter(this);
+    m_barScrollArea->viewport()->setCursor(Qt::OpenHandCursor);
 
     QPushButton *nextBtn = new QPushButton(central);
-    nextBtn->setGeometry(952, 326, 120, 120);
+    nextBtn->setGeometry(1048, 326, 120, 120);
     nextBtn->setStyleSheet(
         "QPushButton{border:none;background-image:url(:/images/butt_radio_searchnext_up.png);}"
         "QPushButton:hover{background-image:url(:/images/butt_radio_searchnext_down.png);}");
@@ -381,21 +602,22 @@ void RadioWindow::setupUI() {
     rightMask->setStyleSheet("background:transparent;");
     rightMask->setAttribute(Qt::WA_TransparentForMouseEvents);
 
-    // 标尺针：居中于 radio_pro， x=112+528-4=636, y=334
+    // 标尺针：居中于 radio_pro 50%处，HTML margin-left=-568 校准 => 全局 x=623(中心627)
+    // scrollArea左=280, markerX=627-280=347
     QLabel *mark = new QLabel(central);
-    mark->setGeometry(636, 334, 8, 85);
+    mark->setGeometry(623, 334, 8, 85);
     mark->setPixmap(QPixmap(":/images/pict_radio_mark.png"));
     mark->setStyleSheet("background:transparent;");
     mark->setAttribute(Qt::WA_TransparentForMouseEvents);
     mark->raise();
 
-    // ── 控制按钟区 (238,482,804×94) ───────────────────────────────────────
-    // CSS .radio_btn { width:804; margin:20px auto } radio_pro bottom=462, +20=482
+    // ── 控制按钟区 (238,472,804×94) ───────────────────────────────────────
+    // CSS .radio_btn { width:804; margin:20px auto } 坐标文件实测 y=472
     // CSS justify-content:space-between 5个按鈕：总宽=60+60+84+60+60=324, 间距=(804-324)/4=120
     // x: list=0 search=180 play=360 fav=564 scan=744
     // y: 60px 按鈕 margin-top:12(+ul margin-top:10)=22; 84px play margin-top:0(+10)=10
     QWidget *btnRow = new QWidget(central);
-    btnRow->setGeometry(238, 482, 804, 94);
+    btnRow->setGeometry(238, 472, 804, 94);
     btnRow->setStyleSheet("background:transparent;");
 
     QPushButton *listBtn = new QPushButton(btnRow);
@@ -432,33 +654,24 @@ void RadioWindow::setupUI() {
     m_scanBtn->setCursor(Qt::PointingHandCursor);
     connect(m_scanBtn, &QPushButton::clicked, this, &RadioWindow::onToggleScan);
 
-    // ── 电台列表 (81,592,1118×118) ─────────────────────────────────────────
+    // ── 电台列表 (81,582,1118×118) ─────────────────────────────────────────
     // CSS .radio_play_list { width:1118; margin:16px auto }
-    //   => x=(1280-1118)/2=81, y=btn_bottom(576)+16=592, h=118
+    //   => x=(1280-1118)/2=81, y=坐标文件实测 582, h=118
     m_stationList = new QListWidget(central);
-    m_stationList->setGeometry(81, 592, 1118, 118);
+    m_stationList->setGeometry(81, 582, 1118, 118);
     m_stationList->setFlow(QListView::LeftToRight);
     m_stationList->setWrapping(false);
     m_stationList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_stationList->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_stationList->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
-    m_stationList->setIconSize(QSize(1, 1));
     m_stationList->setGridSize(QSize(150, 118));
     m_stationList->setSpacing(0);
+    m_stationList->setContentsMargins(0, 0, 0, 0);
+    m_stationList->setMouseTracking(true);
+    m_stationList->viewport()->setMouseTracking(true);
+    m_stationList->setItemDelegate(new StationStripDelegate(m_stationList));
     m_stationList->setStyleSheet(
-        "QListWidget{background:transparent;border:none;outline:none;}"
-        "QListWidget::item{"
-        "  width:150px;height:118px;"
-        "  background-image:url(:/images/radio_play_list_up.png);"
-        "  background-repeat:no-repeat;background-position:center;"
-        "  font-size:36px;color:#fff;text-align:center;"
-        "}"
-        "QListWidget::item:selected{"
-        "  background-image:url(:/images/radio_play_list_down.png);color:#00faff;"
-        "}"
-        "QListWidget::item:hover{"
-        "  background-image:url(:/images/radio_play_list_down.png);color:#00faff;"
-        "}"
+        "QListWidget{background:transparent;border:none;outline:none;padding:0;}"
         "QScrollBar:horizontal{height:0px;background:transparent;border:none;}"
         "QScrollBar:vertical{width:0px;background:transparent;border:none;}");
     rebuildStationStrip();
@@ -498,7 +711,10 @@ void RadioWindow::updateFrequencyView() {
         const QPixmap barPixmap(barPath);
         if (!barPixmap.isNull()) {
             const int viewportWidth = 720;
-            const int markerX = 408;
+            // markerX: HTML校准值。CSS left:50%=528px from radio_pro(x=112) => 全局x=640
+            // HTML margin-left:-568 at 95.9MHz反推: pixel(95.9)=8.9/21*2160=915.4
+            // markerX = 915.4 - 568 = 347; mark widget center = scrollArea_left + markerX = 280+347=627
+            const int markerX = 347;
             const int barWidth = barPixmap.width();
             const double minFreq = m_isFM ? 87.0 : 522.0;
             const double maxFreq = m_isFM ? 108.0 : 1710.0;
@@ -546,36 +762,40 @@ void RadioWindow::onSwitchAM() {
 }
 
 void RadioWindow::onPrev() {
-    // 有硬件：触发向下 seek；无硬件：在预设列表里循环
-    if (m_fd >= 0) {
-        startAutoSeek(false);
-        // seek 是异步的，在 tick 里读回结果；此处给个 300ms 延时轮询
+    // 有硬件且驱动支持 HW_FREQ_SEEK：异步 seek（EAGAIN=已启动）
+    if (m_fd >= 0 && startAutoSeek(false)) {
         m_scanTimer->start();
         QTimer::singleShot(500, this, [this]() { m_scanTimer->stop(); updateFrequencyView(); });
         return;
     }
-    const QStringList stations = m_isFM ? m_fmStations : m_amStations;
-    const QString now = m_isFM ? QString::number(m_frequency, 'f', 1) : QString::number(m_frequency, 'f', 0);
-    int idx = stations.indexOf(now);
-    if (idx < 0) idx = 0;
-    idx = (idx + stations.size() - 1) % stations.size();
-    m_frequency = stations[idx].toDouble();
+    // 驱动不支持 seek 或无硬件：手动步进（FM 0.1MHz / AM 9kHz）
+    const double step = m_isFM ? 0.1 : 9.0;
+    const double minFreq = m_isFM ? 87.0 : 522.0;
+    const double maxFreq = m_isFM ? 108.0 : 1710.0;
+    m_frequency = qBound(minFreq, m_frequency - step, maxFreq);
+    if (m_fd >= 0) {
+        quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
+        setFrequencyHz(fhz);
+    }
     updateFrequencyView();
 }
 
 void RadioWindow::onNext() {
-    if (m_fd >= 0) {
-        startAutoSeek(true);
+    // 有硬件且驱动支持 HW_FREQ_SEEK：异步 seek（EAGAIN=已启动）
+    if (m_fd >= 0 && startAutoSeek(true)) {
         m_scanTimer->start();
         QTimer::singleShot(500, this, [this]() { m_scanTimer->stop(); updateFrequencyView(); });
         return;
     }
-    const QStringList stations = m_isFM ? m_fmStations : m_amStations;
-    const QString now = m_isFM ? QString::number(m_frequency, 'f', 1) : QString::number(m_frequency, 'f', 0);
-    int idx = stations.indexOf(now);
-    if (idx < 0) idx = 0;
-    idx = (idx + 1) % stations.size();
-    m_frequency = stations[idx].toDouble();
+    // 驱动不支持 seek 或无硬件：手动步进（FM 0.1MHz / AM 9kHz）
+    const double step = m_isFM ? 0.1 : 9.0;
+    const double minFreq = m_isFM ? 87.0 : 522.0;
+    const double maxFreq = m_isFM ? 108.0 : 1710.0;
+    m_frequency = qBound(minFreq, m_frequency + step, maxFreq);
+    if (m_fd >= 0) {
+        quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
+        setFrequencyHz(fhz);
+    }
     updateFrequencyView();
 }
 
@@ -633,6 +853,7 @@ void RadioWindow::onSearch() {
     titleLbl->setGeometry(0, 10, 1280, 54);
     titleLbl->setStyleSheet("color:#fff;font-size:36px;font-weight:bold;background:transparent;");
     titleLbl->setAlignment(Qt::AlignCenter);
+    setupTopStatusIcons(topBar);
 
     // 返回按钮 (60,103,60,60)
     QPushButton *backBtn = new QPushButton(&dialog);
@@ -783,6 +1004,7 @@ void RadioWindow::onOpenListDialog() {
     titleLbl->setGeometry(0, 10, 1280, 54);
     titleLbl->setStyleSheet("color:#fff;font-size:36px;font-weight:bold;background:transparent;");
     titleLbl->setAlignment(Qt::AlignCenter);
+    setupTopStatusIcons(topBar);
 
     // 返回按鈕：匹配 CSS .back { left:60; top:103; w:60; h:60 }
     QPushButton *backBtn = new QPushButton(&dialog);
@@ -879,34 +1101,9 @@ void RadioWindow::onOpenListDialog() {
 }
 
 void RadioWindow::setupTopStatusIcons(QWidget *topBar) {
-    QWidget *right = new QWidget(topBar);
-    right->setGeometry(1280 - 16 - 280, 12, 280, 48);
-    right->setStyleSheet("background:transparent;");
-    QHBoxLayout *rightLay = new QHBoxLayout(right);
-    rightLay->setContentsMargins(0, 0, 0, 0);
-    rightLay->setSpacing(16);
-
-    QLabel *btIcon = new QLabel(right);
-    btIcon->setFixedSize(48, 48);
-    btIcon->setPixmap(QPixmap(":/images/pict_bluetooth.png"));
-    rightLay->addWidget(btIcon);
-
-    QLabel *usbIcon = new QLabel(right);
-    usbIcon->setFixedSize(48, 48);
-    usbIcon->setPixmap(QPixmap(":/images/pict_usb.png"));
-    rightLay->addWidget(usbIcon);
-
-    QLabel *volIcon = new QLabel(right);
-    volIcon->setFixedSize(48, 48);
-    volIcon->setPixmap(QPixmap(":/images/pict_volume.png"));
-    QLabel *volLabel = new QLabel("10", right);
-    volLabel->setStyleSheet("QLabel{color:#fff;font-size:36px;}");
-    rightLay->addWidget(volIcon);
-    rightLay->addWidget(volLabel);
-
-    QLabel *timeLabel = new QLabel(QDateTime::currentDateTime().toString("hh:mm"), right);
-    timeLabel->setStyleSheet("QLabel{color:#fff;font-size:36px;}");
-    rightLay->addWidget(timeLabel);
+    auto *right = new TopBarRightWidget(topBar);
+    right->setGeometry(1280 - 16 - TopBarRightWidget::preferredWidth(), 17,
+                       TopBarRightWidget::preferredWidth(), 48);
 }
 
 void RadioWindow::rebuildStationStrip() {
@@ -927,15 +1124,184 @@ void RadioWindow::switchBand(bool fm) {
     m_isFM = fm;
     m_frequency = m_isFM ? 95.9 : 937.0;
 
-    // 切换硬件 band（通过设置对应频率来隐式切换调谐器范围）
-    quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
-    setFrequencyHz(fhz);
+    if (m_fd >= 0) {
+        // tea685x 驱动根据上次设置的频率锁定频段（FM 模式拒绝 AM 频率，反之亦然）
+        m_tunerIndex = 0;  // 频段切换时先重置 tuner 索引为默认值
+        quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
+        const quint32 driverFreq = m_tunerCapLow ? fhz : (fhz / 1000u);
+        bool ok = false;
+
+        // ── 方式 1：直接写入目标频率 ───────────────────────────────────────────
+        ok = setFrequencyHz(fhz);
+
+        // ── 方式 2：V4L2_CID_BAND_STOP_FILTER（某些 Allwinner BSP 驱动将其复用为频段选择器）
+        if (!ok) {
+            struct v4l2_control ctrl;
+            memset(&ctrl, 0, sizeof(ctrl));
+            ctrl.id    = V4L2_CID_BAND_STOP_FILTER;   // V4L2_CID_BASE + 33
+            ctrl.value = m_isFM ? 0 : 1;              // 0=FM, 1=AM
+            if (::ioctl(m_fd, VIDIOC_S_CTRL, &ctrl) == 0) {
+                qDebug() << "RadioWindow: band switch via V4L2_CID_BAND_STOP_FILTER";
+                ok = setFrequencyHz(fhz);
+            } else {
+                // 也试 value=1(FM)/0(AM)，反过来
+                ctrl.value = m_isFM ? 1 : 0;
+                if (::ioctl(m_fd, VIDIOC_S_CTRL, &ctrl) == 0) {
+                    qDebug() << "RadioWindow: band switch via V4L2_CID_BAND_STOP_FILTER (inv)";
+                    ok = setFrequencyHz(fhz);
+                }
+            }
+        }
+
+        // ── 方式 3：先 G_FREQUENCY 保留原结构体，仅改 frequency 字段再 S_FREQUENCY ─
+        //          与 Qt 官方 v4lradiocontrol 实现一致；某些驱动用 reserved[] 保存频段
+        if (!ok) {
+            struct v4l2_frequency vfg;
+            memset(&vfg, 0, sizeof(vfg));
+            vfg.tuner = 0;
+            vfg.type  = V4L2_TUNER_RADIO;
+            if (::ioctl(m_fd, VIDIOC_G_FREQUENCY, &vfg) == 0) {
+                vfg.frequency = driverFreq;
+                if (::ioctl(m_fd, VIDIOC_S_FREQUENCY, &vfg) == 0) {
+                    qDebug() << "RadioWindow: band switch via G_FREQ→modify→S_FREQ";
+                    ok = true;
+                }
+            }
+        }
+
+        // ── 方式 4：VIDIOC_S_FREQUENCY 中 reserved[0] 置为频段标志 ─────────────
+        //          部分 BSP 驱动将 reserved[0]=0 解释为 FM，=1 解释为 AM
+        if (!ok) {
+            for (int bandVal = 0; bandVal <= 3 && !ok; ++bandVal) {
+                struct v4l2_frequency vfr;
+                memset(&vfr, 0, sizeof(vfr));
+                vfr.tuner      = 0;
+                vfr.type       = V4L2_TUNER_RADIO;
+                vfr.frequency  = driverFreq;
+                vfr.reserved[0] = static_cast<__u32>(bandVal);
+                if (::ioctl(m_fd, VIDIOC_S_FREQUENCY, &vfr) == 0) {
+                    qDebug() << "RadioWindow: band switch via S_FREQ reserved[0]=" << bandVal;
+                    ok = true;
+                }
+            }
+        }
+
+        // ── 方式 5：私有控制 V4L2_CID_PRIVATE_BASE + 0..31 ──────────────────────
+        if (!ok) {
+            for (int ofs = 0; ofs <= 31 && !ok; ++ofs) {
+                struct v4l2_control ctrl;
+                memset(&ctrl, 0, sizeof(ctrl));
+                ctrl.id    = static_cast<__u32>(V4L2_CID_PRIVATE_BASE + ofs);
+                ctrl.value = m_isFM ? 0 : 1;
+                if (::ioctl(m_fd, VIDIOC_S_CTRL, &ctrl) == 0) {
+                    qDebug() << "RadioWindow: band switch via V4L2_CID_PRIVATE_BASE+" << ofs;
+                    ok = setFrequencyHz(fhz);
+                }
+            }
+        }
+
+        // ── 方式 6：VIDIOC_S_TUNER audmode 设为非标准值 ─────────────────────────
+        //          某些驱动用 audmode=0 代表 AM，audmode=1 代表 FM
+        if (!ok) {
+            static const int auds[] = {0, 4, 8, 16, 3, 5};
+            for (int audi : auds) {
+                struct v4l2_tuner t;
+                memset(&t, 0, sizeof(t));
+                t.index   = 0;
+                t.type    = V4L2_TUNER_RADIO;
+                t.audmode = static_cast<__u32>(audi);
+                if (::ioctl(m_fd, VIDIOC_S_TUNER, &t) == 0) {
+                    qDebug() << "RadioWindow: band switch via S_TUNER audmode=" << audi;
+                    ok = setFrequencyHz(fhz);
+                    if (ok) break;
+                }
+            }
+        }
+
+        // ── 方式 7：尝试不同 tuner 索引（部分驱动将 AM 作为 tuner[1] 暴露）──────
+        if (!ok) {
+            for (int ti = 1; ti <= 3 && !ok; ++ti) {
+                struct v4l2_frequency vft;
+                memset(&vft, 0, sizeof(vft));
+                vft.tuner     = static_cast<__u32>(ti);
+                vft.type      = V4L2_TUNER_RADIO;
+                vft.frequency = driverFreq;
+                if (::ioctl(m_fd, VIDIOC_S_FREQUENCY, &vft) == 0) {
+                    qDebug() << "RadioWindow: band switch via tuner index" << ti;
+                    m_tunerIndex = ti;  // 记录 AM 使用的 tuner 索引
+                    ok = true;
+                }
+            }
+        }
+
+        // ── 方式 8：音频输入选择（VIDIOC_S_AUDIO，某些驱动用输入区分 FM/AM）────────
+        if (!ok) {
+            const int targetAudio = m_isFM ? 0 : 1;
+            struct v4l2_audio audio;
+            memset(&audio, 0, sizeof(audio));
+            audio.index = static_cast<__u32>(targetAudio);
+            if (::ioctl(m_fd, VIDIOC_S_AUDIO, &audio) == 0) {
+                qDebug() << "RadioWindow: band switch via VIDIOC_S_AUDIO index" << targetAudio;
+                ok = setFrequencyHz(fhz);
+                if (!ok) {
+                    // 失败则恢复默认音频输入
+                    audio.index = 0;
+                    ::ioctl(m_fd, VIDIOC_S_AUDIO, &audio);
+                }
+            }
+        }
+
+        if (!ok) {
+            qWarning() << "RadioWindow: band switch to" << (m_isFM ? "FM" : "AM")
+                       << "failed — all methods exhausted";
+        }
+    }
 
     // 读回实际频率（驱动可能钳位到合法范围）
     quint32 v = getFrequencyHz();
-    if (v > 0)
-        m_frequency = m_isFM ? v4l2ToMhz(v) : v4l2ToKhz(v);
+    if (v > 0) {
+        double freq = m_isFM ? v4l2ToMhz(v) : v4l2ToKhz(v);
+        const double minFreq = m_isFM ? 87.0 : 522.0;
+        const double maxFreq = m_isFM ? 108.0 : 1710.0;
+        if (freq >= minFreq && freq <= maxFreq)
+            m_frequency = freq;
+    }
 
     rebuildStationStrip();
     updateFrequencyView();
+}
+
+void RadioWindow::keyPressEvent(QKeyEvent *event)
+{
+    qDebug() << "[KeyPress] RadioWindow key=" << event->key()
+             << "nativeScanCode=" << event->nativeScanCode()
+             << "nativeVirtualKey=" << event->nativeVirtualKey();
+    switch (event->key()) {
+    case Qt::Key_VolumeUp:
+        qDebug() << "[KeyPress] => VolumeUp";
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%+"});
+        break;
+    case Qt::Key_VolumeDown:
+        qDebug() << "[KeyPress] => VolumeDown";
+        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%-"});
+        break;
+    case Qt::Key_HomePage:
+        qDebug() << "[KeyPress] => Home -> returnToMain";
+        emit requestReturnToMain();
+        close();
+        break;
+    case Qt::Key_Back:
+        qDebug() << "[KeyPress] => Back -> returnToMain";
+        emit requestReturnToMain();
+        close();
+        break;
+    case Qt::Key_Escape:
+        qDebug() << "[KeyPress] => Escape -> returnToMain";
+        emit requestReturnToMain();
+        close();
+        break;
+    default:
+        qDebug() << "[KeyPress] => unhandled, passing to QMainWindow";
+        QMainWindow::keyPressEvent(event);
+    }
 }

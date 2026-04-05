@@ -65,6 +65,8 @@
         <file alias="butt_radio_searchnext_down.png">ui/images/butt_radio_searchnext_down.png</file>
         <file alias="butt_radio_list_up.png">ui/images/butt_radio_list_up.png</file>
         <file alias="butt_radio_list_down.png">ui/images/butt_radio_list_down.png</file>
+        <file alias="radio_play_list_up.png">ui/images/radio_play_list_up.png</file>
+        <file alias="radio_play_list_down.png">ui/images/radio_play_list_down.png</file>
         <file alias="butt_radio_search_up.png">ui/images/butt_radio_search_up.png</file>
         <file alias="butt_radio_search_down.png">ui/images/butt_radio_search_down.png</file>
         <file alias="butt_radio_search_del_all_up.png">ui/images/butt_radio_search_del_all_up.png</file>

@@ -22,6 +22,8 @@ signals:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
 
 private slots:
     void onSwitchFM();
@@ -72,11 +74,18 @@ private:
     QStringList m_amStations;
     bool    m_isFM;
     double  m_frequency;    // 用户可见频率（FM: MHz；AM: kHz）
+    bool    m_tunerCapLow;  // 驱动是否使用 V4L2_TUNER_CAP_LOW 频率单位（62.5 Hz）
+    int     m_tunerIndex;   // 当前使用的 V4L2 tuner 索引（0=FM/默认，部分驱动 1=AM）
     bool    m_favorite;
     bool    m_scanMode;     // 是否正在自动扫台
     bool    m_playing;
 
     QTimer *m_scanTimer;    // 扫台时轮询当前频率
+
+    // ── 频率条拖拽状态 ────────────────────────────────────────────────────
+    bool    m_barDragging;
+    int     m_barDragStartX;
+    int     m_barDragStartScroll;
 };
 
 #endif // RADIOWINDOW_H
