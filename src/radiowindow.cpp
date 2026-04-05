@@ -142,6 +142,7 @@ RadioWindow::RadioWindow(QWidget *parent)
     , m_favoriteBtn(nullptr)
     , m_scanBtn(nullptr)
     , m_stationList(nullptr)
+    , m_stereoLabel(nullptr)
     , m_fmStations({"88.7", "90.6", "91.2", "92.5", "95.9", "96.3", "97.7", "99.8", "101.1"})
     , m_amStations({"554", "639", "756", "855", "937", "955", "981", "1008", "1143"})
     , m_isFM(true)
@@ -151,12 +152,15 @@ RadioWindow::RadioWindow(QWidget *parent)
     , m_favorite(false)
     , m_scanMode(false)
     , m_playing(false)
+    , m_seekUpward(true)
+    , m_seekStartFreq(95.9)
+    , m_seekStepCount(0)
     , m_scanTimer(new QTimer(this))
     , m_barDragging(false)
     , m_barDragStartX(0)
     , m_barDragStartScroll(0) {
 
-    m_scanTimer->setInterval(300);
+    m_scanTimer->setInterval(200);
     connect(m_scanTimer, &QTimer::timeout, this, &RadioWindow::onScanTick);
     setWindowTitle("收音机");
     setFixedSize(1280, 720);
@@ -256,6 +260,7 @@ bool RadioWindow::eventFilter(QObject *obj, QEvent *event)
                 if (m_fd >= 0) {
                     quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
                     setFrequencyHz(fhz);
+                    QTimer::singleShot(300, this, [this]() { updateTunerStatus(); });
                 }
                 updateFrequencyView();
                 return true;
@@ -275,7 +280,7 @@ bool RadioWindow::eventFilter(QObject *obj, QEvent *event)
 bool RadioWindow::openDevice()
 {
     if (m_fd >= 0) return true;
-    m_fd = ::open("/dev/radio0", O_RDWR | O_NONBLOCK);
+    m_fd = ::open("/dev/radio0", O_RDWR);
     if (m_fd < 0) {
         qWarning() << "RadioWindow: cannot open /dev/radio0:" << strerror(errno);
         return false;
@@ -439,32 +444,38 @@ bool RadioWindow::setMute(bool mute)
     return true;
 }
 
+void RadioWindow::updateTunerStatus()
+{
+    if (m_fd < 0 || !m_isFM) {
+        if (m_stereoLabel) m_stereoLabel->setVisible(false);
+        return;
+    }
+    struct v4l2_tuner tuner;
+    memset(&tuner, 0, sizeof(tuner));
+    tuner.index = static_cast<__u32>(m_tunerIndex);
+    tuner.type  = V4L2_TUNER_RADIO;
+    if (::ioctl(m_fd, VIDIOC_G_TUNER, &tuner) == 0) {
+        const bool isStereo = (tuner.rxsubchans & V4L2_TUNER_SUB_STEREO) != 0;
+        if (m_stereoLabel) m_stereoLabel->setVisible(isStereo);
+    }
+}
+
 bool RadioWindow::startAutoSeek(bool upward)
 {
     if (m_fd < 0) return false;
-    struct v4l2_hw_freq_seek seek;
-    memset(&seek, 0, sizeof(seek));
-    seek.tuner    = static_cast<__u32>(m_tunerIndex);
-    seek.type     = V4L2_TUNER_RADIO;
-    seek.seek_upward   = upward ? 1 : 0;
-    seek.wrap_around   = 1;
-    seek.spacing  = 0;   // 驱动自行决定步进
-    if (::ioctl(m_fd, VIDIOC_S_HW_FREQ_SEEK, &seek) < 0) {
-        if (errno == EAGAIN) {
-            // O_NONBLOCK 模式下，EAGAIN 表示 seek 已成功启动（非错误）
-            // 调用方通过 timer 轮询 getFrequencyHz() 感知 seek 结束
-            return true;
-        }
-        qWarning() << "RadioWindow: VIDIOC_S_HW_FREQ_SEEK failed:" << strerror(errno);
-        return false;
-    }
+    m_scanTimer->stop();      // 停止旧的搜台（如果有）
+    m_seekUpward    = upward;
+    m_seekStartFreq = m_frequency;
+    m_seekStepCount = 0;
+    m_scanTimer->start();
     return true;
 }
 
 void RadioWindow::stopScan()
 {
     if (m_scanTimer) m_scanTimer->stop();
-    m_scanMode = false;
+    m_scanMode      = false;
+    m_seekStepCount = 0;
 }
 
 void RadioWindow::setupUI() {
@@ -533,11 +544,12 @@ void RadioWindow::setupUI() {
     }
 
     // STEREO 标签：absolute left:240 在 freqRow 之上覆盖
-    QLabel *stereo = new QLabel("STEREO", central);
-    stereo->setGeometry(240, 186, 220, 120);
-    stereo->setStyleSheet("color:#00FAFF;font-size:36px;background:transparent;");
-    stereo->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    stereo->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_stereoLabel = new QLabel("STEREO", central);
+    m_stereoLabel->setGeometry(240, 186, 220, 120);
+    m_stereoLabel->setStyleSheet("color:#00FAFF;font-size:36px;background:transparent;");
+    m_stereoLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    m_stereoLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_stereoLabel->setVisible(false);  // 默认隐藏，播放后由硬件状态更新
 
     // ── 频率条区域 ────────────────────────────────────────────────────────────
     // CSS .radio_control { width:1056; margin:20px auto }
@@ -703,8 +715,10 @@ void RadioWindow::updateFrequencyView() {
                                     : QString::number(m_frequency, 'f', 0));
     }
     if (m_unitLabel) {
-        m_unitLabel->setText("MHz");
+        m_unitLabel->setText(m_isFM ? "MHz" : "kHz");
     }
+    // AM 始终单声道；FM 立体声由 updateTunerStatus / onScanTick 实时更新
+    if (m_stereoLabel && !m_isFM) m_stereoLabel->setVisible(false);
     if (m_barScrollArea && m_barLabel) {
         const QString barPath = m_isFM ? QStringLiteral(":/images/pict_radio_fmbar.png")
                                        : QStringLiteral(":/images/pict_radio_ambar.png");
@@ -762,40 +776,28 @@ void RadioWindow::onSwitchAM() {
 }
 
 void RadioWindow::onPrev() {
-    // 有硬件且驱动支持 HW_FREQ_SEEK：异步 seek（EAGAIN=已启动）
-    if (m_fd >= 0 && startAutoSeek(false)) {
-        m_scanTimer->start();
-        QTimer::singleShot(500, this, [this]() { m_scanTimer->stop(); updateFrequencyView(); });
+    if (m_fd >= 0) {
+        startAutoSeek(false);
         return;
     }
-    // 驱动不支持 seek 或无硬件：手动步进（FM 0.1MHz / AM 9kHz）
+    // 无硬件：手动步进（FM 0.1MHz / AM 9kHz）
     const double step = m_isFM ? 0.1 : 9.0;
     const double minFreq = m_isFM ? 87.0 : 522.0;
     const double maxFreq = m_isFM ? 108.0 : 1710.0;
     m_frequency = qBound(minFreq, m_frequency - step, maxFreq);
-    if (m_fd >= 0) {
-        quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
-        setFrequencyHz(fhz);
-    }
     updateFrequencyView();
 }
 
 void RadioWindow::onNext() {
-    // 有硬件且驱动支持 HW_FREQ_SEEK：异步 seek（EAGAIN=已启动）
-    if (m_fd >= 0 && startAutoSeek(true)) {
-        m_scanTimer->start();
-        QTimer::singleShot(500, this, [this]() { m_scanTimer->stop(); updateFrequencyView(); });
+    if (m_fd >= 0) {
+        startAutoSeek(true);
         return;
     }
-    // 驱动不支持 seek 或无硬件：手动步进（FM 0.1MHz / AM 9kHz）
+    // 无硬件：手动步进（FM 0.1MHz / AM 9kHz）
     const double step = m_isFM ? 0.1 : 9.0;
     const double minFreq = m_isFM ? 87.0 : 522.0;
     const double maxFreq = m_isFM ? 108.0 : 1710.0;
     m_frequency = qBound(minFreq, m_frequency + step, maxFreq);
-    if (m_fd >= 0) {
-        quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
-        setFrequencyHz(fhz);
-    }
     updateFrequencyView();
 }
 
@@ -807,25 +809,79 @@ void RadioWindow::onToggleFavorite() {
 void RadioWindow::onToggleScan() {
     m_scanMode = !m_scanMode;
     if (m_scanMode) {
-        // 开始自动向上扫台，每 300ms 读一次当前频率
+        // 开始连续自动扫台（用户空间逐频点）
         if (m_fd >= 0) startAutoSeek(true);
-        m_scanTimer->start();
     } else {
         m_scanTimer->stop();
+        m_seekStepCount = 0;
     }
     updateFrequencyView();
 }
 
 void RadioWindow::onScanTick() {
-    // 读回驱动当前停靠频率，刷新显示
-    quint32 v = getFrequencyHz();
-    if (v > 0) {
-        double newFreq = m_isFM ? v4l2ToMhz(v) : v4l2ToKhz(v);
-        if (qAbs(newFreq - m_frequency) > 0.05) {
-            m_frequency = newFreq;
-            updateFrequencyView();
+    const double step    = m_isFM ? 0.1   : 9.0;
+    const double minFreq = m_isFM ? 87.0  : 522.0;
+    const double maxFreq = m_isFM ? 108.0 : 1710.0;
+    // FM: 21MHz/0.1=210步；AM: 1188kHz/9≈132步，各加2余量
+    const int    maxSteps = m_isFM ? 212 : 134;
+
+    // ① 先检测本次频率点的信号强度（设置后已沉待约200ms）
+    if (m_seekStepCount > 0 && m_fd >= 0) {
+        struct v4l2_tuner tuner;
+        memset(&tuner, 0, sizeof(tuner));
+        tuner.index = static_cast<__u32>(m_tunerIndex);
+        tuner.type  = V4L2_TUNER_RADIO;
+        if (::ioctl(m_fd, VIDIOC_G_TUNER, &tuner) == 0) {
+            // 更新立体声标识
+            const bool stereo = (tuner.rxsubchans & V4L2_TUNER_SUB_STEREO) != 0;
+            if (m_stereoLabel) m_stereoLabel->setVisible(m_isFM && stereo);
+
+            // tea685x signal: (raw_dBuV+20)*(0xffff/140)
+            // 25dBuV ≈ (25+20)*468 = 21060；使用 20000 作为门限
+            const quint32 threshold = m_isFM ? 20000u : 16000u;
+            if (static_cast<quint32>(tuner.signal) > threshold) {
+                // 找到电台！
+                m_scanTimer->stop();
+                updateFrequencyView();
+                if (m_scanMode) {
+                    // 连续扫台：停留1.5s后继续
+                    QTimer::singleShot(1500, this, [this]() {
+                        if (m_scanMode) {
+                            m_seekStepCount = 0;
+                            m_seekStartFreq = m_frequency;
+                            m_scanTimer->start();
+                        }
+                    });
+                }
+                return;
+            }
         }
     }
+
+    // ② 检测是否已绕一圈
+    if (m_seekStepCount >= maxSteps) {
+        m_scanTimer->stop();
+        m_scanMode = false;
+        updateFrequencyView();
+        return;
+    }
+
+    // ③ 步进到下一个频率
+    double nextFreq = m_frequency + (m_seekUpward ? step : -step);
+    if (nextFreq > maxFreq + step * 0.5) nextFreq = minFreq;
+    else if (nextFreq < minFreq - step * 0.5) nextFreq = maxFreq;
+
+    m_frequency = nextFreq;
+    m_seekStepCount++;
+
+    if (m_fd >= 0) {
+        const quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
+        setFrequencyHz(fhz);
+    }
+    // 实时刷新频率显示（不更新电台列表，避免频繁重建）
+    if (m_freqLabel)
+        m_freqLabel->setText(m_isFM ? QString::number(m_frequency, 'f', 1)
+                                    : QString::number(m_frequency, 'f', 0));
 }
 
 void RadioWindow::onTogglePlay() {
@@ -837,6 +893,8 @@ void RadioWindow::onTogglePlay() {
             : "QPushButton{border:none;background-image:url(:/images/butt_music_play_up.png);} QPushButton:hover{background-image:url(:/images/butt_music_stop_up.png);}"
         );
     }
+    // 开始播放后延迟300ms读取立体声状态
+    if (m_playing) QTimer::singleShot(300, this, [this]() { updateTunerStatus(); });
 }
 
 void RadioWindow::onSearch() {
@@ -983,7 +1041,7 @@ void RadioWindow::onSearch() {
         bool ok = false;
         const double v = input->text().toDouble(&ok);
         if (!ok) return;
-        m_frequency = m_isFM ? qBound(87.5, v, 108.0) : qBound(531.0, v, 1602.0);
+        m_frequency = m_isFM ? qBound(87.0, v, 108.0) : qBound(522.0, v, 1710.0);
         quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
         setFrequencyHz(fhz);
         updateFrequencyView();
@@ -1130,6 +1188,26 @@ void RadioWindow::switchBand(bool fm) {
         quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
         const quint32 driverFreq = m_tunerCapLow ? fhz : (fhz / 1000u);
         bool ok = false;
+
+        // ── 方式 0：VIDIOC_S_TUNER + rangelow/rangehigh（tea685x 正确切频段方式）──
+        // 驱动 vidioc_s_tuner 通过比较 rangelow/rangehigh 与 bands[] 表来选择频段：
+        //   FM bands[0]: rangelow=8700*160=1392000  rangehigh=10800*160=1728000
+        //   AM bands[1]: rangelow=522*16=8352        rangehigh=1710*16=27360
+        {
+            struct v4l2_tuner t;
+            memset(&t, 0, sizeof(t));
+            t.index     = 0;
+            t.type      = V4L2_TUNER_RADIO;
+            t.audmode   = V4L2_TUNER_MODE_STEREO;
+            t.rangelow  = m_isFM ? 1392000u : 8352u;
+            t.rangehigh = m_isFM ? 1728000u : 27360u;
+            if (::ioctl(m_fd, VIDIOC_S_TUNER, &t) == 0) {
+                qDebug() << "RadioWindow: band switch via VIDIOC_S_TUNER rangelow/rangehigh OK";
+                ok = setFrequencyHz(fhz);
+            } else {
+                qWarning() << "RadioWindow: VIDIOC_S_TUNER band switch failed:" << strerror(errno);
+            }
+        }
 
         // ── 方式 1：直接写入目标频率 ───────────────────────────────────────────
         ok = setFrequencyHz(fhz);
