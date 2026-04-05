@@ -74,6 +74,8 @@ private:
     // ── 状态 ─────────────────────────────────────────────────────────────
     QStringList m_fmStations;
     QStringList m_amStations;
+    QStringList m_fmFavorites;  // 用户收藏的 FM 频率（如 "95.9"）
+    QStringList m_amFavorites;  // 用户收藏的 AM 频率（如 "990"）
     bool    m_isFM;
     double  m_frequency;    // 用户可见频率（FM: MHz；AM: kHz）
     bool    m_tunerCapLow;  // 驱动是否使用 V4L2_TUNER_CAP_LOW 频率单位（62.5 Hz）
