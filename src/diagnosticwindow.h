@@ -2,9 +2,13 @@
 #define DIAGNOSTICWINDOW_H
 
 #include <QMainWindow>
+#include <QMap>
+#include <QVector>
+#include "mcuserialreader.h"
 
 class QLabel;
 class QLineEdit;
+class QScrollArea;
 class QStackedWidget;
 class QWidget;
 
@@ -34,6 +38,7 @@ private slots:
     void onConfirmPdfJump();
     void onPrevPage();
     void onNextPage();
+    void onFaultDataReceived(const QString &controller, const QVector<McuFaultInfo> &faults);
 
 private:
     void setupUI();
@@ -48,6 +53,9 @@ private:
     void appendCharToInput(QLineEdit *target, const QString &text);
     void updatePdfHeader();
     void updateSearchResultHeader();
+    void showFaultDetail(const QString &controller);
+    void populateFaultDetailContent();
+    static int controllerIndex(const QString &ctrl);
 
     QStackedWidget *m_pages;
 
@@ -62,6 +70,14 @@ private:
     int m_pdfTotal;
     int m_resultIndex;
     int m_resultTotal;
+
+    // 故障诊断实时数据
+    McuSerialReader                      *m_reader;
+    QMap<QString, QVector<McuFaultInfo>>  m_activeFaults;
+    QLabel                               *m_faultBadgeLabels[3];
+    QString                               m_currentFaultController;
+    QLabel                               *m_faultDetailTitleLabel;
+    QScrollArea                          *m_faultDetailScrollArea;
 };
 
 #endif // DIAGNOSTICWINDOW_H
