@@ -1,7 +1,7 @@
 TEMPLATE = app
 TARGET = CarDesk
 
-QT += core gui widgets multimedia multimediawidgets
+QT += core gui widgets multimedia multimediawidgets serialport
 
 CONFIG += c++11
 
@@ -116,7 +116,9 @@ HEADERS += \
     src/otamanager.h \
     src/progressmonitor.h \
     src/appsignals.h \
-    src/topbarwidget.h
+    src/topbarwidget.h \
+    src/faultcodedb.h \
+    src/mcuserialreader.h
 
 SOURCES += \
     src/main.cpp \
@@ -139,7 +141,9 @@ SOURCES += \
     src/otamanager.cpp \
     src/progressmonitor.cpp \
     src/appsignals.cpp \
-    src/topbarwidget.cpp
+    src/topbarwidget.cpp \
+    src/faultcodedb.cpp \
+    src/mcuserialreader.cpp
 
 # 资源文件（如果存在）
 exists(resources.qrc) {

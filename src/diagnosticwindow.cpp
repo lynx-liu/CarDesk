@@ -1,5 +1,7 @@
 #include "diagnosticwindow.h"
 #include "devicedetect.h"
+#include "faultcodedb.h"
+#include "mcuserialreader.h"
 #include "topbarwidget.h"
 
 #include <QApplication>
@@ -14,6 +16,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QScreen>
+#include <QScrollArea>
 #include <QStackedWidget>
 #include <QTime>
 #include <QVBoxLayout>
@@ -32,6 +35,10 @@ DiagnosticWindow::DiagnosticWindow(QWidget *parent)
     , m_pdfTotal(10)
     , m_resultIndex(1)
     , m_resultTotal(8)
+    , m_reader(new McuSerialReader(this))
+    , m_faultBadgeLabels{}
+    , m_faultDetailTitleLabel(nullptr)
+    , m_faultDetailScrollArea(nullptr)
 {
     setWindowTitle(QStringLiteral("诊断维护"));
     setObjectName("diagnosticWindow");
@@ -45,6 +52,11 @@ DiagnosticWindow::DiagnosticWindow(QWidget *parent)
     }
 
     setupUI();
+
+    connect(m_reader, &McuSerialReader::dm1Received,
+            this, &DiagnosticWindow::onFaultDataReceived);
+    if (device.getDeviceType() == DeviceDetect::DEVICE_TYPE_CARUNIT)
+        m_reader->open(QStringLiteral("/dev/ttyS2"));
 }
 
 void DiagnosticWindow::closeEvent(QCloseEvent *event)
@@ -199,6 +211,11 @@ QWidget *DiagnosticWindow::createFaultPage()
         QStringLiteral(":/images/butt_diagnosis_controller_down.png")
     };
 
+    const QStringList ctrlKeys = {
+        QStringLiteral("ABS"),
+        QStringLiteral("EBS"),
+        QStringLiteral("BCM")
+    };
     for (int i = 0; i < names.size(); ++i) {
         auto *btn = new QPushButton(names.at(i), page);
         // CSS .diagnostic_fault_con { margin-top:207px } => y = 82+207 = 289
@@ -212,14 +229,17 @@ QWidget *DiagnosticWindow::createFaultPage()
                 "QPushButton:hover{background-image:url(%2);}"
             ).arg(up.at(i), down.at(i))
         );
-        if (i == 0) {
-            // ABS 系统：有故障徽标，点击进入故障详情页
-            connect(btn, &QPushButton::clicked, this, &DiagnosticWindow::onOpenFaultDetailPage);
-            auto *tips = new QLabel(QStringLiteral("1"), btn);
-            tips->setGeometry(77, -8, 32, 32);
-            tips->setAlignment(Qt::AlignCenter);
-            tips->setStyleSheet("QLabel{background:#B82F2F;color:#fff;font-size:24px;border-radius:16px;}");
-        }
+        const QString ctrl = ctrlKeys.at(i);
+        connect(btn, &QPushButton::clicked, this, [this, ctrl]() {
+            showFaultDetail(ctrl);
+        });
+        // 故障徽标（有活跃故障时显示）
+        m_faultBadgeLabels[i] = new QLabel(btn);
+        m_faultBadgeLabels[i]->setGeometry(77, -8, 32, 32);
+        m_faultBadgeLabels[i]->setAlignment(Qt::AlignCenter);
+        m_faultBadgeLabels[i]->setStyleSheet(
+            "QLabel{background:#B82F2F;color:#fff;font-size:24px;border-radius:16px;}");
+        m_faultBadgeLabels[i]->hide();
     }
 
     return page;
@@ -740,7 +760,6 @@ QWidget *DiagnosticWindow::createFaultDetailPage()
     topBarRight->setGeometry(1280 - 16 - TopBarRightWidget::preferredWidth(), 17,
                              TopBarRightWidget::preferredWidth(), 48);
 
-    // .back { left:60; top:103; w:60; h:60 }  → 返回故障列表
     auto *backBtn = new QPushButton(page);
     backBtn->setGeometry(60, 103, 60, 60);
     backBtn->setCursor(Qt::PointingHandCursor);
@@ -750,59 +769,56 @@ QWidget *DiagnosticWindow::createFaultDetailPage()
     );
     connect(backBtn, &QPushButton::clicked, this, [this]() { openPage(1); });
 
-    // CSS .diagnostic_fault_detail { width:986; margin:24px auto }
-    // => x=(1280-986)/2=147, y=82+24=106
-    // 列宽(含border): 95 | 88 | 395 | 396，gap=4px → 95+88+395+396+3×4 = 986 ✓
-    // 1行表头 + 8行数据，行高60px，行间距4px => 9×60+8×4=572px
-    auto *detailWrap = new QWidget(page);
-    detailWrap->setGeometry(147, 106, 986, 572);
-    detailWrap->setStyleSheet("QWidget{background:transparent;}");
-    auto *detailLayout = new QVBoxLayout(detailWrap);
-    detailLayout->setContentsMargins(0, 0, 0, 0);
-    detailLayout->setSpacing(4);
+    // 控制器标题（动态更新）
+    m_faultDetailTitleLabel = new QLabel(page);
+    m_faultDetailTitleLabel->setGeometry(147, 106, 986, 40);
+    m_faultDetailTitleLabel->setStyleSheet(
+        "QLabel{color:#eaf2ff;font-size:22px;background:transparent;}");
 
-    struct RowData { QString c1, c2, c3, c4; };
-    const QList<RowData> rows = {
-        {"SPN",  "FMI", "车身控制器",      "维修建议"},
-        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
-        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
-        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
-        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
-        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
-        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
-        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
-        {"790",  "8",   "轴右轮速传感器",   "维修建议内容"},
+    // 固定表头行（SPN | FMI | 故障描述 | DTC码）
+    // 列宽：95+88+395+396 = 974，加 3×4px 间距 = 986
+    const int colW[] = {95, 88, 395, 396};
+    const QStringList headers = {
+        QStringLiteral("SPN"),
+        QStringLiteral("FMI"),
+        QStringLiteral("故障描述"),
+        QStringLiteral("DTC码")
     };
-    const int colWidths[] = {95, 88, 395, 396};
-
-    for (int r = 0; r < rows.size(); ++r) {
-        auto *rowWidget = new QWidget(detailWrap);
-        rowWidget->setFixedHeight(60);
-        auto *rowLayout = new QHBoxLayout(rowWidget);
-        rowLayout->setContentsMargins(0, 0, 0, 0);
-        rowLayout->setSpacing(4);
-
-        const QStringList texts = {rows[r].c1, rows[r].c2, rows[r].c3, rows[r].c4};
-        const QString baseStyle = r == 0
-            ? "QLabel{border:1px solid #0068FF;background:rgba(255,255,255,0.1);color:#fff;font-size:20px;padding-left:24px;font-weight:bold;line-height:60px;}"
-            : "QLabel{border:1px solid #0068FF;background:rgba(255,255,255,0.1);color:#fff;font-size:20px;padding-left:24px;line-height:60px;}";
-
-        for (int c = 0; c < 4; ++c) {
-            auto *cell = new QLabel(texts[c], rowWidget);
-            cell->setFixedSize(colWidths[c], 60);
-            cell->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-            cell->setStyleSheet(baseStyle);
-            rowLayout->addWidget(cell);
-        }
-        detailLayout->addWidget(rowWidget);
+    auto *headerRow = new QWidget(page);
+    headerRow->setGeometry(147, 150, 986, 56);
+    auto *headerLayout = new QHBoxLayout(headerRow);
+    headerLayout->setContentsMargins(0, 0, 0, 0);
+    headerLayout->setSpacing(4);
+    for (int c = 0; c < 4; ++c) {
+        auto *cell = new QLabel(headers[c], headerRow);
+        cell->setFixedSize(colW[c], 56);
+        cell->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        cell->setStyleSheet(
+            "QLabel{border:1px solid #0068FF;background:rgba(0,104,255,0.3);"
+            "color:#fff;font-size:20px;padding-left:12px;font-weight:bold;}");
+        headerLayout->addWidget(cell);
     }
+
+    // 可滚动数据区域（内容由 populateFaultDetailContent() 动态填充）
+    m_faultDetailScrollArea = new QScrollArea(page);
+    m_faultDetailScrollArea->setGeometry(147, 210, 986, 468);
+    m_faultDetailScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_faultDetailScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_faultDetailScrollArea->setWidgetResizable(true);
+    m_faultDetailScrollArea->setStyleSheet(
+        "QScrollArea{border:none;background:transparent;}"
+        "QScrollBar:vertical{background:rgba(255,255,255,0.08);width:8px;border-radius:4px;margin:0;}"
+        "QScrollBar::handle:vertical{background:rgba(0,104,255,0.7);border-radius:4px;min-height:20px;}"
+        "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;border:none;}"
+    );
+    m_faultDetailScrollArea->viewport()->setStyleSheet("background:transparent;");
 
     return page;
 }
 
 void DiagnosticWindow::onOpenFaultDetailPage()
 {
-    openPage(6);
+    showFaultDetail(QStringLiteral("ABS"));
 }
 
 void DiagnosticWindow::onOpenFaultPage()
@@ -990,4 +1006,126 @@ void DiagnosticWindow::keyPressEvent(QKeyEvent *event)
     default:
         QMainWindow::keyPressEvent(event);
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  故障诊断实时数据相关实现
+// ─────────────────────────────────────────────────────────────────────────────
+
+int DiagnosticWindow::controllerIndex(const QString &ctrl)
+{
+    if (ctrl == QLatin1String("ABS")) return 0;
+    if (ctrl == QLatin1String("EBS")) return 1;
+    if (ctrl == QLatin1String("BCM")) return 2;
+    return -1;
+}
+
+void DiagnosticWindow::onFaultDataReceived(const QString &controller,
+                                            const QVector<McuFaultInfo> &faults)
+{
+    m_activeFaults[controller] = faults;
+
+    // 更新对应系统按钮上的徽标数量
+    const int idx = controllerIndex(controller);
+    if (idx >= 0 && m_faultBadgeLabels[idx]) {
+        const int cnt = faults.size();
+        if (cnt > 0) {
+            m_faultBadgeLabels[idx]->setText(QString::number(cnt));
+            m_faultBadgeLabels[idx]->show();
+        } else {
+            m_faultBadgeLabels[idx]->hide();
+        }
+    }
+
+    // 若详情页正在显示该控制器的故障，立即刷新
+    if (m_pages && m_pages->currentIndex() == 6 &&
+        m_currentFaultController == controller) {
+        populateFaultDetailContent();
+    }
+}
+
+void DiagnosticWindow::showFaultDetail(const QString &controller)
+{
+    m_currentFaultController = controller;
+    populateFaultDetailContent();
+    openPage(6);
+}
+
+void DiagnosticWindow::populateFaultDetailContent()
+{
+    if (!m_faultDetailScrollArea || !m_faultDetailTitleLabel)
+        return;
+
+    const QString ctrl = m_currentFaultController;
+    const QVector<McuFaultInfo> &faults = m_activeFaults.value(ctrl);
+
+    // 控制器显示名称映射
+    static const QStringList kCtrlKeys  = {
+        QStringLiteral("ABS"), QStringLiteral("EBS"), QStringLiteral("BCM")};
+    static const QStringList kCtrlNames = {
+        QStringLiteral("ABS系统"),
+        QStringLiteral("双预警系统"),
+        QStringLiteral("车身控制器")};
+    const int ci = kCtrlKeys.indexOf(ctrl);
+    const QString dispName = (ci >= 0) ? kCtrlNames.at(ci) : ctrl;
+
+    m_faultDetailTitleLabel->setText(
+        faults.isEmpty()
+            ? QStringLiteral("%1  —  当前无活跃故障").arg(dispName)
+            : QStringLiteral("%1  —  %2 个活跃故障").arg(dispName).arg(faults.size()));
+
+    // 清除旧内容
+    if (QWidget *old = m_faultDetailScrollArea->takeWidget())
+        old->deleteLater();
+
+    // 生成新内容
+    // 列宽：95(SPN)+88(FMI)+395(故障描述)+396(DTC码) + 3×4gap = 986
+    const int colW[] = {95, 88, 395, 396};
+
+    auto *content = new QWidget();
+    content->setStyleSheet("QWidget{background:transparent;}");
+    auto *layout = new QVBoxLayout(content);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(4);
+
+    if (faults.isEmpty()) {
+        auto *empty = new QLabel(QStringLiteral("当前控制器无活跃故障"), content);
+        empty->setAlignment(Qt::AlignCenter);
+        empty->setStyleSheet(
+            "QLabel{color:#88aacc;font-size:26px;background:transparent;padding:60px 0;}");
+        layout->addWidget(empty);
+    } else {
+        for (const McuFaultInfo &f : faults) {
+            const QString desc = FaultCodeDb::lookup(ctrl, f.spn, f.fmi);
+            const QString dtc  = FaultCodeDb::dtcCode(ctrl, f.spn, f.fmi);
+
+            auto *row = new QWidget(content);
+            row->setFixedHeight(56);
+            auto *rl = new QHBoxLayout(row);
+            rl->setContentsMargins(0, 0, 0, 0);
+            rl->setSpacing(4);
+
+            const QStringList texts = {
+                QString::number(f.spn),
+                QString::number(f.fmi),
+                desc.isEmpty() ? f.rawDesc : desc,
+                dtc.isEmpty()  ? QStringLiteral("—") : dtc
+            };
+            for (int c = 0; c < 4; ++c) {
+                auto *cell = new QLabel(texts[c], row);
+                cell->setFixedSize(colW[c], 56);
+                cell->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+                cell->setWordWrap(c == 2);  // 故障描述列允许换行
+                cell->setStyleSheet(
+                    "QLabel{border:1px solid rgba(0,104,255,0.5);"
+                    "background:rgba(255,255,255,0.07);color:#eaf2ff;"
+                    "font-size:18px;padding-left:8px;padding-right:4px;}");
+                rl->addWidget(cell);
+            }
+            layout->addWidget(row);
+        }
+    }
+
+    layout->addStretch();
+    m_faultDetailScrollArea->setWidget(content);
 }
