@@ -685,6 +685,7 @@ QWidget *SystemSettingWindow::createDisplayPage()
     auto *slider = new QSlider(Qt::Horizontal, brightnessRow);
     slider->setRange(0, 100);
     slider->setValue(initSliderVal);
+    slider->setFixedHeight(44);
     slider->setStyleSheet(
         "QSlider::groove:horizontal{height:8px;background:rgba(255,255,255,0.28);border-radius:4px;}"
         "QSlider::sub-page:horizontal{background:#00a5ff;border-radius:4px;}"
@@ -839,6 +840,7 @@ QWidget *SystemSettingWindow::createSoundPage()
     auto *slider = new QSlider(Qt::Horizontal, vRight);
     slider->setRange(0, 100);
     slider->setValue(50);
+    slider->setFixedHeight(44);
     slider->setStyleSheet(
         "QSlider::groove:horizontal{height:8px;background:rgba(255,255,255,0.28);border-radius:4px;}"
         "QSlider::sub-page:horizontal{background:#00a5ff;border-radius:4px;}"
