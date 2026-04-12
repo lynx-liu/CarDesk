@@ -1,5 +1,6 @@
 #include "phonewindow.h"
 #include "topbarwidget.h"
+#include "appsignals.h"
 
 #include <QApplication>
 #include <QKeyEvent>
@@ -489,7 +490,7 @@ void PhoneWindow::onHangup() {
         item->setData(Qt::UserRole, m_callNumber->text());
         item->setSizeHint(QSize(944, 68));
         m_historyList->insertItem(0, item);
-        m_historyList->setItemWidget(item, createHistoryRow(QStringLiteral("最近通话"), m_callNumber->text(), QDateTime::currentDateTime().toString("yyyy.MM.dd  hh:mm"), QStringLiteral(":/images/pict_callinglist_state_1.png"), true));
+        m_historyList->setItemWidget(item, createHistoryRow(QStringLiteral("最近通话"), m_callNumber->text(), QDateTime::currentDateTime().toString("yyyy.MM.dd  " + AppSignals::timeFormat()), QStringLiteral(":/images/pict_callinglist_state_1.png"), true));
     }
 }
 

@@ -2,6 +2,7 @@
 #include "progressmonitor.h"
 
 #include <QProcess>
+#include <QDate>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -182,6 +183,11 @@ void OTAManager::onProcessFinished(int exitCode)
         emit updateProgress(100);
         emit updateStateChanged(QStringLiteral("升级成功，准备重启系统..."));
         emit updateCompleted();
+
+        // 记录本次升级日期，供系统信息页展示
+        const QString today = QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd"));
+        QProcess::startDetached(QStringLiteral("fw_setenv"),
+                                {QStringLiteral("swu_date"), today});
 
         // 延迟后重启系统
         QTimer::singleShot(3000, this, &OTAManager::rebootSystem);

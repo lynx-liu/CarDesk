@@ -77,6 +77,10 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     connect(AppSignals::instance(), &AppSignals::volumeLevelChanged,
             this, &TopBarRightWidget::onVolumeChanged);
 
+    // 时钟制式变化时立即刷新显示
+    connect(AppSignals::instance(), &AppSignals::clockFormatChanged,
+            this, [this](bool) { onClockTick(); });
+
     // ── 时钟定时器 ────────────────────────────────────────────────────────────
     m_clockTimer = new QTimer(this);
     m_clockTimer->setInterval(1000);
@@ -132,6 +136,6 @@ void TopBarRightWidget::onVolumeBtnClicked()
 void TopBarRightWidget::onClockTick()
 {
     if (m_timeLabel) {
-        m_timeLabel->setText(QTime::currentTime().toString("hh:mm"));
+        m_timeLabel->setText(QTime::currentTime().toString(AppSignals::timeFormat()));
     }
 }

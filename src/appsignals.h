@@ -2,12 +2,10 @@
 #define APPSIGNALS_H
 
 #include <QObject>
+#include <QApplication>
 
 /**
  * AppSignals — 应用级信号总线（单例）
- *
- * 用于在 GlobalKeyFilter（main.cpp）与所有子界面顶部栏之间传递
- * 硬件音量键引起的音量变化，使各界面的音量图标和数值实时同步。
  */
 class AppSignals : public QObject {
     Q_OBJECT
@@ -17,9 +15,18 @@ public:
         return &inst;
     }
 
+    /** 返回当前时钟格式字符串（"HH:mm" 或 "hh:mm AP"）*/
+    static QString timeFormat() {
+        const QVariant v = qApp ? qApp->property("appClock24h") : QVariant();
+        return (v.isValid() && v.toBool()) ? QStringLiteral("HH:mm") : QStringLiteral("hh:mm AP");
+    }
+
 signals:
-    /** 音量等级变化（0–10 整数等级，对应 amixer 0-100% 归一化） */
+    /** 音量等级变化（0–10 整数等级，对应 amixer 0-100% 归一化）*/
     void volumeLevelChanged(int level);
+
+    /** 时钟制式变化：true=24小时，false=12小时 */
+    void clockFormatChanged(bool use24h);
 
 private:
     AppSignals() = default;
