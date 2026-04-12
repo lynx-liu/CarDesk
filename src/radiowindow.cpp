@@ -1,6 +1,7 @@
 #include "radiowindow.h"
 #include "devicedetect.h"
 #include "topbarwidget.h"
+#include "t507sdkbridge.h"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -205,12 +206,16 @@ RadioWindow::~RadioWindow()
     stopScan();
     if (m_playing) setMute(true);
     closeDevice();
+    // 退出收音机：将 TM2313 功放输入切回媒体声道（IN2 = SoC DAC）
+    T507SdkBridge::setAudioSource(false);
 }
 
 void RadioWindow::closeEvent(QCloseEvent *event) {
     stopScan();
     if (m_playing) setMute(true);
     closeDevice();
+    // 退出收音机：将 TM2313 功放输入切回媒体声道（IN2 = SoC DAC）
+    T507SdkBridge::setAudioSource(false);
     emit requestReturnToMain();
     QMainWindow::closeEvent(event);
 }
@@ -653,6 +658,7 @@ void RadioWindow::setupUI() {
     m_playBtn->setCursor(Qt::PointingHandCursor);
     m_playBtn->setStyleSheet(
         "QPushButton{border:none;background-image:url(:/images/butt_music_play_up.png);}"
+        "QPushButton:hover{background-image:url(:/images/butt_music_play_down.png);}"
         "QPushButton:pressed{background-image:url(:/images/butt_music_play_down.png);}");
     connect(m_playBtn, &QPushButton::clicked, this, &RadioWindow::onTogglePlay);
 
@@ -902,8 +908,12 @@ void RadioWindow::onTogglePlay() {
     setMute(!m_playing);
     if (m_playBtn) {
         m_playBtn->setStyleSheet(m_playing
-            ? "QPushButton{border:none;background-image:url(:/images/butt_music_stop_up.png);} QPushButton:hover{background-image:url(:/images/butt_music_play_up.png);}"
-            : "QPushButton{border:none;background-image:url(:/images/butt_music_play_up.png);} QPushButton:hover{background-image:url(:/images/butt_music_stop_up.png);}"
+            ? "QPushButton{border:none;background-image:url(:/images/butt_music_stop_up.png);}"
+              "QPushButton:hover{background-image:url(:/images/butt_music_stop_down.png);}"
+              "QPushButton:pressed{background-image:url(:/images/butt_music_stop_down.png);}"
+            : "QPushButton{border:none;background-image:url(:/images/butt_music_play_up.png);}"
+              "QPushButton:hover{background-image:url(:/images/butt_music_play_down.png);}"
+              "QPushButton:pressed{background-image:url(:/images/butt_music_play_down.png);}"
         );
     }
     // 开始播放后延迟300ms读取立体声状态
