@@ -369,6 +369,7 @@ int main(int argc, char *argv[]) {
 
     QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
+    app.setOverrideCursor(Qt::BlankCursor);  // 触控设备隐藏鼠标指针
     app.setProperty("appClock24h", false);  // 默认 12 小时制（与原始行为一致）
     app.setProperty("appSoundMode", QStringLiteral("立体声"));  // 默认声场模式
     T507SdkBridge::setSoundMode(QStringLiteral("立体声"));  // 应用默认声场到 TM2313
