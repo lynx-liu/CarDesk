@@ -15,15 +15,14 @@
 #include <QDialog>
 #include <fcntl.h>
 #include <unistd.h>
-#include <sys/ioctl.h>
-#include <linux/fb.h>
 #include <QSocketNotifier>
+#include "backlight.h"
 #include <linux/input.h>
 #include "mainwindow.h"
 #include "devicedetect.h"
 #include "appsignals.h"
 
-// ── Power 键关屏 / 亮屏（FBIOBLANK on /dev/fb0）──────────────────────────
+// ── 背光控制（POWER 键关/亮屏，SLEEP 键关机，具体 dispdbg 操作在 backlight.cpp）─
 class ScreenBlanker : public QObject {
 public:
     static ScreenBlanker *instance() {
@@ -34,13 +33,17 @@ public:
 
     void blank() {
         if (m_blanked) return;
+        // 保存当前亮度（来自 Backlight 缓存或 sysfs）
+        m_savedBrightness = Backlight::get();
+        qDebug() << "[ScreenBlanker] blank: saved brightness=" << m_savedBrightness;
         m_blanked = true;
-        setFbBlank(FB_BLANK_POWERDOWN);
+        Backlight::set(0);
     }
     void unblank() {
         if (!m_blanked) return;
         m_blanked = false;
-        setFbBlank(FB_BLANK_UNBLANK);
+        Backlight::set(m_savedBrightness);
+        qDebug() << "[ScreenBlanker] unblank: restore brightness=" << m_savedBrightness;
     }
     void toggle() {
         if (m_blanked) unblank(); else blank();
@@ -48,14 +51,7 @@ public:
 
 private:
     bool m_blanked = false;
-
-    static void setFbBlank(int value) {
-        int fd = ::open("/dev/fb0", O_RDWR | O_CLOEXEC);
-        if (fd >= 0) {
-            ::ioctl(fd, FBIOBLANK, value);
-            ::close(fd);
-        }
-    }
+    int  m_savedBrightness = 128;
 };
 
 // ── 音量浮动指示条 ────────────────────────────────────────────────────────────
@@ -181,8 +177,20 @@ protected:
             }
         }
         if (t == QEvent::KeyPress) {
-            // 任意按键亮屏（Power 键已在 InputNotifier 处理切换，此处仅做亮屏）
+            // 任意按键亮屏——但电源/睡眠键由 InputNotifier raw 路径处理（toggle/poweroff）。
+            // 这里只消耗事件、不亮屏，避免两条路径叠加导致闪屏后又关屏。
+            // 双重判断：scanCode（raw evdev code）和 Qt key value（evdevkeyboard 可能
+            // 将 KEY_POWER→Key_PowerOff，其 nativeScanCode 不保证等于 116）。
             if (ScreenBlanker::instance()->isBlanked()) {
+                QKeyEvent *ke = static_cast<QKeyEvent *>(event);
+                const unsigned int sc = ke->nativeScanCode();
+                const int k = ke->key();
+                const bool isPowerKey = (sc == 116u || sc == 142u
+                    || k == Qt::Key_PowerOff || k == Qt::Key_Sleep
+                    || k == Qt::Key_WakeUp   || k == Qt::Key_PowerDown);
+                if (isPowerKey) {
+                    return true;  // 消耗事件，亮屏由 InputNotifier::toggle() 完成
+                }
                 ScreenBlanker::instance()->unblank();
                 return true;
             }
@@ -360,6 +368,7 @@ int main(int argc, char *argv[]) {
 
     QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
+    app.setProperty("appClock24h", false);  // 默认 12 小时制（与原始行为一致）
     configureApplicationFont(app);
 
     // 全局硬件键监听（音量键 + 诊断日志）
@@ -383,8 +392,12 @@ int main(int argc, char *argv[]) {
                     switch (ev.code) {
                     case KEY_HOMEPAGE: qtKey = Qt::Key_HomePage; break;
                     case KEY_BACK:     qtKey = Qt::Key_Back;     break;
+                    case KEY_SLEEP:
+                        qDebug() << "[InputNotifier] ev.code=142 KEY_SLEEP => shutdown";
+                        QProcess::startDetached(QStringLiteral("poweroff"), {});
+                        break;
                     case KEY_POWER:
-                        qDebug() << "[InputNotifier] ev.code=116 => Power toggle blank";
+                        qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => toggle blank";
                         ScreenBlanker::instance()->toggle();
                         break;
                     default: break;

@@ -1,6 +1,7 @@
 #include "musicplayerwindow.h"
 #include "devicedetect.h"
 #include "topbarwidget.h"
+#include "appsignals.h"
 
 #include <QVBoxLayout>
 #include <QKeyEvent>
@@ -191,7 +192,7 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
     volNum->setStyleSheet("color: #fff; font-size: 36px; background: transparent;");
 
     QLabel *timeLbl = makeLabel(topBar, 1174, 10, 94, 54, "");
-    timeLbl->setText(QTime::currentTime().toString("hh:mm"));
+    timeLbl->setText(QTime::currentTime().toString(AppSignals::timeFormat()));
     timeLbl->setStyleSheet("color: #fff; font-size: 36px; background: transparent;");
 
     // ── Tab 标签栏（y:100，USB:480,100,160×66 | BT:640,100,160×66）─────

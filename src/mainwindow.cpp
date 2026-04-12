@@ -300,6 +300,10 @@ void MainWindow::setupConnections() {
     // 时钟更新
     connect(m_clockTimer, &QTimer::timeout, this, &MainWindow::onUpdateClock);
 
+    // 时钟制式变化时立即刷新主界面时钟
+    connect(AppSignals::instance(), &AppSignals::clockFormatChanged,
+            this, [this](bool) { onUpdateClock(); });
+
     // 硬件音量键实时同步主界面音量标签（非静音状态下）
     connect(AppSignals::instance(), &AppSignals::volumeLevelChanged, this, [this](int level) {
         const int bounded = qBound(0, level, 10);
@@ -341,7 +345,7 @@ void MainWindow::onUpdateClock() {
     if (!m_clockLabel) return;
     
     QDateTime now = QDateTime::currentDateTime();
-    QString timeStr = now.toString("hh:mm");
+    QString timeStr = now.toString(AppSignals::timeFormat());
     m_clockLabel->setText(timeStr);
 }
 

@@ -2,6 +2,8 @@
 #include "otamanager.h"
 #include "devicedetect.h"
 #include "topbarwidget.h"
+#include "backlight.h"
+#include "appsignals.h"
 
 #include <QButtonGroup>
 #include <QKeyEvent>
@@ -29,7 +31,9 @@
 #include <QApplication>
 #include <QDir>
 #include <QDirIterator>
+#include <QFile>
 #include <QFileInfo>
+#include <QCoreApplication>
 #include <QScreen>
 #include <QTime>
 #include <QVector>
@@ -676,9 +680,10 @@ QWidget *SystemSettingWindow::createDisplayPage()
     auto *lowIcon = new QLabel(brightnessRow);
     lowIcon->setFixedSize(24, 24);
     lowIcon->setPixmap(QPixmap(":/images/pict_brightness_low.png").scaled(24, 24, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    const int initSliderVal = Backlight::backlightToSlider(Backlight::get());
     auto *slider = new QSlider(Qt::Horizontal, brightnessRow);
     slider->setRange(0, 100);
-    slider->setValue(50);
+    slider->setValue(initSliderVal);
     slider->setStyleSheet(
         "QSlider::groove:horizontal{height:8px;background:rgba(255,255,255,0.28);border-radius:4px;}"
         "QSlider::sub-page:horizontal{background:#00a5ff;border-radius:4px;}"
@@ -687,13 +692,22 @@ QWidget *SystemSettingWindow::createDisplayPage()
     auto *highIcon = new QLabel(brightnessRow);
     highIcon->setFixedSize(36, 36);
     highIcon->setPixmap(QPixmap(":/images/pict_brightness_high.png").scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    auto *tips = new QLabel(QStringLiteral("50"), brightnessRow);
+    auto *tips = new QLabel(QString::number(initSliderVal), brightnessRow);
     tips->setFixedSize(48, 38);
     tips->setAlignment(Qt::AlignCenter);
     tips->setStyleSheet("QLabel{background:url(:/images/pict_brightness_tips.png);font-size:24px;color:#fff;}");
     connect(slider, &QSlider::valueChanged, tips, [tips](int v) {
         tips->setText(QString::number(v));
+        Backlight::set(Backlight::sliderToBacklight(v));
     });
+    // 亮度模式预设（slider 0–100）：白天=100 / 夜晚=20 / 自动=打开时实测值
+    const int kDaySlider   = 100;
+    const int kNightSlider = 20;
+    const int kAutoSlider  = initSliderVal;
+    connect(dayBtn,   &QPushButton::toggled, slider, [slider, kDaySlider  ](bool on){ if (on) slider->setValue(kDaySlider);   });
+    connect(nightBtn, &QPushButton::toggled, slider, [slider, kNightSlider](bool on){ if (on) slider->setValue(kNightSlider); });
+    connect(autoBtn,  &QPushButton::toggled, slider, [slider, kAutoSlider ](bool on){ if (on) slider->setValue(kAutoSlider);  });
+
     brightnessLayout->addWidget(lowIcon);
     brightnessLayout->addWidget(slider, 1);
     brightnessLayout->addWidget(highIcon);
@@ -747,7 +761,51 @@ QWidget *SystemSettingWindow::createDisplayPage()
 
     layout->addWidget(row1);
     layout->addWidget(makeSwitchRow(QStringLiteral("关屏时钟"), QStringLiteral("数字"), QStringLiteral("模拟")));
-    layout->addWidget(makeSwitchRow(QStringLiteral("时钟制式"), QStringLiteral("12小时"), QStringLiteral("24小时")));
+
+    // 时钟制式行（单独实现以便连接 AppSignals::clockFormatChanged）
+    {
+        const bool init24h = qApp->property("appClock24h").toBool();
+        auto *clockRow = new QWidget(page);
+        clockRow->setFixedHeight(98);
+        clockRow->setStyleSheet("QWidget{border-bottom:2px solid rgba(255,255,255,0.1);}");
+        auto *h = new QHBoxLayout(clockRow);
+        h->setContentsMargins(0, 27, 0, 27);
+        h->setSpacing(16);
+        auto *title = new QLabel(QStringLiteral("时钟制式"), clockRow);
+        title->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;}");
+        title->setFixedWidth(170);
+        h->addWidget(title);
+        h->addStretch();
+        auto *container = new QWidget(clockRow);
+        container->setFixedSize(240, 44);
+        container->setStyleSheet(init24h
+            ? "QWidget{background:url(:/images/butt_setting_choose_right.png) no-repeat;}"
+            : "QWidget{background:url(:/images/butt_setting_choose_left.png) no-repeat;}");
+        auto *h12Btn = new QPushButton(QStringLiteral("12小时"), container);
+        auto *h24Btn = new QPushButton(QStringLiteral("24小时"), container);
+        h12Btn->setGeometry(0,   0, 120, 44);
+        h24Btn->setGeometry(120, 0, 120, 44);
+        const QString btnStyle =
+            "QPushButton{border:none;background:transparent;color:#fff;font-size:24px;}"
+            "QPushButton:hover{color:#00faff;}";
+        h12Btn->setStyleSheet(btnStyle);
+        h24Btn->setStyleSheet(btnStyle);
+        h12Btn->setCursor(Qt::PointingHandCursor);
+        h24Btn->setCursor(Qt::PointingHandCursor);
+        QObject::connect(h12Btn, &QPushButton::clicked, container, [container]() {
+            container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_left.png) no-repeat;}");
+            qApp->setProperty("appClock24h", false);
+            AppSignals::instance()->clockFormatChanged(false);
+        });
+        QObject::connect(h24Btn, &QPushButton::clicked, container, [container]() {
+            container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_right.png) no-repeat;}");
+            qApp->setProperty("appClock24h", true);
+            AppSignals::instance()->clockFormatChanged(true);
+        });
+        h->addWidget(container);
+        layout->addWidget(clockRow);
+    }
+
     layout->addStretch();
     return page;
 }
@@ -1345,6 +1403,39 @@ QWidget *SystemSettingWindow::createBluetoothPage()
 
 QWidget *SystemSettingWindow::createInfoPage()
 {
+    // 软件版本：从 U-Boot 环境变量读取（fw_printenv -n swu_version）
+    auto readSoftVersion = []() -> QString {
+        QProcess p;
+        p.start(QStringLiteral("fw_printenv"), {QStringLiteral("-n"), QStringLiteral("swu_version")});
+        if (p.waitForFinished(800)) {
+            const QString v = QString::fromLocal8Bit(p.readAllStandardOutput()).trimmed();
+            if (!v.isEmpty()) return v;
+        }
+        return QStringLiteral("-");
+    };
+
+    // 硬件型号：从设备树读取
+    auto readHardwareModel = []() -> QString {
+        QFile f(QStringLiteral("/proc/device-tree/model"));
+        if (f.open(QIODevice::ReadOnly)) {
+            const QString m = QString::fromLocal8Bit(f.readAll()).trimmed().replace(QChar('\0'), QString());
+            f.close();
+            if (!m.isEmpty()) return m;
+        }
+        return QStringLiteral("-");
+    };
+
+    // 系统更新日期：优先读 OTA 写入的 swu_date，无则用编译时日期
+    auto readUpdateDate = []() -> QString {
+        QProcess p;
+        p.start(QStringLiteral("fw_printenv"), {QStringLiteral("-n"), QStringLiteral("swu_date")});
+        if (p.waitForFinished(800)) {
+            const QString d = QString::fromLocal8Bit(p.readAllStandardOutput()).trimmed();
+            if (!d.isEmpty()) return d;
+        }
+        return QStringLiteral(APP_BUILD_DATE);
+    };
+
     auto *page = new QWidget();
     auto *layout = new QVBoxLayout(page);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -1357,9 +1448,9 @@ QWidget *SystemSettingWindow::createInfoPage()
     listLayout->setSpacing(24);
 
     const QList<QPair<QString, QString>> rows = {
-        {QStringLiteral("软件版本："), QStringLiteral("V3.2.1")},
-        {QStringLiteral("硬件型号："), QStringLiteral("CH-2004")},
-        {QStringLiteral("系统更新日期："), QStringLiteral("2026-1-26")}
+        {QStringLiteral("软件版本："), readSoftVersion()},
+        {QStringLiteral("硬件型号："), readHardwareModel()},
+        {QStringLiteral("系统更新日期："), readUpdateDate()}
     };
 
     for (const auto &row : rows) {

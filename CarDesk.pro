@@ -70,6 +70,9 @@ contains(CONFIG, arm_build)|contains(CONFIG, arm64_build) {
     message("Building for x86/x64 (PC)")
 }
 
+# 编译时注入构建日期，供系统更新日期展示层兼容处理
+DEFINES += APP_BUILD_DATE=\\\"$$system(date +%Y-%m-%d)\\\"
+
 # 编译输出目录
 CONFIG(debug, debug|release) {
     DESTDIR = $$PWD/build/debug
@@ -118,7 +121,8 @@ HEADERS += \
     src/appsignals.h \
     src/topbarwidget.h \
     src/faultcodedb.h \
-    src/mcuserialreader.h
+    src/mcuserialreader.h \
+    src/backlight.h
 
 SOURCES += \
     src/main.cpp \
@@ -143,7 +147,8 @@ SOURCES += \
     src/appsignals.cpp \
     src/topbarwidget.cpp \
     src/faultcodedb.cpp \
-    src/mcuserialreader.cpp
+    src/mcuserialreader.cpp \
+    src/backlight.cpp
 
 # 资源文件（如果存在）
 exists(resources.qrc) {
