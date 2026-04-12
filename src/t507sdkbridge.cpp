@@ -8,9 +8,11 @@
 #endif
 
 // TM2313 ioctl 命令（来自内核驱动 tm2313.h，用户空间直接引用数值）
-static const int TM2313_LOUDNESS      = 10000; // arg: 1=开, 0=关
-static const int TM2313_TREBLE        = 10002; // arg: 0-15，TDA7313编码(0=+14dB,7=0dB,8=-2dB,15=-14dB)
-static const int TM2313_BASS          = 10003; // arg: 同上
+static const int TM2313_LOUDNESS               = 10000; // arg: 1=开, 0=关
+static const int TM2313_TREBLE                 = 10002; // arg: 0-15，TDA7313编码(0=+14dB,7=0dB,8=-2dB,15=-14dB)
+static const int TM2313_BASS                   = 10003; // arg: 同上
+static const int TM2313_INPUT_SWITCH_STEREO_1  = 10011; // 切换到 IN1（收音机 / TEA685x 模拟输出）
+static const int TM2313_INPUT_SWITCH_STEREO_2  = 10012; // 切换到 IN2（媒体声道 / SoC DAC，默认）
 
 // 声场预设表：{treble(0-15), bass(0-15), loudness(0/1)}
 // 编码参考 TDA7313 兼容规范：0=+14dB, 1=+12dB ... 7=0dB(flat), 8=-2dB ... 15=-14dB
@@ -66,6 +68,26 @@ void T507SdkBridge::setSoundMode(const QString &modeName)
     Q_UNUSED(TM2313_LOUDNESS)
     Q_UNUSED(TM2313_TREBLE)
     Q_UNUSED(TM2313_BASS)
+#endif
+}
+
+void T507SdkBridge::setAudioSource(bool radioMode)
+{
+    qDebug() << "[TM2313] setAudioSource:" << (radioMode ? "radio(STEREO_1/IN1)" : "media(STEREO_2/IN2)");
+#ifdef CAR_DESK_DEVICE_CARUNIT
+    int fd = ::open("/dev/tm2313", O_RDWR);
+    if (fd < 0) {
+        qWarning() << "[TM2313] Cannot open /dev/tm2313";
+        return;
+    }
+    // radioMode=true  → STEREO_1 (0x40, IN1): TEA685x FM/AM 模拟输出
+    // radioMode=false → STEREO_2 (0x41, IN2): SoC DAC 媒体声道（默认）
+    ::ioctl(fd, radioMode ? TM2313_INPUT_SWITCH_STEREO_1 : TM2313_INPUT_SWITCH_STEREO_2, 0);
+    ::close(fd);
+#else
+    Q_UNUSED(radioMode)
+    Q_UNUSED(TM2313_INPUT_SWITCH_STEREO_1)
+    Q_UNUSED(TM2313_INPUT_SWITCH_STEREO_2)
 #endif
 }
 
