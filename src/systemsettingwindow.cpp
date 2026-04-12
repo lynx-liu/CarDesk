@@ -4,6 +4,7 @@
 #include "topbarwidget.h"
 #include "backlight.h"
 #include "appsignals.h"
+#include "t507sdkbridge.h"
 
 #include <QButtonGroup>
 #include <QKeyEvent>
@@ -907,7 +908,11 @@ QWidget *SystemSettingWindow::createSoundPage()
 
     // CSS .setting_sound_field .setting_brightness_tab li:first-child { border-radius:100px; w:168; bg:#0452CA }
     // 使用专用图片（butt_setting_sound_field_up/down.png 168×44）
-    auto *fieldBtn = new QPushButton(QStringLiteral("低音增强"), fieldRow);
+    auto *fieldBtn = new QPushButton(
+        qApp->property("appSoundMode").toString().isEmpty()
+            ? QStringLiteral("立体声")
+            : qApp->property("appSoundMode").toString(),
+        fieldRow);
     fieldBtn->setFixedSize(168, 44);
     fieldBtn->setStyleSheet(
         "QPushButton{border:none;background:url(:/images/butt_setting_sound_field_up.png) no-repeat center;color:#fff;font-size:24px;}"
@@ -980,6 +985,8 @@ QWidget *SystemSettingWindow::createSoundPage()
             btn->setCursor(Qt::PointingHandCursor);
             connect(btn, &QPushButton::clicked, &dialog, [&dialog, fieldBtn, text = modes[i]]() {
                 fieldBtn->setText(text);
+                qApp->setProperty("appSoundMode", text);
+                T507SdkBridge::setSoundMode(text);
                 dialog.accept();
             });
         }
