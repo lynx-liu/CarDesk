@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <QSocketNotifier>
 #include "backlight.h"
+#include "t507sdkbridge.h"
 #include <linux/input.h>
 #include "mainwindow.h"
 #include "devicedetect.h"
@@ -369,6 +370,8 @@ int main(int argc, char *argv[]) {
     QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
     app.setProperty("appClock24h", false);  // 默认 12 小时制（与原始行为一致）
+    app.setProperty("appSoundMode", QStringLiteral("立体声"));  // 默认声场模式
+    T507SdkBridge::setSoundMode(QStringLiteral("立体声"));  // 应用默认声场到 TM2313
     configureApplicationFont(app);
 
     // 全局硬件键监听（音量键 + 诊断日志）

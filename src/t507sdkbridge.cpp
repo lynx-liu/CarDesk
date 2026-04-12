@@ -1,4 +1,73 @@
 #include "t507sdkbridge.h"
+#include <QMap>
+#include <QDebug>
+#ifdef CAR_DESK_DEVICE_CARUNIT
+#  include <fcntl.h>
+#  include <unistd.h>
+#  include <sys/ioctl.h>
+#endif
+
+// TM2313 ioctl 命令（来自内核驱动 tm2313.h，用户空间直接引用数值）
+static const int TM2313_LOUDNESS      = 10000; // arg: 1=开, 0=关
+static const int TM2313_TREBLE        = 10002; // arg: 0-15，TDA7313编码(0=+14dB,7=0dB,8=-2dB,15=-14dB)
+static const int TM2313_BASS          = 10003; // arg: 同上
+
+// 声场预设表：{treble(0-15), bass(0-15), loudness(0/1)}
+// 编码参考 TDA7313 兼容规范：0=+14dB, 1=+12dB ... 7=0dB(flat), 8=-2dB ... 15=-14dB
+struct Tm2313Preset { int treble; int bass; int loudness; };
+
+static const QMap<QString, Tm2313Preset> &soundPresets()
+{
+    static const QMap<QString, Tm2313Preset> presets = {
+        // 立体声：完全平坦，适合原声音乐
+        {QStringLiteral("立体声"),   {7,  7,  0}},
+        // 环绕声：高低音轻微提升，增加空间感
+        {QStringLiteral("环绕声"),   {5,  5,  0}},
+        // 低音增强：低音大幅提升（+10dB），响度补偿开
+        {QStringLiteral("低音增强"), {7,  2,  1}},
+        // 高音增强：高音提升（+10dB），低音平坦
+        {QStringLiteral("高音增强"), {2,  7,  0}},
+        // 平衡音：与立体声相同，强调左右均衡
+        {QStringLiteral("平衡音"),   {7,  7,  0}},
+        // 音场定位：高低音适度提升，增强方向感
+        {QStringLiteral("音场定位"), {5,  4,  0}},
+        // 降噪音效：高低音轻微衰减，减少噪声感
+        {QStringLiteral("降噪音效"), {9,  9,  0}},
+        // 虚拟声场：高低音较大提升 + 响度，营造环绕感
+        {QStringLiteral("虚拟声场"), {4,  3,  1}},
+        // 响度补偿：平坦响度开，低音微提，适合低音量聆听
+        {QStringLiteral("响度补偿"), {7,  6,  1}},
+    };
+    return presets;
+}
+
+void T507SdkBridge::setSoundMode(const QString &modeName)
+{
+    const auto &presets = soundPresets();
+    if (!presets.contains(modeName)) {
+        qWarning() << "[TM2313] Unknown sound mode:" << modeName;
+        return;
+    }
+    const Tm2313Preset &p = presets[modeName];
+    qDebug() << "[TM2313] setSoundMode:" << modeName
+             << "treble=" << p.treble << "bass=" << p.bass << "loudness=" << p.loudness;
+
+#ifdef CAR_DESK_DEVICE_CARUNIT
+    int fd = ::open("/dev/tm2313", O_RDWR);
+    if (fd < 0) {
+        qWarning() << "[TM2313] Cannot open /dev/tm2313";
+        return;
+    }
+    ::ioctl(fd, TM2313_TREBLE,   (unsigned long)p.treble);
+    ::ioctl(fd, TM2313_BASS,     (unsigned long)p.bass);
+    ::ioctl(fd, TM2313_LOUDNESS, (unsigned long)p.loudness);
+    ::close(fd);
+#else
+    Q_UNUSED(TM2313_LOUDNESS)
+    Q_UNUSED(TM2313_TREBLE)
+    Q_UNUSED(TM2313_BASS)
+#endif
+}
 
 QStringList T507SdkBridge::ahdVideoNodes()
 {
