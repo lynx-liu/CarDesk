@@ -11,6 +11,7 @@
 #include <QPainter>
 #include <QProcess>
 #include <QScreen>
+#include <QTextCodec>
 #include <QTimer>
 #include <QDialog>
 #include <fcntl.h>
@@ -369,6 +370,8 @@ int main(int argc, char *argv[]) {
 
     QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
+    // 设备 buildroot 默认 LANG=C，强制 UTF-8 避免中文文件名乱码
+    QTextCodec::setCodecForLocale(QTextCodec::codecForName("UTF-8"));
     app.setOverrideCursor(Qt::BlankCursor);  // 触控设备隐藏鼠标指针
     app.setProperty("appClock24h", false);  // 默认 12 小时制（与原始行为一致）
     app.setProperty("appSoundMode", QStringLiteral("立体声"));  // 默认声场模式
