@@ -930,10 +930,20 @@ void RadioWindow::onSearch() {
     QWidget *topBar = new QWidget(&dialog);
     topBar->setGeometry(0, 0, 1280, 82);
     topBar->setStyleSheet("background-image:url(:/images/topbar.png);");
+    // HOME 按钮
+    QPushButton *homeBtn = new QPushButton(topBar);
+    homeBtn->setGeometry(12, 17, 48, 48);
+    homeBtn->setStyleSheet(
+        "QPushButton{border:none;background-image:url(:/images/pict_home_up.png);}" 
+        "QPushButton:hover{background-image:url(:/images/pict_home_down.png);}");
+    homeBtn->setCursor(Qt::PointingHandCursor);
+    connect(homeBtn, &QPushButton::clicked, this, [this, &dialog]{ emit requestReturnToMain(); dialog.reject(); this->close(); });
+
     QLabel *titleLbl = new QLabel("收音机", topBar);
     titleLbl->setGeometry(0, 10, 1280, 54);
     titleLbl->setStyleSheet("color:#fff;font-size:36px;font-weight:bold;background:transparent;");
     titleLbl->setAlignment(Qt::AlignCenter);
+    titleLbl->setAttribute(Qt::WA_TransparentForMouseEvents);
     setupTopStatusIcons(topBar);
 
     // 返回按钮 (60,103,60,60)
@@ -1081,10 +1091,20 @@ void RadioWindow::onOpenListDialog() {
     QWidget *topBar = new QWidget(&dialog);
     topBar->setGeometry(0, 0, 1280, 82);
     topBar->setStyleSheet("background-image:url(:/images/topbar.png);");
+    // HOME 按钮
+    QPushButton *homeBtn = new QPushButton(topBar);
+    homeBtn->setGeometry(12, 17, 48, 48);
+    homeBtn->setStyleSheet(
+        "QPushButton{border:none;background-image:url(:/images/pict_home_up.png);}" 
+        "QPushButton:hover{background-image:url(:/images/pict_home_down.png);}");
+    homeBtn->setCursor(Qt::PointingHandCursor);
+    connect(homeBtn, &QPushButton::clicked, this, [this, &dialog]{ emit requestReturnToMain(); dialog.reject(); this->close(); });
+
     QLabel *titleLbl = new QLabel("收音机", topBar);
     titleLbl->setGeometry(0, 10, 1280, 54);
     titleLbl->setStyleSheet("color:#fff;font-size:36px;font-weight:bold;background:transparent;");
     titleLbl->setAlignment(Qt::AlignCenter);
+    titleLbl->setAttribute(Qt::WA_TransparentForMouseEvents);
     setupTopStatusIcons(topBar);
 
     // 返回按鈕：匹配 CSS .back { left:60; top:103; w:60; h:60 }
