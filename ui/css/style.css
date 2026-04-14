@@ -1,3 +1,18 @@
+/* 针对系统设置模式等li选中时去除虚线边框 */
+.setting_brightness_tab li:focus,
+.setting_brightness_tab li:active,
+.setting_brightness_tab li.on:focus,
+.setting_brightness_tab li.on:active,
+.setting_brightness_tab li:focus-visible,
+.setting_btn li:focus,
+.setting_btn li:active,
+.setting_btn li.on:focus,
+.setting_btn li.on:active,
+.setting_btn li:focus-visible {
+	outline: none !important;
+	border: none !important;
+	box-shadow: none !important;
+}
 @charset "utf-8";
 
 /* CSS Document */
@@ -1907,9 +1922,20 @@ button.format_btn:hover {
 	margin: 2px;
 }
 
+
 .setting_brightness_tab li.on,
 .setting_brightness_tab li:hover {
 	background: #0452CA;
+	outline: none !important;
+	border: none !important;
+	box-shadow: none !important;
+}
+
+.setting_brightness_tab li:focus,
+.setting_brightness_tab li:active {
+	outline: none !important;
+	border: none !important;
+	box-shadow: none !important;
 }
 
 .setting_brightness_tab li:last-child {
@@ -2014,6 +2040,17 @@ button.format_btn:hover {
 	line-height: 44px;
 	text-align: center;
 	float: left;
+	outline: none !important;
+	border: none !important;
+	box-shadow: none !important;
+}
+
+.setting_btn li.on,
+.setting_btn li:focus,
+.setting_btn li:active {
+	outline: none !important;
+	border: none !important;
+	box-shadow: none !important;
 }
 
 .setting_btn:hover {

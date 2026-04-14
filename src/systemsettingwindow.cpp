@@ -634,6 +634,7 @@ QWidget *SystemSettingWindow::createDisplayPage()
             "QPushButton{border:none;background:#3f3d52;color:#fff;font-size:24px;}"
             "QPushButton:checked{background:#0452ca;}"
             "QPushButton:hover{background:#0452ca;}"
+            "QPushButton:focus, QPushButton:checked:focus, QPushButton:focus-visible {outline:none;border:none;box-shadow:none;}"
             + radiusRule
         );
         return btn;
@@ -743,7 +744,8 @@ QWidget *SystemSettingWindow::createDisplayPage()
         rightBtn->setGeometry(120, 0, 120, 44);
         const QString btnBase =
             "QPushButton{border:none;background:transparent;color:#fff;font-size:24px;}"
-            "QPushButton:hover{color:#00faff;}";
+            "QPushButton:hover{color:#00faff;}"
+            "QPushButton:focus, QPushButton:checked:focus, QPushButton:focus-visible {outline:none;border:none;box-shadow:none;}";
         leftBtn->setStyleSheet(btnBase);
         rightBtn->setStyleSheet(btnBase);
         leftBtn->setCursor(Qt::PointingHandCursor);
@@ -789,7 +791,8 @@ QWidget *SystemSettingWindow::createDisplayPage()
         h24Btn->setGeometry(120, 0, 120, 44);
         const QString btnStyle =
             "QPushButton{border:none;background:transparent;color:#fff;font-size:24px;}"
-            "QPushButton:hover{color:#00faff;}";
+            "QPushButton:hover{color:#00faff;}"
+            "QPushButton:focus, QPushButton:checked:focus, QPushButton:focus-visible {outline:none;border:none;box-shadow:none;}";
         h12Btn->setStyleSheet(btnStyle);
         h24Btn->setStyleSheet(btnStyle);
         h12Btn->setCursor(Qt::PointingHandCursor);
@@ -889,7 +892,8 @@ QWidget *SystemSettingWindow::createSoundPage()
         btn->setStyleSheet(
             QString("QPushButton{border:none;background:#3f3d52;color:#fff;font-size:24px;%1}"
                     "QPushButton:checked{background:#0452ca;}"
-                    "QPushButton:hover{background:#0452ca;}")
+                    "QPushButton:hover{background:#0452ca;}"
+                    "QPushButton:focus, QPushButton:checked:focus, QPushButton:focus-visible {outline:none;border:none;box-shadow:none;}")
                 .arg(i == 0 ? "border-radius:22px 0 0 22px;" : (i == touchModes.size() - 1 ? "border-radius:0 22px 22px 0;" : "border-radius:0;"))
         );
         touchGroup->addButton(btn);
@@ -919,6 +923,7 @@ QWidget *SystemSettingWindow::createSoundPage()
     fieldBtn->setStyleSheet(
         "QPushButton{border:none;background:url(:/images/butt_setting_sound_field_up.png) no-repeat center;color:#fff;font-size:24px;}"
         "QPushButton:hover{background:url(:/images/butt_setting_sound_field_down.png) no-repeat center;}"
+        "QPushButton:focus, QPushButton:checked:focus, QPushButton:focus-visible {outline:none;border:none;box-shadow:none;}"
     );
     connect(fieldBtn, &QPushButton::clicked, this, [this, fieldBtn]() {
         // 声场模式选择：全屏对话框，匹配 system_setting_sound_field.html
@@ -973,25 +978,28 @@ QWidget *SystemSettingWindow::createSoundPage()
         // 每行 y offset: 16, 16+78+32=126, 16+78+32+78+32=236
         const int colXs[3] = {0, 248, 496};
         const int rowYs[3] = {16, 126, 236};
-        for (int i = 0; i < modes.size(); ++i) {
-            const int col = i % 3;
-            const int row = i / 3;
-            auto *btn = new QPushButton(modes[i], &dialog);
-            btn->setGeometry(292 + colXs[col], 232 + rowYs[row], 200, 78);
-            const bool isActive = (i == currentIdx);
-            btn->setStyleSheet(isActive
-                ? "QPushButton{border:2px solid #00FAFF;background:rgba(0,250,255,0.08);color:#00FAFF;font-size:35px;}"
-                  "QPushButton:hover{border:2px solid #00FAFF;color:#00FAFF;}"
-                : "QPushButton{border:1px solid #0068FF;background:transparent;color:#fff;font-size:35px;}"
-                  "QPushButton:hover{border:2px solid #00FAFF;color:#00FAFF;}");
-            btn->setCursor(Qt::PointingHandCursor);
-            connect(btn, &QPushButton::clicked, &dialog, [&dialog, fieldBtn, text = modes[i]]() {
-                fieldBtn->setText(text);
-                qApp->setProperty("appSoundMode", text);
-                T507SdkBridge::setSoundMode(text);
-                dialog.accept();
-            });
-        }
+                for (int i = 0; i < modes.size(); ++i) {
+                        const int col = i % 3;
+                        const int row = i / 3;
+                        auto *btn = new QPushButton(modes[i], &dialog);
+                        btn->setGeometry(292 + colXs[col], 232 + rowYs[row], 200, 78);
+                        const bool isActive = (i == currentIdx);
+                        btn->setStyleSheet(isActive
+                                ? "QPushButton{border:2px solid #00FAFF;background:rgba(0,250,255,0.08);color:#00FAFF;font-size:35px;}"
+                                    "QPushButton:hover{border:2px solid #00FAFF;color:#00FAFF;}"
+                                    "QPushButton:focus, QPushButton:checked:focus, QPushButton:focus-visible {outline:none;box-shadow:none;}"
+                                : "QPushButton{border:1px solid #0068FF;background:transparent;color:#fff;font-size:35px;}"
+                                    "QPushButton:hover{border:2px solid #00FAFF;color:#00FAFF;}"
+                                    "QPushButton:focus, QPushButton:checked:focus, QPushButton:focus-visible {outline:none;box-shadow:none;}"
+                        );
+                        btn->setCursor(Qt::PointingHandCursor);
+                        connect(btn, &QPushButton::clicked, &dialog, [&dialog, fieldBtn, text = modes[i]]() {
+                                fieldBtn->setText(text);
+                                qApp->setProperty("appSoundMode", text);
+                                T507SdkBridge::setSoundMode(text);
+                                dialog.accept();
+                        });
+                }
         dialog.exec();
     });
     fieldLayout->addWidget(fieldBtn);
