@@ -120,6 +120,7 @@ void ImageViewingWindow::setupUI()
 
     auto *homeBtn = new QPushButton(topBar);
     homeBtn->setGeometry(12, 12, 48, 48);
+    homeBtn->setFocusPolicy(Qt::NoFocus);
     homeBtn->setStyleSheet(
         "QPushButton { border:none; background-image:url(:/images/pict_home_up.png); background-repeat:no-repeat; }"
         "QPushButton:hover { background-image:url(:/images/pict_home_down.png); }"
@@ -146,6 +147,7 @@ void ImageViewingWindow::setupUI()
         "QPushButton { border:none; background:url(:/images/butt_back_up.png) no-repeat; }"
         "QPushButton:hover { background:url(:/images/butt_back_down.png) no-repeat; }"
     );
+    backBtn->setFocusPolicy(Qt::NoFocus);
     backBtn->setCursor(Qt::PointingHandCursor);
 
     connect(backBtn, &QPushButton::clicked, this, &ImageViewingWindow::onBackDirClicked);
@@ -199,6 +201,7 @@ void ImageViewingWindow::setupUI()
         "QPushButton{border:none;background-image:url(:/images/butt_video_back_up.png);background-repeat:no-repeat;background-position:center;}"
         "QPushButton:hover{background-image:url(:/images/butt_video_back_down.png);}"
     );
+    viewBack->setFocusPolicy(Qt::NoFocus);
     connect(viewBack, &QPushButton::clicked, this, &ImageViewingWindow::onBackToList);
 
     m_viewTitleLabel = new QLabel(QStringLiteral("图片"), overlayTop);
@@ -226,6 +229,7 @@ void ImageViewingWindow::setupUI()
         "QPushButton:hover{background-image:url(:/images/butt_music_prev_down.png);}"
     );
     connect(m_prevButton, &QPushButton::clicked, this, &ImageViewingWindow::onPrevImage);
+    m_prevButton->setFocusPolicy(Qt::NoFocus);
 
     auto *hiddenCenter = new QPushButton(btnWrap);
     hiddenCenter->setFixedSize(84, 84);
@@ -238,6 +242,7 @@ void ImageViewingWindow::setupUI()
         "QPushButton:hover{background-image:url(:/images/butt_music_next_down.png);}"
     );
     connect(m_nextButton, &QPushButton::clicked, this, &ImageViewingWindow::onNextImage);
+    m_nextButton->setFocusPolicy(Qt::NoFocus);
 
     m_rotateButton = new QPushButton(btnWrap);
     m_rotateButton->setFixedSize(60, 60);
@@ -246,6 +251,7 @@ void ImageViewingWindow::setupUI()
         "QPushButton:hover{background-image:url(:/images/butt_image_rotate_down.png);}"
     );
     connect(m_rotateButton, &QPushButton::clicked, this, &ImageViewingWindow::onRotateImage);
+    m_rotateButton->setFocusPolicy(Qt::NoFocus);
 
     btnWrapLay->addWidget(m_prevButton);
     btnWrapLay->addStretch();

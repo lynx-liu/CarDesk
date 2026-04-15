@@ -101,6 +101,7 @@ void VideoListWindow::setupUI() {
         "}"
     );
     leftLayout->addWidget(m_homeButton);
+    m_homeButton->setFocusPolicy(Qt::NoFocus);
     leftLayout->addStretch();
     topLayout->addWidget(leftWidget, 0, 0);
     
@@ -141,6 +142,7 @@ void VideoListWindow::setupUI() {
     );
     
     backLayout->addWidget(m_backDirButton);
+    m_backDirButton->setFocusPolicy(Qt::NoFocus);
     backLayout->addStretch();
     
     mainLayout->addWidget(backWidget);
