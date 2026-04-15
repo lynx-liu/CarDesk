@@ -63,7 +63,7 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
 
     // ── 时间 ─────────────────────────────────────────────────────────────────
     m_timeLabel = new QLabel(this);
-    m_timeLabel->setFixedWidth(94);
+    m_timeLabel->setFixedWidth(166);
     m_timeLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     m_timeLabel->setStyleSheet("QLabel { color: #fff; font-size: 36px; background: transparent; }");
     outerLay->addWidget(m_timeLabel);
