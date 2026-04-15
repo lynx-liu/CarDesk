@@ -174,26 +174,10 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
     m_titleLabel->setAlignment(Qt::AlignCenter);
     m_titleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
 
-    // 状态图标区（蓝牙 930,12 | USB 994,12 | 音量 1058,12 | 音量值 1110,10 | 时间 1174,10）
-    auto makeLabel = [&](QWidget *parent, int x, int y, int w, int h, const QString &img) {
-        QLabel *l = new QLabel(parent);
-        l->setGeometry(x, y, w, h);
-        if (!img.isEmpty()) l->setPixmap(QPixmap(img));
-        l->setStyleSheet("background: transparent;");
-        return l;
-    };
-    makeLabel(topBar, 930, 12, 48, 48, ":/images/pict_buetooth.png");
-    makeLabel(topBar, 994, 12, 48, 48, ":/images/pict_usb.png");
-    makeLabel(topBar, 1058, 12, 48, 48, ":/images/pict_volume.png");
-
-    QLabel *volNum = makeLabel(topBar, 1110, 10, 60, 54, "");
-    volNum->setText(QString::number(qApp->property("appVolumeLevel").isValid()
-        ? qApp->property("appVolumeLevel").toInt() : 10));
-    volNum->setStyleSheet("color: #fff; font-size: 36px; background: transparent;");
-
-    QLabel *timeLbl = makeLabel(topBar, 1174, 10, 94, 54, "");
-    timeLbl->setText(QTime::currentTime().toString(AppSignals::timeFormat()));
-    timeLbl->setStyleSheet("color: #fff; font-size: 36px; background: transparent;");
+    // 状态图标（使用 TopBarRightWidget 自动同步音量和时钟）
+    auto *topBarRight = new TopBarRightWidget(topBar);
+    topBarRight->setGeometry(1280 - 16 - TopBarRightWidget::preferredWidth(), 17,
+                             TopBarRightWidget::preferredWidth(), 48);
 
     // ── Tab 标签栏（y:100，USB:480,100,160×66 | BT:640,100,160×66）─────
     m_usbTab = new QPushButton("USB音乐", page);

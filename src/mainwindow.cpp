@@ -12,6 +12,7 @@
 #include "usbmanager.h"
 #include "videolistwindow.h"
 #include "musicplayerwindow.h"
+#include "topbarwidget.h"
 
 #include <QApplication>
 #include <QVBoxLayout>
@@ -184,57 +185,9 @@ void MainWindow::createTopBar() {
     titleLabel->setObjectName("titleLabel");
     topLayout->addWidget(titleLabel, 0, 1, Qt::AlignCenter);
 
-    // 右侧图标区域
-    QWidget *iconWidget = new QWidget(this);
-    QHBoxLayout *iconLayout = new QHBoxLayout(iconWidget);
-    iconLayout->setContentsMargins(0, 0, 0, 0);
-    iconLayout->setSpacing(16);
-
-    // 蓝牙
-    QPushButton *btBtn = new QPushButton(this);
-    btBtn->setObjectName("btBtn");
-    btBtn->setCursor(Qt::PointingHandCursor);
-    btBtn->setToolTip("蓝牙");
-    connect(btBtn, &QPushButton::clicked, this, &MainWindow::onBluetoothClicked);
-    iconLayout->addWidget(btBtn);
-    
-    // USB
-    QPushButton *usbBtn = new QPushButton(this);
-    usbBtn->setObjectName("usbBtn");
-    usbBtn->setCursor(Qt::PointingHandCursor);
-    usbBtn->setToolTip("USB");
-    connect(usbBtn, &QPushButton::clicked, this, &MainWindow::onUSBClicked);
-    iconLayout->addWidget(usbBtn);
-    
-    // 音量
-    m_volumeWidget = new QWidget(this);
-    QHBoxLayout *volLayout = new QHBoxLayout(m_volumeWidget);
-    volLayout->setContentsMargins(0, 0, 0, 0);
-    volLayout->setSpacing(6);
-
-    m_volBtn = new QPushButton(this);
-    m_volBtn->setObjectName("volBtn");
-    m_volBtn->setFixedSize(48, 48);
-    m_volBtn->setStyleSheet(
-        "QPushButton { border: none; background-image: url(:/images/pict_volume.png); "
-        "background-repeat: no-repeat; background-position: center; }");
-    m_volBtn->setCursor(Qt::PointingHandCursor);
-    m_volBtn->setToolTip("音量");
-    connect(m_volBtn, &QPushButton::clicked, this, &MainWindow::onVolumeClicked);
-    volLayout->addWidget(m_volBtn);
-
-    m_volumeLabel = new QLabel("10", this);
-    m_volumeLabel->setObjectName("volumeLabel");
-    m_volumeLabel->setFixedWidth(52);  // 固定宽度，静音切换不移位图标
-    volLayout->addWidget(m_volumeLabel);
-
-    iconLayout->addWidget(m_volumeWidget);
-
-    m_clockLabel = new QLabel(this);
-    m_clockLabel->setObjectName("clockLabel");
-    iconLayout->addWidget(m_clockLabel);
-
-    topLayout->addWidget(iconWidget, 0, 2, Qt::AlignRight | Qt::AlignVCenter);
+    // 右侧状态图标（使用 TopBarRightWidget 统一管理音量/时钟/状态）
+    auto *topBarRight = new TopBarRightWidget(this);
+    topLayout->addWidget(topBarRight, 0, 2, Qt::AlignRight | Qt::AlignVCenter);
 }
 
 void MainWindow::createNavigationBar() {
@@ -297,34 +250,7 @@ void MainWindow::adjustForDevice() {
 }
 
 void MainWindow::setupConnections() {
-    // 时钟更新
-    connect(m_clockTimer, &QTimer::timeout, this, &MainWindow::onUpdateClock);
-
-    // 时钟制式变化时立即刷新主界面时钟
-    connect(AppSignals::instance(), &AppSignals::clockFormatChanged,
-            this, [this](bool) { onUpdateClock(); });
-
-    // 硬件音量键实时同步主界面音量标签（非静音状态下）
-    connect(AppSignals::instance(), &AppSignals::volumeLevelChanged, this, [this](int level) {
-        const int bounded = qBound(0, level, 10);
-        if (bounded == 0) {
-            m_isMuted = true;
-            if (m_volBtn) {
-                m_volBtn->setStyleSheet(
-                    "QPushButton { border: none; background-image: url(:/images/pict_volume_mute.png); "
-                    "background-repeat: no-repeat; background-position: center; }");
-            }
-            if (m_volumeLabel) m_volumeLabel->setText("");
-        } else {
-            m_isMuted = false;
-            if (m_volBtn) {
-                m_volBtn->setStyleSheet(
-                    "QPushButton { border: none; background-image: url(:/images/pict_volume.png); "
-                    "background-repeat: no-repeat; background-position: center; }");
-            }
-            if (m_volumeLabel) m_volumeLabel->setText(QString::number(bounded));
-        }
-    });
+    // TopBarRightWidget 自行管理时钟和音量显示 / 响应 AppSignals，无需在主界面重复处理
 }
 
 void MainWindow::setupSystemInfo() {
@@ -334,11 +260,7 @@ void MainWindow::setupSystemInfo() {
     // 启动时钟定时器（每秒更新）
     m_clockTimer->start(1000);
     
-    // 设置初始音量（从系统读取实际等级）
-    if (m_volumeLabel) {
-        const QVariant vp = qApp->property("appVolumeLevel");
-        m_volumeLabel->setText(QString::number(vp.isValid() ? vp.toInt() : 10));
-    }
+    // 初始音量由 TopBarRightWidget 管理
 }
 
 void MainWindow::onUpdateClock() {
