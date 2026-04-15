@@ -18,6 +18,7 @@
 #include <QDateTime>
 #include <QCloseEvent>
 #include <QSize>
+#include "appsignals.h"
 
 VideoListWindow::VideoListWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -293,10 +294,10 @@ void VideoListWindow::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_VolumeUp:
-        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%+"});
+        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%+"}, this);
         break;
     case Qt::Key_VolumeDown:
-        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%-"});
+        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%-"}, this);
         break;
     case Qt::Key_HomePage:
         onHomeClicked();

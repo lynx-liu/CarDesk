@@ -230,13 +230,11 @@ protected:
             switch (key) {
             case Qt::Key_VolumeUp:
                 qDebug() << "[GlobalKey] => VolumeUp";
-                QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%+"});
-                if (m_overlay) scheduleVolumeRead(m_overlay);
+                AppSignals::runAmixer({"sset", "LINEOUT volume", "5%+"}, nullptr);
                 return true;
             case Qt::Key_VolumeDown:
                 qDebug() << "[GlobalKey] => VolumeDown";
-                QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%-"});
-                if (m_overlay) scheduleVolumeRead(m_overlay);
+                AppSignals::runAmixer({"sset", "LINEOUT volume", "5%-"}, nullptr);
                 return true;
             case Qt::Key_HomePage:
                 qDebug() << "[GlobalKey] => HomePage";

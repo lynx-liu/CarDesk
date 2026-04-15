@@ -126,13 +126,19 @@ void TopBarRightWidget::onVolumeBtnClicked()
             QString("QPushButton { border: none; background-image: url(%1); "
                     "background-repeat: no-repeat; background-position: center; }").arg(icon));
     }
-    if (m_volLabel) {
-        if (m_isMuted) {
-            m_volLabel->setText("");
-        } else {
-            const QVariant vp = qApp->property("appVolumeLevel");
-            m_volLabel->setText(QString::number(vp.isValid() ? vp.toInt() : 10));
-        }
+    // Broadcast change globally so other TopBarRightWidget instances stay in sync.
+    if (m_isMuted) {
+        // save previous level
+        const QVariant cur = qApp->property("appVolumeLevel");
+        const int curLv = cur.isValid() ? cur.toInt() : 10;
+        qApp->setProperty("appVolumePrevLevel", curLv);
+        qApp->setProperty("appVolumeLevel", 0);
+        AppSignals::instance()->volumeLevelChanged(0);
+    } else {
+        const QVariant prev = qApp->property("appVolumePrevLevel");
+        const int restore = prev.isValid() ? prev.toInt() : 10;
+        qApp->setProperty("appVolumeLevel", restore);
+        AppSignals::instance()->volumeLevelChanged(restore);
     }
 }
 
