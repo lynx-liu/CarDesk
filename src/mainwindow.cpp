@@ -28,12 +28,11 @@
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
-    , m_clockLabel(nullptr)
-    , m_volumeLabel(nullptr)
-    , m_volumeWidget(nullptr)
-    , m_volBtn(nullptr)
-    , m_isMuted(false)
+    , m_topBar(nullptr)
+    , m_navBar(nullptr)
+    , m_centralWidget(nullptr)
     , m_transitionOverlay(nullptr)
+    , m_volumeWidget(nullptr)
     , m_bluetoothManager(new BluetoothManager(this))
     , m_mediaManager(new MediaManager(this))
     , m_phoneWindow(nullptr)
@@ -43,7 +42,6 @@ MainWindow::MainWindow(QWidget *parent)
     , m_drivingImageWindow(nullptr)
     , m_imageViewingWindow(nullptr)
     , m_usbManager(new USBManager(this))
-    , m_clockTimer(new QTimer(this))
 {
     setupWindowSize();
     setupUI();
@@ -98,7 +96,7 @@ void MainWindow::setupUI() {
     mainLayout->addWidget(m_navBar, 1);
     
     applyIndexStyle();
-        ensureTransitionOverlay();
+    ensureTransitionOverlay();
     
     setWindowTitle("CarDesk");
 }
@@ -122,38 +120,6 @@ void MainWindow::applyIndexStyle() {
             font-size: 36px;
             background: transparent;
             font-weight: 700;
-        }
-
-        QLabel#clockLabel {
-            color: #ffffff;
-            font-size: 36px;
-            background: transparent;
-        }
-
-        QLabel#volumeLabel {
-            color: #ffffff;
-            font-size: 36px;
-            background: transparent;
-        }
-
-        QPushButton#btBtn {
-            border: none;
-            width: 48px;
-            height: 48px;
-            background-image: url(:/images/pict_buetooth.png);
-        }
-        QPushButton#btBtn:hover {
-            background-image: url(:/images/pict_buetooth_on.png);
-        }
-
-        QPushButton#usbBtn {
-            border: none;
-            width: 48px;
-            height: 48px;
-            background-image: url(:/images/pict_usb.png);
-        }
-        QPushButton#usbBtn:hover {
-            background-image: url(:/images/pict_usb_on.png);
         }
 
         QPushButton[nav="true"] {
@@ -254,21 +220,7 @@ void MainWindow::setupConnections() {
 }
 
 void MainWindow::setupSystemInfo() {
-    // 更新系统时间
-    onUpdateClock();
-    
-    // 启动时钟定时器（每秒更新）
-    m_clockTimer->start(1000);
-    
-    // 初始音量由 TopBarRightWidget 管理
-}
-
-void MainWindow::onUpdateClock() {
-    if (!m_clockLabel) return;
-    
-    QDateTime now = QDateTime::currentDateTime();
-    QString timeStr = now.toString(AppSignals::timeFormat());
-    m_clockLabel->setText(timeStr);
+    // TopBarRightWidget 管理时钟与音量显示，无需主界面重复处理
 }
 
 void MainWindow::onBluetoothClicked() {
@@ -281,28 +233,6 @@ void MainWindow::onUSBClicked() {
     m_usbManager->scanDevices();
 }
 
-void MainWindow::onVolumeClicked() {
-    qDebug() << "Volume button clicked";
-    m_isMuted = !m_isMuted;
-    // 切换图标
-    if (m_volBtn) {
-        const QString icon = m_isMuted
-            ? QStringLiteral(":/images/pict_volume_mute.png")
-            : QStringLiteral(":/images/pict_volume.png");
-        m_volBtn->setStyleSheet(
-            QString("QPushButton { border: none; background-image: url(%1); "
-                    "background-repeat: no-repeat; background-position: center; }").arg(icon));
-    }
-    // 静音时隐藏数字（固定宽度保持布局稳定）；取消静音时显示实际等级
-    if (m_volumeLabel) {
-        if (m_isMuted) {
-            m_volumeLabel->setText("");
-        } else {
-            const QVariant vp = qApp->property("appVolumeLevel");
-            m_volumeLabel->setText(QString::number(vp.isValid() ? vp.toInt() : 10));
-        }
-    }
-}
 
 void MainWindow::onVideoListClicked() {
     qDebug() << "Video List button clicked";

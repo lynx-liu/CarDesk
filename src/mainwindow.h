@@ -28,10 +28,8 @@ public:
     ~MainWindow();
 
 private slots:
-    void onUpdateClock();
     void onBluetoothClicked();
     void onUSBClicked();
-    void onVolumeClicked();
     void onVideoListClicked();
     void onMusicUSBClicked();
     void onPhoneClicked();
@@ -61,10 +59,6 @@ private:
     void hideTransitionOverlay();
     
     // UI 组件
-    QLabel *m_clockLabel;
-    QLabel *m_volumeLabel;
-    QPushButton *m_volBtn;
-    bool m_isMuted;
     QWidget *m_topBar;
     QWidget *m_navBar;
     QWidget *m_centralWidget;
@@ -81,10 +75,7 @@ private:
     DrivingImageWindow *m_drivingImageWindow;
     ImageViewingWindow *m_imageViewingWindow;
     USBManager *m_usbManager;
-    
-    // 定时器
-    QTimer *m_clockTimer;
-    
+
     // 样式表
     QString m_styleSheet;
 };

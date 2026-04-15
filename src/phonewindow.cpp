@@ -73,6 +73,7 @@ void PhoneWindow::setupUI() {
     QPushButton *homeBtn = new QPushButton(this);
     homeBtn->setFixedSize(48, 48);
     homeBtn->setStyleSheet("QPushButton{border:none;background-image:url(:/images/pict_home_up.png);} QPushButton:hover{background-image:url(:/images/pict_home_down.png);}");
+    homeBtn->setFocusPolicy(Qt::NoFocus);
     connect(homeBtn, &QPushButton::clicked, this, [this](){ emit requestReturnToMain(); close(); });
     top->addWidget(homeBtn, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
 
@@ -96,6 +97,7 @@ void PhoneWindow::setupUI() {
         b->setFixedSize(160, 66);
         b->setCursor(Qt::PointingHandCursor);
         b->setStyleSheet("QPushButton{border:none;color:#fff;font-size:28px;background-repeat:no-repeat;background-position:center;} QPushButton:hover{color:#00FAFF;}");
+        b->setFocusPolicy(Qt::NoFocus);
         return b;
     };
 
@@ -170,6 +172,7 @@ void PhoneWindow::setupUI() {
         QPushButton *key = new QPushButton(this);
         key->setProperty("digit", keys.at(i));
         key->setFixedSize(198, 120);
+        key->setFocusPolicy(Qt::NoFocus);
         key->setStyleSheet(
             QString("QPushButton{border:none;background:url(%1) no-repeat center center;}"
                     "QPushButton:hover{background-image:url(%2);}").arg(upIcons.at(i), downIcons.at(i))
@@ -194,12 +197,14 @@ void PhoneWindow::setupUI() {
     connect(delBtn, &QPushButton::clicked, this, [this]() {
         m_numberEdit->setText(m_numberEdit->text().left(m_numberEdit->text().size() - 1));
     });
+    delBtn->setFocusPolicy(Qt::NoFocus);
 
     QPushButton *dialBtn = new QPushButton("拨号", this);
     dialBtn->setFixedSize(198, 196);
     dialBtn->setStyleSheet("QPushButton{color:#fff;font-size:48px;font-weight:bold;border:none;background:#0068FF;text-align:center;}"
                            "QPushButton:hover{background:#00FAFF;}");
     connect(dialBtn, &QPushButton::clicked, this, &PhoneWindow::onDial);
+    dialBtn->setFocusPolicy(Qt::NoFocus);
 
     actionLayout->addWidget(delBtn);
     actionLayout->addWidget(dialBtn);

@@ -514,11 +514,13 @@ void RadioWindow::setupUI() {
     m_fmTabBtn = new QPushButton("FM", central);
     m_fmTabBtn->setGeometry(480, 100, 160, 66);
     m_fmTabBtn->setCursor(Qt::PointingHandCursor);
+    m_fmTabBtn->setFocusPolicy(Qt::NoFocus);
     connect(m_fmTabBtn, &QPushButton::clicked, this, &RadioWindow::onSwitchFM);
 
     m_amTabBtn = new QPushButton("AM", central);
     m_amTabBtn->setGeometry(640, 100, 160, 66);
     m_amTabBtn->setCursor(Qt::PointingHandCursor);
+    m_amTabBtn->setFocusPolicy(Qt::NoFocus);
     connect(m_amTabBtn, &QPushButton::clicked, this, &RadioWindow::onSwitchAM);
 
     // ── 频率显示区 (y:186, h:120) ─────────────────────────────────────
@@ -574,6 +576,7 @@ void RadioWindow::setupUI() {
         "QPushButton{border:none;background-image:url(:/images/butt_radio_searchpre_up.png);}"
         "QPushButton:hover{background-image:url(:/images/butt_radio_searchpre_down.png);}");
     prev->setCursor(Qt::PointingHandCursor);
+    prev->setFocusPolicy(Qt::NoFocus);
     connect(prev, &QPushButton::clicked, this, &RadioWindow::onPrev);
 
     // barArea: CSS .radio_pro div { width:720; height:106; margin-top:30 }
@@ -603,6 +606,7 @@ void RadioWindow::setupUI() {
         "QPushButton{border:none;background-image:url(:/images/butt_radio_searchnext_up.png);}"
         "QPushButton:hover{background-image:url(:/images/butt_radio_searchnext_down.png);}");
     nextBtn->setCursor(Qt::PointingHandCursor);
+    nextBtn->setFocusPolicy(Qt::NoFocus);
     connect(nextBtn, &QPushButton::clicked, this, &RadioWindow::onNext);
 
     // 左遂照： CSS ::before left:166 in radio_pro(x=112) => global x=278
@@ -643,6 +647,7 @@ void RadioWindow::setupUI() {
         "QPushButton{border:none;background-image:url(:/images/butt_radio_list_up.png);}"
         "QPushButton:hover{background-image:url(:/images/butt_radio_list_down.png);}");
     listBtn->setCursor(Qt::PointingHandCursor);
+    listBtn->setFocusPolicy(Qt::NoFocus);
     connect(listBtn, &QPushButton::clicked, this, &RadioWindow::onOpenListDialog);
 
     m_searchBtn = new QPushButton(btnRow);
@@ -651,6 +656,7 @@ void RadioWindow::setupUI() {
         "QPushButton{border:none;background-image:url(:/images/butt_radio_search_up.png);}"
         "QPushButton:hover{background-image:url(:/images/butt_radio_search_down.png);}");
     m_searchBtn->setCursor(Qt::PointingHandCursor);
+    m_searchBtn->setFocusPolicy(Qt::NoFocus);
     connect(m_searchBtn, &QPushButton::clicked, this, &RadioWindow::onSearch);
 
     m_playBtn = new QPushButton(btnRow);
@@ -660,16 +666,19 @@ void RadioWindow::setupUI() {
         "QPushButton{border:none;background-image:url(:/images/butt_music_play_up.png);}"
         "QPushButton:hover{background-image:url(:/images/butt_music_play_down.png);}"
         "QPushButton:pressed{background-image:url(:/images/butt_music_play_down.png);}");
+    m_playBtn->setFocusPolicy(Qt::NoFocus);
     connect(m_playBtn, &QPushButton::clicked, this, &RadioWindow::onTogglePlay);
 
     m_favoriteBtn = new QPushButton(btnRow);
     m_favoriteBtn->setGeometry(564, 22, 60, 60);
     m_favoriteBtn->setCursor(Qt::PointingHandCursor);
+    m_favoriteBtn->setFocusPolicy(Qt::NoFocus);
     connect(m_favoriteBtn, &QPushButton::clicked, this, &RadioWindow::onToggleFavorite);
 
     m_scanBtn = new QPushButton(btnRow);
     m_scanBtn->setGeometry(744, 22, 60, 60);
     m_scanBtn->setCursor(Qt::PointingHandCursor);
+    m_scanBtn->setFocusPolicy(Qt::NoFocus);
     connect(m_scanBtn, &QPushButton::clicked, this, &RadioWindow::onToggleScan);
 
     // ── 电台列表 (81,582,1118×118) ─────────────────────────────────────────
