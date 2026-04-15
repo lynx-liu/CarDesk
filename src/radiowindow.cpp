@@ -2,6 +2,7 @@
 #include "devicedetect.h"
 #include "topbarwidget.h"
 #include "t507sdkbridge.h"
+#include "appsignals.h"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -1439,11 +1440,11 @@ void RadioWindow::keyPressEvent(QKeyEvent *event)
     switch (event->key()) {
     case Qt::Key_VolumeUp:
         qDebug() << "[KeyPress] => VolumeUp";
-        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%+"});
+        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%+"}, this);
         break;
     case Qt::Key_VolumeDown:
         qDebug() << "[KeyPress] => VolumeDown";
-        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%-"});
+        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%-"}, this);
         break;
     case Qt::Key_HomePage:
         qDebug() << "[KeyPress] => Home -> returnToMain";

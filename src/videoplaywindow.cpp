@@ -1,5 +1,6 @@
 #include "videoplaywindow.h"
 #include "devicedetect.h"
+#include "appsignals.h"
 
 #include <QVBoxLayout>
 #include <QKeyEvent>
@@ -811,10 +812,10 @@ void VideoPlayWindow::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_VolumeUp:
-        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%+"});
+        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%+"}, this);
         break;
     case Qt::Key_VolumeDown:
-        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%-"});
+        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%-"}, this);
         break;
     case Qt::Key_HomePage:
         // 保存当前位置 + 完整释放 SDK（XPlayerReset 清除硬件叠加层）

@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QApplication>
+#include <QStringList>
 
 /**
  * AppSignals — 应用级信号总线（单例）
@@ -20,6 +21,12 @@ public:
         const QVariant v = qApp ? qApp->property("appClock24h") : QVariant();
         return (v.isValid() && v.toBool()) ? QStringLiteral("HH:mm") : QStringLiteral("hh:mm AP");
     }
+
+    /**
+     * Run `amixer` with given args and refresh system volume level afterwards.
+     * This will emit `volumeLevelChanged(int)` after reading current volume.
+     */
+    static void runAmixer(const QStringList &args, QObject *parent = nullptr);
 
 signals:
     /** 音量等级变化（0–10 整数等级，对应 amixer 0-100% 归一化）*/

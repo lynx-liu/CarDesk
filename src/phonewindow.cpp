@@ -732,10 +732,10 @@ void PhoneWindow::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_VolumeUp:
-        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%+"});
+        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%+"}, this);
         break;
     case Qt::Key_VolumeDown:
-        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%-"});
+        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%-"}, this);
         break;
     case Qt::Key_HomePage:
         emit requestReturnToMain();

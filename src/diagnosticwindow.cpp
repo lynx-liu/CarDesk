@@ -3,6 +3,7 @@
 #include "faultcodedb.h"
 #include "mcuserialreader.h"
 #include "topbarwidget.h"
+#include "appsignals.h"
 
 #include <QApplication>
 #include <QKeyEvent>
@@ -964,10 +965,10 @@ void DiagnosticWindow::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_VolumeUp:
-        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%+"});
+        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%+"}, this);
         break;
     case Qt::Key_VolumeDown:
-        QProcess::startDetached("amixer", {"sset", "LINEOUT volume", "5%-"});
+        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%-"}, this);
         break;
     case Qt::Key_HomePage:
         emit requestReturnToMain();
