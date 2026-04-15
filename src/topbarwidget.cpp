@@ -2,7 +2,7 @@
 #include "appsignals.h"
 
 #include <QHBoxLayout>
-#include <QTime>
+#include <QDateTime>
 #include <QApplication>
 #include <QVariant>
 
@@ -18,6 +18,7 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     // ── 蓝牙图标 ────────────────────────────────────────────────────────────
     auto *btBtn = new QPushButton(this);
     btBtn->setFixedSize(48, 48);
+    btBtn->setFocusPolicy(Qt::NoFocus);
     btBtn->setCursor(Qt::PointingHandCursor);
     btBtn->setToolTip("蓝牙");
     btBtn->setStyleSheet(
@@ -29,6 +30,7 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     // ── USB 图标 ─────────────────────────────────────────────────────────────
     auto *usbBtn = new QPushButton(this);
     usbBtn->setFixedSize(48, 48);
+    usbBtn->setFocusPolicy(Qt::NoFocus);
     usbBtn->setCursor(Qt::PointingHandCursor);
     usbBtn->setToolTip("USB");
     usbBtn->setStyleSheet(
@@ -46,6 +48,7 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
 
     m_volBtn = new QPushButton(volGroup);
     m_volBtn->setFixedSize(48, 48);
+    m_volBtn->setFocusPolicy(Qt::NoFocus);
     m_volBtn->setCursor(Qt::PointingHandCursor);
     m_volBtn->setToolTip("音量");
     m_volBtn->setStyleSheet(
@@ -63,7 +66,7 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
 
     // ── 时间 ─────────────────────────────────────────────────────────────────
     m_timeLabel = new QLabel(this);
-    m_timeLabel->setFixedWidth(166);
+    m_timeLabel->setFixedWidth(150);
     m_timeLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     m_timeLabel->setStyleSheet("QLabel { color: #fff; font-size: 36px; background: transparent; }");
     outerLay->addWidget(m_timeLabel);
@@ -136,6 +139,6 @@ void TopBarRightWidget::onVolumeBtnClicked()
 void TopBarRightWidget::onClockTick()
 {
     if (m_timeLabel) {
-        m_timeLabel->setText(QTime::currentTime().toString(AppSignals::timeFormat()));
+        m_timeLabel->setText(QDateTime::currentDateTime().toString(AppSignals::timeFormat()));
     }
 }
