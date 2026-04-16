@@ -447,15 +447,17 @@ void VideoPlayWindow::setupUI() {
 
     // 右侧控制区域（HTML: .video_play_control）
     QWidget *controlWidget = new QWidget();
+    controlWidget->setStyleSheet("background: transparent;");
     QHBoxLayout *controlLayout = new QHBoxLayout(controlWidget);
     controlLayout->setContentsMargins(48, 0, 0, 0);
     controlLayout->setSpacing(0);
 
-    m_timeLabel->setStyleSheet("color: #fff; font-size: 24px;");
+    m_timeLabel->setStyleSheet("color: #fff; font-size: 24px; background: transparent;");
     m_timeLabel->setFixedWidth(100);
     m_timeLabel->setAlignment(Qt::AlignCenter);
 
     QWidget *progressContainer = new QWidget();
+    progressContainer->setStyleSheet("background: transparent;");
     QHBoxLayout *progressLayout = new QHBoxLayout(progressContainer);
     progressLayout->setContentsMargins(24, 14, 24, 14);
     progressLayout->setSpacing(0);
@@ -466,10 +468,15 @@ void VideoPlayWindow::setupUI() {
     m_progressSlider->setMaximum(1000);
     m_progressSlider->setValue(0);
     m_progressSlider->setStyleSheet(
+        "QSlider { "
+        "  background: transparent; "
+        "  margin: 0; "
+        "} "
         "QSlider::groove:horizontal { "
-        "  background: rgba(255, 255, 255, 0.3); "
+        "  background: transparent; "
         "  height: 8px; "
         "  border-radius: 4px; "
+        "  border: none; "
         "} "
         "QSlider::handle:horizontal { "
         "  background: #fff; "
@@ -477,16 +484,22 @@ void VideoPlayWindow::setupUI() {
         "  height: 16px; "
         "  border-radius: 8px; "
         "  margin: -4px 0; "
+        "  border: none; "
         "} "
         "QSlider::sub-page:horizontal { "
         "  background: #00a0e9; "
         "  border-radius: 4px; "
+        "  border: none; "
+        "} "
+        "QSlider::add-page:horizontal { "
+        "  background: transparent; "
+        "  border: none; "
         "}"
     );
 
     progressLayout->addWidget(m_progressSlider);
 
-    m_durationLabel->setStyleSheet("color: #fff; font-size: 24px;");
+    m_durationLabel->setStyleSheet("color: #fff; font-size: 24px; background: transparent;");
     m_durationLabel->setFixedWidth(100);
     m_durationLabel->setAlignment(Qt::AlignCenter);
 
