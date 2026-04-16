@@ -36,6 +36,12 @@ protected:
     void keyPressEvent(QKeyEvent *event) override;
     void hideEvent(QHideEvent *event) override;
     void showEvent(QShowEvent *event) override;
+    bool event(QEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void wheelEvent(QWheelEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
     void onPlayVideo();
@@ -57,6 +63,10 @@ private:
     void updateTitle();
     void setPlayButtonState(bool playing);
     void updateTimeAndSlider(qint64 positionMs, qint64 durationMs);
+    void resetInactivityTimer();
+    void hideControls();
+    void showControls();
+    void handleUserActivity();
 
 #ifdef CAR_DESK_USE_T507_SDK
     bool initSdkPlayer(const QString &videoPath);
@@ -71,6 +81,8 @@ private:
     QPushButton *m_nextButton;
     QPushButton *m_backButton;
     QSlider *m_progressSlider;
+    QWidget *m_topBar;
+    QWidget *m_bottomBar;
     
     int m_currentIndex;
     QStringList m_videoFiles;
@@ -79,6 +91,7 @@ private:
     QMediaPlayer *m_mediaPlayer;
     QVideoWidget *m_videoWidget;
     bool m_useSdkPlayer;
+    bool m_controlsHidden;
     bool m_pausedForHome;      // HOME 键退出时置位，供 tryResumeVideo 判断
     QString m_resumePath;      // HOME 退出前的视频文件路径
     int m_resumePositionMs;    // HOME 退出前的播放位置（ms）
