@@ -987,11 +987,12 @@ void MusicPlayerWindow::onMediaDurationChanged(qint64 duration)
 void MusicPlayerWindow::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
 {
     if (status == QMediaPlayer::EndOfMedia) {
-        int next = m_currentIndex + 1;
-        if (next < m_musicFiles.count())
-            playMusic(next);
-        else
+        if (m_musicFiles.isEmpty()) {
             setPlayButtonState(false);
+            return;
+        }
+        int next = (m_currentIndex + 1 >= m_musicFiles.count()) ? 0 : m_currentIndex + 1;
+        playMusic(next);
     }
 }
 
@@ -1021,13 +1022,14 @@ void MusicPlayerWindow::onSdkPlaybackComplete()
     if (m_sdkTimer) m_sdkTimer->stop();
     setPlayButtonState(false);
 
-    if (m_currentIndex < m_musicFiles.count() - 1) {
-        m_sdkSwitching = true;
-        QTimer::singleShot(300, this, [this]() {
-            m_sdkSwitching = false;
-            playMusic(m_currentIndex + 1);
-        });
-    }
+    if (m_musicFiles.isEmpty()) return;
+
+    int next = (m_currentIndex < m_musicFiles.count() - 1) ? (m_currentIndex + 1) : 0;
+    m_sdkSwitching = true;
+    QTimer::singleShot(300, this, [this, next]() {
+        m_sdkSwitching = false;
+        playMusic(next);
+    });
 }
 
 #endif // CAR_DESK_USE_T507_SDK
