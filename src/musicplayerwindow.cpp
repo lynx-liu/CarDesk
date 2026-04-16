@@ -13,6 +13,8 @@
 #include <QDebug>
 #include <QScreen>
 #include <QApplication>
+#include <QMouseEvent>
+#include <QStyle>
 #include <QTime>
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -64,6 +66,36 @@ static bool ensureSdkMusicResourcesCreated()
 }
 
 #endif // CAR_DESK_USE_T507_SDK
+
+class MusicPlayerWindow;
+
+class MusicProgressSlider : public QSlider {
+public:
+    MusicProgressSlider(MusicPlayerWindow *owner, Qt::Orientation orientation, QWidget *parent = nullptr)
+        : QSlider(orientation, parent)
+        , m_owner(owner) {}
+
+protected:
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (orientation() == Qt::Horizontal && event->button() == Qt::LeftButton) {
+            int value = QStyle::sliderValueFromPosition(minimum(), maximum(), event->pos().x(), width(), false);
+            setValue(value);
+        }
+        QSlider::mousePressEvent(event);
+    }
+
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        QSlider::mouseReleaseEvent(event);
+        if (event->button() == Qt::LeftButton && m_owner) {
+            m_owner->processSliderRelease(value());
+        }
+    }
+
+private:
+    MusicPlayerWindow *m_owner;
+};
 
 // ══════════════════════════════════════════════════════════════════════════════
 // 构造 / 析构
@@ -256,24 +288,36 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
     m_durLabel->setStyleSheet("color: #fff; font-size: 24px; background: transparent;");
     m_durLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
-    // 进度滑块（204,422,872×8 → slider 竖向居中）
-    m_progressSlider = new QSlider(Qt::Horizontal, page);
-    m_progressSlider->setGeometry(204, 414, 872, 22);
+    // 进度滑块（204,422,872×8 → slider 竖向居中；widget 更高但视觉轨道保持 8px）
+    m_progressSlider = new MusicProgressSlider(this, Qt::Horizontal, page);
+    m_progressSlider->setGeometry(204, 412, 872, 26);
     m_progressSlider->setMinimum(0);
     m_progressSlider->setMaximum(1000);
     m_progressSlider->setValue(0);
     m_progressSlider->setStyleSheet(
         "QSlider::groove:horizontal {"
-        "  border: none; height: 8px; margin: 7px 0;"
+        "  border: none; height: 8px; margin: 9px 0;"
         "  background: url(:/images/prog_music_back.png) no-repeat left center; }"
         "QSlider::sub-page:horizontal {"
-        "  height: 8px; margin: 7px 0;"
+        "  height: 8px; margin: 9px 0;"
         "  background: url(:/images/prog_music_fore.png) no-repeat left center; }"
         "QSlider::add-page:horizontal {"
-        "  height: 8px; margin: 7px 0; background: transparent; }"
+        "  height: 8px; margin: 9px 0; background: transparent; }"
         "QSlider::handle:horizontal {"
         "  background: #ffffff; border: none;"
         "  width: 14px; height: 14px; border-radius: 7px; margin: -3px 0; }");
+    connect(m_progressSlider, &QSlider::sliderPressed, this, [this]() {
+        if (!m_sliderDragging)
+            beginSliderSeek(m_progressSlider->value());
+    });
+    connect(m_progressSlider, &QSlider::sliderMoved, this, [this](int value) {
+        if (m_sliderDragging)
+            previewSliderSeek(value);
+    });
+    connect(m_progressSlider, &QSlider::sliderReleased, this, [this]() {
+        if (m_sliderDragging)
+            finalizeSliderSeek(m_progressSlider->value());
+    });
 
     // ── 控制按钮（精确坐标）──────────────────────────────────────────────
     // 列表 238,466,60×60
@@ -356,19 +400,7 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
               "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_circle_down.png); }");
     });
 
-    connect(m_progressSlider, &QSlider::sliderReleased, this, [this]() {
-#ifdef CAR_DESK_USE_T507_SDK
-        if (m_useSdkPlayer && m_sdkPlayer && m_sdkDurationMs > 0) {
-            qint64 posMs = (static_cast<qint64>(m_progressSlider->value()) * m_sdkDurationMs) / 1000;
-            XPlayerSeekTo(m_sdkPlayer, static_cast<int>(posMs), AW_SEEK_CLOSEST_SYNC);
-            return;
-        }
-#endif
-        if (m_mediaPlayer->duration() > 0) {
-            qint64 posMs = (static_cast<qint64>(m_progressSlider->value()) * m_mediaPlayer->duration()) / 1000;
-            m_mediaPlayer->setPosition(posMs);
-        }
-    });
+    Q_UNUSED(m_progressSlider);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -818,12 +850,105 @@ void MusicPlayerWindow::updateProgressBar(qint64 posMs, qint64 durMs)
 {
     if (m_posLabel) m_posLabel->setText(formatTime(posMs));
     if (m_durLabel) m_durLabel->setText(formatTime(durMs));
-    if (m_progressSlider && !m_progressSlider->isSliderDown()) {
+    if (m_progressSlider && !m_sliderDragging) {
         if (durMs > 0)
             m_progressSlider->setValue(static_cast<int>((posMs * 1000) / durMs));
         else
             m_progressSlider->setValue(0);
     }
+}
+
+int MusicPlayerWindow::sliderValueFromMousePos(const QPoint &pos) const
+{
+    if (!m_progressSlider) return 0;
+    int x = pos.x();
+    int min = m_progressSlider->minimum();
+    int max = m_progressSlider->maximum();
+    int width = m_progressSlider->width();
+    if (width <= 0) return min;
+    int value = QStyle::sliderValueFromPosition(min, max, x, width, false);
+    return qBound(min, value, max);
+}
+
+void MusicPlayerWindow::beginSliderSeek(int value)
+{
+    if (m_sliderDragging) return;
+    m_sliderDragging = true;
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer && m_sdkPlayer) {
+        m_wasPlayingBeforeSeek = m_sdkPlaying;
+        if (m_sdkPlaying) {
+            XPlayerPause(m_sdkPlayer);
+            m_sdkPlaying = false;
+            setPlayButtonState(false);
+        }
+        previewSliderSeek(value);
+        return;
+    }
+#endif
+    if (m_mediaPlayer) {
+        m_wasPlayingBeforeSeek = (m_mediaPlayer->state() == QMediaPlayer::PlayingState);
+        if (m_wasPlayingBeforeSeek) {
+            m_mediaPlayer->pause();
+        }
+    }
+    previewSliderSeek(value);
+}
+
+void MusicPlayerWindow::previewSliderSeek(int value)
+{
+    if (!m_progressSlider) return;
+    m_progressSlider->setValue(value);
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer && m_sdkDurationMs > 0) {
+        qint64 positionMs = (static_cast<qint64>(value) * m_sdkDurationMs) / 1000;
+        updateProgressBar(positionMs, m_sdkDurationMs);
+        return;
+    }
+#endif
+    if (!m_mediaPlayer) return;
+    qint64 durationMs = m_mediaPlayer->duration();
+    if (durationMs > 0) {
+        qint64 positionMs = (static_cast<qint64>(value) * durationMs) / 1000;
+        updateProgressBar(positionMs, durationMs);
+    }
+}
+
+void MusicPlayerWindow::finalizeSliderSeek(int value)
+{
+    if (!m_sliderDragging) return;
+    m_sliderDragging = false;
+    previewSliderSeek(value);
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer && m_sdkPlayer && m_sdkDurationMs > 0) {
+        const qint64 positionMs = (static_cast<qint64>(value) * m_sdkDurationMs) / 1000;
+        XPlayerSeekTo(m_sdkPlayer, static_cast<int>(positionMs), AW_SEEK_CLOSEST_SYNC);
+        if (m_wasPlayingBeforeSeek) {
+            XPlayerStart(m_sdkPlayer);
+            m_sdkPlaying = true;
+            setPlayButtonState(true);
+            if (m_sdkTimer && !m_sdkTimer->isActive()) m_sdkTimer->start();
+        }
+        m_wasPlayingBeforeSeek = false;
+        return;
+    }
+#endif
+    if (!m_mediaPlayer) return;
+    qint64 durationMs = m_mediaPlayer->duration();
+    if (durationMs > 0) {
+        qint64 position = (static_cast<qint64>(value) * durationMs) / 1000;
+        m_mediaPlayer->setPosition(position);
+    }
+    if (m_wasPlayingBeforeSeek && m_mediaPlayer && !m_mediaPlayer->media().isNull()) {
+        m_mediaPlayer->play();
+    }
+    m_wasPlayingBeforeSeek = false;
+}
+
+void MusicPlayerWindow::processSliderRelease(int value)
+{
+    if (m_sliderDragging)
+        finalizeSliderSeek(value);
 }
 
 void MusicPlayerWindow::setPlayButtonState(bool playing)
@@ -850,7 +975,7 @@ QString MusicPlayerWindow::formatTime(qint64 ms)
 
 void MusicPlayerWindow::onMediaPositionChanged(qint64 position)
 {
-    if (!m_progressSlider->isSliderDown())
+    if (!m_sliderDragging)
         updateProgressBar(position, m_mediaPlayer->duration());
 }
 

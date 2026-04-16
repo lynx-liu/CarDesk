@@ -100,6 +100,7 @@ class MusicPlayerWindow : public QMainWindow {
 public:
     explicit MusicPlayerWindow(QWidget *parent = nullptr);
     ~MusicPlayerWindow();
+    void processSliderRelease(int value);
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -166,6 +167,14 @@ private:
     QLabel      *m_durLabel       = nullptr;
     QSlider     *m_progressSlider = nullptr;
     QListWidget *m_playlistWidget = nullptr;  // 底部水平列表
+
+    bool         m_sliderDragging    = false;
+    bool         m_wasPlayingBeforeSeek = false;
+
+    int          sliderValueFromMousePos(const QPoint &pos) const;
+    void         beginSliderSeek(int value);
+    void         previewSliderSeek(int value);
+    void         finalizeSliderSeek(int value);
 
     // ── 列表页控件（匹配 music_usb_play_list.html）──
     QListWidget *m_musicListWidget    = nullptr;
