@@ -859,11 +859,6 @@ void VideoPlayWindow::onSdkPlaybackComplete()
         m_sdkTimer->stop();
     }
 
-    // 没有下一条时只更新按钮状态，避免重复EOS回调触发重入。
-    if (m_currentIndex >= m_videoFiles.count() - 1) {
-        return;
-    }
-
     m_sdkSwitching = true;
     QTimer::singleShot(300, this, [this]() {
         m_sdkSwitching = false;   // 先清标志，再执行切换，避免 initSdkPlayer 守卫误拦截
