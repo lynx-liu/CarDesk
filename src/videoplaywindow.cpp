@@ -584,17 +584,19 @@ void VideoPlayWindow::onPlayVideo() {
 }
 
 void VideoPlayWindow::onNextVideo() {
-    if (m_currentIndex < m_videoFiles.count() - 1) {
-        m_currentIndex++;
-        onPlayVideo();
+    if (m_videoFiles.isEmpty()) {
+        return;
     }
+    m_currentIndex = (m_currentIndex + 1) % m_videoFiles.count();
+    onPlayVideo();
 }
 
 void VideoPlayWindow::onPreviousVideo() {
-    if (m_currentIndex > 0) {
-        m_currentIndex--;
-        onPlayVideo();
+    if (m_videoFiles.isEmpty()) {
+        return;
     }
+    m_currentIndex = (m_currentIndex - 1 + m_videoFiles.count()) % m_videoFiles.count();
+    onPlayVideo();
 }
 
 void VideoPlayWindow::updateTitle() {
@@ -636,7 +638,10 @@ void VideoPlayWindow::onProcessFinished(int exitCode, QProcess::ExitStatus exitS
 void VideoPlayWindow::onMediaStatusChanged(QMediaPlayer::MediaStatus status) {
     qDebug() << "Media status changed:" << status;
     if (status == QMediaPlayer::EndOfMedia) {
-        // 播放完成，自动播放下一个
+        if (m_videoFiles.isEmpty()) {
+            return;
+        }
+        // 播放完成，自动播放列表中的下一首（最后一首时循环到第一首）
         onNextVideo();
     }
 }
