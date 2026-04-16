@@ -67,6 +67,10 @@ private:
     void hideControls();
     void showControls();
     void handleUserActivity();
+    int sliderValueFromContainerPos(const QPoint &pos) const;
+    void beginSliderSeek(int value);
+    void previewSliderSeek(int value);
+    void finalizeSliderSeek(int value);
 
 #ifdef CAR_DESK_USE_T507_SDK
     bool initSdkPlayer(const QString &videoPath);
@@ -81,6 +85,7 @@ private:
     QPushButton *m_nextButton;
     QPushButton *m_backButton;
     QSlider *m_progressSlider;
+    QWidget *m_progressContainer;
     QWidget *m_topBar;
     QWidget *m_bottomBar;
     
@@ -92,6 +97,8 @@ private:
     QVideoWidget *m_videoWidget;
     bool m_useSdkPlayer;
     bool m_controlsHidden;
+    bool m_sliderDragging;
+    bool m_wasPlayingBeforeSeek;
     bool m_pausedForHome;      // HOME 键退出时置位，供 tryResumeVideo 判断
     QString m_resumePath;      // HOME 退出前的视频文件路径
     int m_resumePositionMs;    // HOME 退出前的播放位置（ms）
