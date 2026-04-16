@@ -139,6 +139,8 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     , m_bottomBar(nullptr)
     , m_useSdkPlayer(false)
     , m_controlsHidden(false)
+    , m_sliderDragging(false)
+    , m_wasPlayingBeforeSeek(false)
     , m_pausedForHome(false)
     , m_resumePositionMs(0)
 #ifdef CAR_DESK_USE_T507_SDK
@@ -244,20 +246,65 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     
     // 连接进度条：拖动时跳转播放位置
     connect(m_progressSlider, &QSlider::sliderPressed, this, [this]() {
+        m_sliderDragging = true;
 #ifdef CAR_DESK_USE_T507_SDK
         if (m_useSdkPlayer) {
+            m_wasPlayingBeforeSeek = m_sdkPlaying;
+            if (m_sdkPlaying) {
+                XPlayerPause(m_sdkPlayer);
+                m_sdkPlaying = false;
+                setPlayButtonState(false);
+            }
             return;
         }
 #endif
-        // 开始拖动时暂时断开位置更新，避免冲突
-        disconnect(m_mediaPlayer, &QMediaPlayer::positionChanged, this, &VideoPlayWindow::onPositionChanged);
+        if (!m_mediaPlayer) {
+            return;
+        }
+        m_wasPlayingBeforeSeek = (m_mediaPlayer->state() == QMediaPlayer::PlayingState);
+        if (m_wasPlayingBeforeSeek) {
+            m_mediaPlayer->pause();
+        }
+    });
+    connect(m_progressSlider, &QSlider::sliderMoved, this, [this](int value) {
+        if (!m_sliderDragging) {
+            return;
+        }
+#ifdef CAR_DESK_USE_T507_SDK
+        if (m_useSdkPlayer) {
+            if (m_sdkDurationMs > 0) {
+                qint64 positionMs = (static_cast<qint64>(value) * m_sdkDurationMs) / 1000;
+                updateTimeAndSlider(positionMs, m_sdkDurationMs);
+            }
+            return;
+        }
+#endif
+        if (!m_mediaPlayer) {
+            return;
+        }
+        if (m_mediaPlayer->duration() > 0) {
+            qint64 positionMs = (static_cast<qint64>(value) * m_mediaPlayer->duration()) / 1000;
+            updateTimeAndSlider(positionMs, m_mediaPlayer->duration());
+        }
     });
     connect(m_progressSlider, &QSlider::sliderReleased, this, [this]() {
+        if (!m_sliderDragging) {
+            return;
+        }
+        m_sliderDragging = false;
 #ifdef CAR_DESK_USE_T507_SDK
         if (m_useSdkPlayer) {
             if (m_sdkPlayer && m_sdkDurationMs > 0) {
                 const qint64 positionMs = (m_progressSlider->value() * m_sdkDurationMs) / 1000;
                 XPlayerSeekTo(m_sdkPlayer, static_cast<int>(positionMs), AW_SEEK_CLOSEST_SYNC);
+                if (m_wasPlayingBeforeSeek) {
+                    XPlayerStart(m_sdkPlayer);
+                    m_sdkPlaying = true;
+                    setPlayButtonState(true);
+                    if (m_sdkTimer && !m_sdkTimer->isActive()) {
+                        m_sdkTimer->start();
+                    }
+                }
             }
             return;
         }
@@ -270,8 +317,9 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
             qint64 position = (m_progressSlider->value() * m_mediaPlayer->duration()) / 1000;
             m_mediaPlayer->setPosition(position);
         }
-        // 重新连接位置更新
-        connect(m_mediaPlayer, &QMediaPlayer::positionChanged, this, &VideoPlayWindow::onPositionChanged);
+        if (m_wasPlayingBeforeSeek && m_mediaPlayer->media().isNull() == false) {
+            m_mediaPlayer->play();
+        }
     });
     
     m_hideTimer = new QTimer(this);
@@ -458,6 +506,8 @@ void VideoPlayWindow::setupUI() {
 
     QWidget *progressContainer = new QWidget();
     progressContainer->setStyleSheet("background: transparent;");
+    progressContainer->installEventFilter(this);
+    m_progressContainer = progressContainer;
     QHBoxLayout *progressLayout = new QHBoxLayout(progressContainer);
     progressLayout->setContentsMargins(24, 14, 24, 14);
     progressLayout->setSpacing(0);
@@ -812,6 +862,27 @@ bool VideoPlayWindow::eventFilter(QObject *obj, QEvent *event)
         return QMainWindow::eventFilter(obj, event);
     }
 
+    if (widget == m_progressContainer) {
+        if (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseMove || event->type() == QEvent::MouseButtonRelease) {
+            QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            if (event->type() == QEvent::MouseButtonPress && mouseEvent->button() == Qt::LeftButton) {
+                int value = sliderValueFromContainerPos(mouseEvent->pos());
+                beginSliderSeek(value);
+                return true;
+            }
+            if (event->type() == QEvent::MouseMove && m_sliderDragging) {
+                int value = sliderValueFromContainerPos(mouseEvent->pos());
+                previewSliderSeek(value);
+                return true;
+            }
+            if (event->type() == QEvent::MouseButtonRelease && mouseEvent->button() == Qt::LeftButton && m_sliderDragging) {
+                int value = sliderValueFromContainerPos(mouseEvent->pos());
+                finalizeSliderSeek(value);
+                return true;
+            }
+        }
+    }
+
     switch (event->type()) {
     case QEvent::MouseButtonPress:
     case QEvent::MouseButtonRelease:
@@ -827,6 +898,109 @@ bool VideoPlayWindow::eventFilter(QObject *obj, QEvent *event)
     }
 
     return QMainWindow::eventFilter(obj, event);
+}
+
+int VideoPlayWindow::sliderValueFromContainerPos(const QPoint &pos) const
+{
+    if (!m_progressSlider) {
+        return 0;
+    }
+
+    QPoint sliderPos = m_progressSlider->mapFromParent(pos);
+    int x = sliderPos.x();
+    int min = m_progressSlider->minimum();
+    int max = m_progressSlider->maximum();
+    int width = m_progressSlider->width();
+    if (width <= 0) {
+        return min;
+    }
+    int value = QStyle::sliderValueFromPosition(min, max, x, width, false);
+    return qBound(min, value, max);
+}
+
+void VideoPlayWindow::beginSliderSeek(int value)
+{
+    if (m_sliderDragging) {
+        return;
+    }
+    m_sliderDragging = true;
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        m_wasPlayingBeforeSeek = m_sdkPlaying;
+        if (m_sdkPlaying && m_sdkPlayer) {
+            XPlayerPause(m_sdkPlayer);
+            m_sdkPlaying = false;
+            setPlayButtonState(false);
+        }
+    }
+#endif
+    if (!m_mediaPlayer) {
+        return;
+    }
+    m_wasPlayingBeforeSeek = (m_mediaPlayer->state() == QMediaPlayer::PlayingState);
+    if (m_wasPlayingBeforeSeek) {
+        m_mediaPlayer->pause();
+    }
+    previewSliderSeek(value);
+}
+
+void VideoPlayWindow::previewSliderSeek(int value)
+{
+    if (!m_progressSlider) {
+        return;
+    }
+    m_progressSlider->setValue(value);
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer && m_sdkDurationMs > 0) {
+        qint64 positionMs = (static_cast<qint64>(value) * m_sdkDurationMs) / 1000;
+        updateTimeAndSlider(positionMs, m_sdkDurationMs);
+        return;
+    }
+#endif
+    if (!m_mediaPlayer) {
+        return;
+    }
+    qint64 durationMs = m_mediaPlayer->duration();
+    if (durationMs > 0) {
+        qint64 positionMs = (static_cast<qint64>(value) * durationMs) / 1000;
+        updateTimeAndSlider(positionMs, durationMs);
+    }
+}
+
+void VideoPlayWindow::finalizeSliderSeek(int value)
+{
+    if (!m_sliderDragging) {
+        return;
+    }
+    m_sliderDragging = false;
+    previewSliderSeek(value);
+
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer && m_sdkPlayer && m_sdkDurationMs > 0) {
+        const qint64 positionMs = (static_cast<qint64>(value) * m_sdkDurationMs) / 1000;
+        XPlayerSeekTo(m_sdkPlayer, static_cast<int>(positionMs), AW_SEEK_CLOSEST_SYNC);
+        if (m_wasPlayingBeforeSeek) {
+            XPlayerStart(m_sdkPlayer);
+            m_sdkPlaying = true;
+            setPlayButtonState(true);
+            if (m_sdkTimer && !m_sdkTimer->isActive()) {
+                m_sdkTimer->start();
+            }
+        }
+        return;
+    }
+#endif
+    if (!m_mediaPlayer) {
+        return;
+    }
+    qint64 durationMs = m_mediaPlayer->duration();
+    if (durationMs > 0) {
+        qint64 position = (static_cast<qint64>(value) * durationMs) / 1000;
+        m_mediaPlayer->setPosition(position);
+    }
+    if (m_wasPlayingBeforeSeek && !m_mediaPlayer->media().isNull()) {
+        m_mediaPlayer->play();
+    }
 }
 
 void VideoPlayWindow::onSdkTick()
