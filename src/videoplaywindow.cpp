@@ -16,6 +16,7 @@
 #include <QFileInfo>
 #include <QProcess>
 #include <QMouseEvent>
+#include <QEvent>
 #include <QTimer>
 
 #ifdef CAR_DESK_USE_T507_SDK
@@ -134,7 +135,10 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     , m_hideTimer(nullptr)
     , m_mediaPlayer(nullptr)
     , m_videoWidget(nullptr)
+    , m_topBar(nullptr)
+    , m_bottomBar(nullptr)
     , m_useSdkPlayer(false)
+    , m_controlsHidden(false)
     , m_pausedForHome(false)
     , m_resumePositionMs(0)
 #ifdef CAR_DESK_USE_T507_SDK
@@ -271,9 +275,13 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     });
     
     m_hideTimer = new QTimer(this);
+    m_hideTimer->setInterval(5000);
+    m_hideTimer->setSingleShot(true);
     connect(m_hideTimer, &QTimer::timeout, this, [this]() {
-        m_hideTimer->stop();
+        hideControls();
     });
+    qApp->installEventFilter(this);
+    resetInactivityTimer();
 }
 
 VideoPlayWindow::~VideoPlayWindow() {
@@ -305,11 +313,15 @@ void VideoPlayWindow::setupUI() {
     }
 #endif
     setCentralWidget(centralWidget);
+    centralWidget->setAttribute(Qt::WA_AcceptTouchEvents);
+    centralWidget->installEventFilter(this);
     
     // 视频显示区域（全屏填充）
     m_videoWidget->setParent(centralWidget);
     m_videoWidget->setGeometry(0, 0, 1280, 720);
     m_videoWidget->setStyleSheet(m_useSdkPlayer ? "background: transparent;" : "background: black;");
+    m_videoWidget->setAttribute(Qt::WA_AcceptTouchEvents);
+    m_videoWidget->installEventFilter(this);
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer) {
         m_videoWidget->hide();
@@ -317,15 +329,16 @@ void VideoPlayWindow::setupUI() {
 #endif
     
     // ===== 顶部栏：绝对定位 =====
-    QWidget *topBar = new QWidget(centralWidget);
-    topBar->setGeometry(0, 0, 1280, 72);
-    topBar->setStyleSheet("background: rgba(0, 0, 0, 0.5);");
-    topBar->raise();  // 确保在视频上层
+    m_topBar = new QWidget(centralWidget);
+    m_topBar->setGeometry(0, 0, 1280, 72);
+    m_topBar->setStyleSheet("background: rgba(0, 0, 0, 0.5);");
+    m_topBar->raise();  // 确保在视频上层
 
     // 返回按钮（HTML: .video_play_top span）
-    m_backButton->setParent(topBar);
+    m_backButton->setParent(m_topBar);
     m_backButton->setFixedSize(48, 48);
     m_backButton->move(12, 12);
+    m_backButton->setFocusPolicy(Qt::NoFocus);
     m_backButton->setStyleSheet(
         "QPushButton { "
         "  border: none; "
@@ -333,14 +346,19 @@ void VideoPlayWindow::setupUI() {
         "  background-image: url(:/images/butt_video_back_up.png); "
         "  background-repeat: no-repeat; "
         "  background-position: center; "
+        "  outline: none; "
         "} "
         "QPushButton:hover { "
         "  background-image: url(:/images/butt_video_back_down.png); "
+        "} "
+        "QPushButton:focus { "
+        "  outline: none; "
+        "  border: none; "
         "}"
     );
 
     // 标题（HTML: .video_play_top h1）
-    m_titleLabel->setParent(topBar);
+    m_titleLabel->setParent(m_topBar);
     m_titleLabel->setGeometry(100, 0, 1080, 72);  // 留出左右空间，避免遮挡按钮
     m_titleLabel->setStyleSheet(
         "color: #fff; "
@@ -352,13 +370,13 @@ void VideoPlayWindow::setupUI() {
     m_titleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);  // 让鼠标事件穿透到下层
     
     // ===== 底部栏：绝对定位 =====
-    QWidget *bottomBar = new QWidget(centralWidget);
-    bottomBar->setGeometry(0, 720 - 132, 1280, 132);
-    bottomBar->setStyleSheet("background: rgba(0, 0, 0, 0.5);");
-    bottomBar->raise();  // 确保在视频上层
+    m_bottomBar = new QWidget(centralWidget);
+    m_bottomBar->setGeometry(0, 720 - 132, 1280, 132);
+    m_bottomBar->setStyleSheet("background: rgba(0, 0, 0, 0.5);");
+    m_bottomBar->raise();  // 确保在视频上层
 
     // HTML: padding 24px 48px, display:flex
-    QHBoxLayout *bottomLayout = new QHBoxLayout(bottomBar);
+    QHBoxLayout *bottomLayout = new QHBoxLayout(m_bottomBar);
     bottomLayout->setContentsMargins(48, 24, 48, 24);
     bottomLayout->setSpacing(0);
 
@@ -374,10 +392,16 @@ void VideoPlayWindow::setupUI() {
     m_prevButton->setFixedSize(60, 60);
     m_prevButton->setIcon(QIcon(":/images/butt_music_prev_up.png"));
     m_prevButton->setIconSize(QSize(60, 60));
+    m_prevButton->setFocusPolicy(Qt::NoFocus);
     m_prevButton->setStyleSheet(
         "QPushButton { "
         "  border: none; "
         "  background: transparent; "
+        "  outline: none; "
+        "} "
+        "QPushButton:focus { "
+        "  outline: none; "
+        "  border: none; "
         "}"
     );
 
@@ -385,10 +409,16 @@ void VideoPlayWindow::setupUI() {
     m_playButton->setFixedSize(84, 84);
     m_playButton->setIcon(QIcon(":/images/butt_music_play_up.png"));
     m_playButton->setIconSize(QSize(84, 84));
+    m_playButton->setFocusPolicy(Qt::NoFocus);
     m_playButton->setStyleSheet(
         "QPushButton { "
         "  border: none; "
         "  background: transparent; "
+        "  outline: none; "
+        "} "
+        "QPushButton:focus { "
+        "  outline: none; "
+        "  border: none; "
         "}"
     );
 
@@ -396,10 +426,16 @@ void VideoPlayWindow::setupUI() {
     m_nextButton->setFixedSize(60, 60);
     m_nextButton->setIcon(QIcon(":/images/butt_music_next_up.png"));
     m_nextButton->setIconSize(QSize(60, 60));
+    m_nextButton->setFocusPolicy(Qt::NoFocus);
     m_nextButton->setStyleSheet(
         "QPushButton { "
         "  border: none; "
         "  background: transparent; "
+        "  outline: none; "
+        "} "
+        "QPushButton:focus { "
+        "  outline: none; "
+        "  border: none; "
         "}"
     );
 
@@ -657,6 +693,124 @@ void VideoPlayWindow::updateTimeAndSlider(qint64 positionMs, qint64 durationMs)
     }
 }
 
+void VideoPlayWindow::resetInactivityTimer()
+{
+    if (!m_hideTimer) {
+        return;
+    }
+
+    if (m_controlsHidden) {
+        return;
+    }
+
+    m_hideTimer->stop();
+    m_hideTimer->start();
+}
+
+void VideoPlayWindow::hideControls()
+{
+    if (m_controlsHidden) {
+        return;
+    }
+    m_controlsHidden = true;
+    if (m_topBar) {
+        m_topBar->hide();
+    }
+    if (m_bottomBar) {
+        m_bottomBar->hide();
+    }
+}
+
+void VideoPlayWindow::showControls()
+{
+    if (!m_controlsHidden) {
+        return;
+    }
+    m_controlsHidden = false;
+    if (m_topBar) {
+        m_topBar->show();
+    }
+    if (m_bottomBar) {
+        m_bottomBar->show();
+    }
+    resetInactivityTimer();
+}
+
+void VideoPlayWindow::handleUserActivity()
+{
+    if (m_controlsHidden) {
+        showControls();
+        return;
+    }
+    resetInactivityTimer();
+}
+
+bool VideoPlayWindow::event(QEvent *event)
+{
+    switch (event->type()) {
+    case QEvent::MouseButtonPress:
+    case QEvent::MouseButtonRelease:
+    case QEvent::TouchBegin:
+    case QEvent::TouchEnd:
+    case QEvent::MouseMove:
+    case QEvent::KeyPress:
+    case QEvent::Wheel:
+        handleUserActivity();
+        break;
+    default:
+        break;
+    }
+    return QMainWindow::event(event);
+}
+
+void VideoPlayWindow::mousePressEvent(QMouseEvent *event)
+{
+    handleUserActivity();
+    QMainWindow::mousePressEvent(event);
+}
+
+void VideoPlayWindow::mouseReleaseEvent(QMouseEvent *event)
+{
+    handleUserActivity();
+    QMainWindow::mouseReleaseEvent(event);
+}
+
+void VideoPlayWindow::mouseMoveEvent(QMouseEvent *event)
+{
+    handleUserActivity();
+    QMainWindow::mouseMoveEvent(event);
+}
+
+void VideoPlayWindow::wheelEvent(QWheelEvent *event)
+{
+    handleUserActivity();
+    QMainWindow::wheelEvent(event);
+}
+
+bool VideoPlayWindow::eventFilter(QObject *obj, QEvent *event)
+{
+    QWidget *widget = qobject_cast<QWidget*>(obj);
+    if (!widget || widget->window() != this) {
+        return QMainWindow::eventFilter(obj, event);
+    }
+
+    switch (event->type()) {
+    case QEvent::MouseButtonPress:
+    case QEvent::MouseButtonRelease:
+    case QEvent::TouchBegin:
+    case QEvent::TouchEnd:
+    case QEvent::MouseMove:
+    case QEvent::KeyPress:
+    case QEvent::Wheel:
+        handleUserActivity();
+        break;
+    default:
+        break;
+    }
+
+    return QMainWindow::eventFilter(obj, event);
+}
+
 void VideoPlayWindow::onSdkTick()
 {
 #ifdef CAR_DESK_USE_T507_SDK
@@ -869,6 +1023,8 @@ void VideoPlayWindow::hideEvent(QHideEvent *event)
 void VideoPlayWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
+    showControls();
+    resetInactivityTimer();
     if (!m_pausedForHome || m_resumePath.isEmpty()) {
         return;
     }
