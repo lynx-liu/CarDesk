@@ -15,6 +15,8 @@
 #include <QApplication>
 #include <QMouseEvent>
 #include <QStyle>
+#include <QTextCodec>
+#include <QScroller>
 #include <QTime>
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -374,6 +376,7 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
     m_playlistWidget->setUniformItemSizes(true);
     m_playlistWidget->setStyleSheet("QListWidget { background: transparent; border: none; outline: none; }");
     m_playlistWidget->setItemDelegate(new MusicPlaylistDelegate(m_playlistWidget));
+    QScroller::grabGesture(m_playlistWidget->viewport(), QScroller::LeftMouseButtonGesture);
 
     // ── 按钮信号 ─────────────────────────────────────────────────────────
     connect(m_homeButton,     &QPushButton::clicked, this, [this]() {
@@ -477,10 +480,12 @@ void MusicPlayerWindow::setupListPage(QWidget *page)
     m_musicListWidget->setUniformItemSizes(true);
     m_musicListWidget->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_musicListWidget->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_musicListWidget->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_musicListWidget->setStyleSheet(
         "QListWidget { background: transparent; border: none; outline: none; }"
         "QListWidget::item { border: none; }");
     m_musicListWidget->setItemDelegate(new MusicListItemDelegate(m_musicListWidget));
+    QScroller::grabGesture(m_musicListWidget->viewport(), QScroller::LeftMouseButtonGesture);
 
     // ── 路径标签（x:168, y:590, 944×50）─────────────────────────────────
     // 样式：rgba(255,255,255,.1) 背景 + 1px #0068FF border + border-radius:5px
@@ -577,8 +582,10 @@ void MusicPlayerWindow::refreshPlaylistWidget()
         QListWidgetItem *item = new QListWidgetItem(fi.baseName(), m_playlistWidget);
         m_playlistWidget->addItem(item);
     }
-    if (m_currentIndex >= 0 && m_currentIndex < m_playlistWidget->count())
+    if (m_currentIndex >= 0 && m_currentIndex < m_playlistWidget->count()) {
         m_playlistWidget->setCurrentRow(m_currentIndex);
+        m_playlistWidget->scrollToItem(m_playlistWidget->currentItem(), QAbstractItemView::PositionAtCenter);
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -606,7 +613,7 @@ void MusicPlayerWindow::playMusic(int index)
         m_sdkSoundCtrl = g_sdkMusicSoundCtrl;
         XPlayerSetNotifyCallback(m_sdkPlayer, sdkMusicNotify, this);
 
-        const QByteArray pb = musicPath.toLocal8Bit();
+        const QByteArray pb = musicPath.toUtf8();
         if (XPlayerSetDataSourceUrl(m_sdkPlayer, pb.constData(), nullptr, nullptr) != 0) {
             qWarning() << "MusicSDK: SetDataSourceUrl failed"; return;
         }
