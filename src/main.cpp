@@ -231,10 +231,12 @@ protected:
             case Qt::Key_VolumeUp:
                 qDebug() << "[GlobalKey] => VolumeUp";
                 AppSignals::runAmixer({"sset", "LINEOUT volume", "5%+"}, nullptr);
+                scheduleVolumeRead(m_overlay);
                 return true;
             case Qt::Key_VolumeDown:
                 qDebug() << "[GlobalKey] => VolumeDown";
                 AppSignals::runAmixer({"sset", "LINEOUT volume", "5%-"}, nullptr);
+                scheduleVolumeRead(m_overlay);
                 return true;
             case Qt::Key_HomePage:
                 qDebug() << "[GlobalKey] => HomePage";
