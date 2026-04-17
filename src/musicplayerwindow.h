@@ -46,7 +46,7 @@ public:
         QRect textBg(r.x(), r.y() + 88, 120, 30);
         p->fillRect(textBg, QColor(0, 0, 0, 191));
         p->setPen(Qt::white);
-        QFont font;
+        QFont font = option.font;
         font.setPixelSize(20);
         p->setFont(font);
         p->drawText(textBg, Qt::AlignHCenter | Qt::AlignVCenter, text);
@@ -83,7 +83,7 @@ public:
         QString text = index.data(Qt::DisplayRole).toString();
         QRect textRect(r.x(), r.y() + 117, 160, 42);
         p->setPen(Qt::white);
-        QFont font;
+        QFont font = option.font;
         font.setPixelSize(20);
         p->setFont(font);
         p->drawText(textRect, Qt::AlignHCenter | Qt::AlignVCenter, text);
