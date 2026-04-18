@@ -211,6 +211,21 @@ RadioWindow::RadioWindow(QWidget *parent)
     // 进入收音机界面时自动切到收音机声道
     T507SdkBridge::setAudioSource(true);
     setMute(false);
+    // 将系统音量变化关联到收音机硬件音量
+    connect(AppSignals::instance(), &AppSignals::volumeLevelChanged, this, [this](int level){
+        // level: 0..10 -> map to approximate dB range -60 .. +24
+        const double span = 84.0; // 24 - (-60)
+        const int db = qRound(-60.0 + level * (span / 10.0));
+        setRadioVolumeDb(db);
+    });
+    // 同步当前已存在的系统音量
+    {
+        const QVariant vp = qApp->property("appVolumeLevel");
+        const int curLevel = vp.isValid() ? vp.toInt() : 10;
+        const double span = 84.0;
+        const int db = qRound(-60.0 + curLevel * (span / 10.0));
+        setRadioVolumeDb(db);
+    }
     // 开始播放后延迟300ms读取立体声状态
     QTimer::singleShot(300, this, [this]() { updateTunerStatus(); });
 }
@@ -459,6 +474,26 @@ bool RadioWindow::setMute(bool mute)
         return false;
     }
     return true;
+}
+
+void RadioWindow::setRadioVolumeDb(int db)
+{
+    if (m_fd < 0) {
+        // 尝试打开设备再设置
+        if (!openDevice()) {
+            qWarning() << "RadioWindow: cannot open device to set volume";
+            return;
+        }
+    }
+    struct v4l2_control ctrl;
+    memset(&ctrl, 0, sizeof(ctrl));
+    ctrl.id = V4L2_CID_AUDIO_VOLUME;
+    ctrl.value = db; // 驱动通常在 -60..24 或者 0..(range) 之间，按驱动定义
+    if (::ioctl(m_fd, VIDIOC_S_CTRL, &ctrl) < 0) {
+        qWarning() << "RadioWindow: VIDIOC_S_CTRL VOLUME failed:" << strerror(errno);
+    } else {
+        qDebug() << "RadioWindow: set volume to" << db << "(dB)";
+    }
 }
 
 void RadioWindow::updateTunerStatus()
