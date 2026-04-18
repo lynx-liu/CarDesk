@@ -168,9 +168,16 @@ void VideoListWindow::setupUI() {
         "  border: none; "
         "  outline: none; "
         "} "
+        "QScrollBar:vertical{width:12px;background:transparent;border-radius:6px;margin:0; padding:0;}"
+        "QScrollBar::groove:vertical{background:rgba(0,104,255,0.10);border-radius:3px;margin:0px 3px; padding:0;}"
+        "QScrollBar::handle:vertical{background:#0068FF;border-radius:3px;min-height:60px;margin:3px 3px;}"
+        "QScrollBar::handle:vertical:hover{background:#00faff;}"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical{height:0;background:none;border:none;}"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical{background:transparent;}"
     );
     m_videoListWidget->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    m_videoListWidget->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_videoListWidget->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_videoListWidget->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     
     // 精确匹配HTML flexbox space-between布局
     // 5列: 944/5 = 188.8px per cell → gridSize = 188
@@ -183,8 +190,8 @@ void VideoListWindow::setupUI() {
     m_videoListWidget->setSpacing(0);
     m_videoListWidget->setResizeMode(QListView::Fixed);
     m_videoListWidget->setIconSize(QSize(0, 0));
-    m_videoListWidget->setGridSize(QSize(188, 178));  // 水平188×5=940≤944, 垂直178×2=356=HTML高度
-    m_videoListWidget->setFixedSize(944, 356);  // 精确匹配HTML ul高度356px
+    m_videoListWidget->setGridSize(QSize(188, 178));  // 水平188×5=940
+    m_videoListWidget->setFixedSize(956, 356);  // 保留足够空间显示垂直滚动条
     
     // 应用自定义委托来绘制背景和文本
     m_videoListWidget->setItemDelegate(new VideoListItemDelegate(m_videoListWidget));
