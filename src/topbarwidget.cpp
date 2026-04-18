@@ -1,10 +1,12 @@
 #include "topbarwidget.h"
 #include "appsignals.h"
+#include "t507sdkbridge.h"
 
 #include <QHBoxLayout>
 #include <QDateTime>
 #include <QApplication>
 #include <QVariant>
+#include <QStorageInfo>
 
 TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     : QWidget(parent)
@@ -28,16 +30,16 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     outerLay->addWidget(btBtn);
 
     // ── USB 图标 ─────────────────────────────────────────────────────────────
-    auto *usbBtn = new QPushButton(this);
-    usbBtn->setFixedSize(48, 48);
-    usbBtn->setFocusPolicy(Qt::NoFocus);
-    usbBtn->setCursor(Qt::PointingHandCursor);
-    usbBtn->setToolTip("USB");
-    usbBtn->setStyleSheet(
+    m_usbBtn = new QPushButton(this);
+    m_usbBtn->setFixedSize(48, 48);
+    m_usbBtn->setFocusPolicy(Qt::NoFocus);
+    m_usbBtn->setCursor(Qt::ArrowCursor);
+    m_usbBtn->setToolTip("USB");
+    m_usbBtn->setStyleSheet(
         "QPushButton { border: none; background-image: url(:/images/pict_usb.png); "
         "background-repeat: no-repeat; background-position: center; }"
-        "QPushButton:hover { background-image: url(:/images/pict_usb_on.png); }");
-    outerLay->addWidget(usbBtn);
+    );
+    outerLay->addWidget(m_usbBtn);
 
     // ── 音量图标 + 数值（合为一个子 widget，间距 6px） ───────────────────────
     auto *volGroup = new QWidget(this);
@@ -83,7 +85,12 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     // 时钟制式变化时立即刷新显示
     connect(AppSignals::instance(), &AppSignals::clockFormatChanged,
             this, [this](bool) { onClockTick(); });
-
+    // ── USB 插拔检测定时器 ─────────────────────────────────────────────────────
+    m_usbTimer = new QTimer(this);
+    m_usbTimer->setInterval(1000);
+    connect(m_usbTimer, &QTimer::timeout, this, &TopBarRightWidget::updateUsbState);
+    m_usbTimer->start();
+    updateUsbState();
     // ── 时钟定时器 ────────────────────────────────────────────────────────────
     m_clockTimer = new QTimer(this);
     m_clockTimer->setInterval(1000);
@@ -146,4 +153,36 @@ void TopBarRightWidget::onClockTick()
     if (m_timeLabel) {
         m_timeLabel->setText(QDateTime::currentDateTime().toString(AppSignals::timeFormat()));
     }
+}
+
+void TopBarRightWidget::updateUsbState()
+{
+    bool foundUsb = false;
+    const QString usbPath = T507SdkBridge::usbMountPath();
+
+    for (const QStorageInfo &storage : QStorageInfo::mountedVolumes()) {
+        if (!storage.isValid() || storage.isReadOnly() || !storage.isReady())
+            continue;
+
+        const QString root = storage.rootPath();
+        if (root == usbPath) {
+            foundUsb = true;
+            break;
+        }
+    }
+
+    if (foundUsb == m_usbConnected)
+        return;
+
+    m_usbConnected = foundUsb;
+    if (!m_usbBtn)
+        return;
+
+    const QString icon = m_usbConnected
+        ? QStringLiteral(":/images/pict_usb_on.png")
+        : QStringLiteral(":/images/pict_usb.png");
+    m_usbBtn->setStyleSheet(
+        QString("QPushButton { border: none; background-image: url(%1); "
+                "background-repeat: no-repeat; background-position: center; }")
+            .arg(icon));
 }

@@ -34,12 +34,16 @@ private slots:
     void onVolumeChanged(int level);
     void onVolumeBtnClicked();
     void onClockTick();
+    void updateUsbState();
 
 private:
+    QPushButton *m_usbBtn   = nullptr;
     QPushButton *m_volBtn    = nullptr;
     QLabel      *m_volLabel  = nullptr;
     QLabel      *m_timeLabel = nullptr;
+    QTimer      *m_usbTimer = nullptr;
     QTimer      *m_clockTimer = nullptr;
+    bool         m_usbConnected = false;
     bool         m_isMuted   = false;
 };
 
