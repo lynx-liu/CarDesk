@@ -17,6 +17,9 @@ public:
     explicit RadioWindow(QWidget *parent = nullptr);
     ~RadioWindow();
 
+public slots:
+    void setRadioVolumeDb(int db); // db 范围通常 -60 ~ 24（驱动定义）
+
 signals:
     void requestReturnToMain();
 
