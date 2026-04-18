@@ -1168,9 +1168,9 @@ void RadioWindow::onOpenListDialog() {
 
     // 电台网格（必须在 Tab connect 之前创建，供 lambda 捕获）
     // CSS .radio_list_con { width:1060; margin:16px auto }
-    // 宽度用 1066（= 5×212 + 6px slack）避免 Qt viewport 舍入导致只显示 4 列
+    // 宽度改为 1092，以便出现垂直滚动条时仍能保持5列布局
     QListWidget *list = new QListWidget(&dialog);
-    list->setGeometry(107, 182, 1066, 424);
+    list->setGeometry(107, 182, 1092, 424);
     list->setFrameShape(QFrame::NoFrame);
     list->setContentsMargins(0, 0, 0, 0);
     list->setViewMode(QListView::IconMode);
@@ -1181,14 +1181,27 @@ void RadioWindow::onOpenListDialog() {
     list->setIconSize(QSize(1, 1));
     list->setSpacing(0);
     list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    list->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    list->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     list->setMouseTracking(true);
     list->viewport()->setMouseTracking(true);
     list->setAttribute(Qt::WA_Hover);
     list->setStyleSheet(
         "QListWidget{border:none;background:transparent;outline:none;padding:0;margin:0;}"
         "QListWidget::item{width:212px;height:212px;background:transparent;}"
-        "QScrollBar:vertical,QScrollBar:horizontal{width:0;height:0;background:transparent;}");
+        "QScrollBar:vertical{width:12px;background:transparent;border-radius:6px;margin:0;padding:0;}"
+        "QScrollBar::groove:vertical{background:rgba(0,104,255,0.10);border-radius:3px;margin:0px 3px;padding:0;}"
+        "QScrollBar::handle:vertical{background:#0068FF;border-radius:3px;min-height:60px;margin:3px 3px;}"
+        "QScrollBar::handle:vertical:hover{background:#00faff;}"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical{height:0;background:none;border:none;}"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical{background:transparent;}");
+    list->verticalScrollBar()->setStyleSheet(
+        "QScrollBar:vertical{width:12px;background:transparent;border-radius:6px;margin:0;padding:0;}"
+        "QScrollBar::groove:vertical{background:rgba(0,104,255,0.10);border-radius:3px;margin:0px 3px;padding:0;}"
+        "QScrollBar::handle:vertical{background:#0068FF;border-radius:3px;min-height:60px;margin:3px 3px;}"
+        "QScrollBar::handle:vertical:hover{background:#00faff;}"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical{height:0;background:none;border:none;}"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical{background:transparent;}");
     list->setItemDelegate(new RadioListDelegate(m_isFM, list));
 
     // ── Tab 切换逻辑：0=我的收藏  1=本地电台 ──────────────────────────────
