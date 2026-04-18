@@ -35,6 +35,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QCoreApplication>
+#include <QSettings>
 #include <QScreen>
 #include <QTime>
 #include <QVector>
@@ -46,6 +47,14 @@ QString shellQuote(const QString &s)
     QString out = s;
     out.replace("'", "'\\''");
     return "'" + out + "'";
+}
+
+static void performFactoryReset()
+{
+    QSettings settings;
+    settings.clear();
+    settings.sync();
+    qDebug() << "SystemSettingWindow: factory reset cleared application settings.";
 }
 }
 
@@ -1587,7 +1596,12 @@ QWidget *SystemSettingWindow::createFactoryPage()
         root->addWidget(top);
         root->addLayout(row);
 
-        connect(ok, &QPushButton::clicked, &dialog, &QDialog::accept);
+        connect(ok, &QPushButton::clicked, &dialog, [this, &dialog]() {
+            performFactoryReset();
+            dialog.accept();
+            emit requestReturnToMain();
+            this->close();
+        });
         connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
         dialog.exec();
     });
