@@ -26,6 +26,7 @@
 #include <QStyledItemDelegate>
 #include <QVBoxLayout>
 #include <QDebug>
+#include <QSettings>
 
 // ── V4L2 ─────────────────────────────────────────────────────────────────────
 #include <fcntl.h>
@@ -173,6 +174,13 @@ RadioWindow::RadioWindow(QWidget *parent)
     }
 
     setupUI();
+    
+    // 加载用户收藏（如果有）
+    {
+        QSettings settings;
+        m_fmFavorites = settings.value("radio/fmFavorites").toStringList();
+        m_amFavorites = settings.value("radio/amFavorites").toStringList();
+    }
 
     // 尝试打开硬件设备
     if (openDevice()) {
@@ -824,6 +832,12 @@ void RadioWindow::onToggleFavorite() {
         favs.removeAll(key);
     else
         favs.append(key);
+    // 保存收藏到本地设置
+    {
+        QSettings settings;
+        settings.setValue("radio/fmFavorites", m_fmFavorites);
+        settings.setValue("radio/amFavorites", m_amFavorites);
+    }
     updateFrequencyView();
 }
 
