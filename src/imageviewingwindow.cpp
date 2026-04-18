@@ -229,6 +229,7 @@ void ImageViewingWindow::setupUI()
 
     auto *btnWrap = new QWidget(bottomBar);
     btnWrap->setFixedWidth(420);
+    btnWrap->setStyleSheet("background:transparent;");
     auto *btnWrapLay = new QHBoxLayout(btnWrap);
     btnWrapLay->setContentsMargins(0, 0, 0, 0);
     btnWrapLay->setSpacing(0);
@@ -236,8 +237,9 @@ void ImageViewingWindow::setupUI()
     m_prevButton = new QPushButton(btnWrap);
     m_prevButton->setFixedSize(60, 60);
     m_prevButton->setStyleSheet(
-        "QPushButton{border:none;background-image:url(:/images/butt_music_prev_up.png);background-repeat:no-repeat;background-position:center;}"
-        "QPushButton:hover{background-image:url(:/images/butt_music_prev_down.png);}"
+        "QPushButton{border:none;background-color:transparent;background-image:url(:/images/butt_music_prev_up.png);background-repeat:no-repeat;background-position:center;}"
+        "QPushButton:hover{background-color:transparent;background-image:url(:/images/butt_music_prev_down.png);background-repeat:no-repeat;}"
+        "QPushButton:pressed{background-color:transparent;}"
     );
     connect(m_prevButton, &QPushButton::clicked, this, &ImageViewingWindow::onPrevImage);
     m_prevButton->setFocusPolicy(Qt::NoFocus);
@@ -249,8 +251,9 @@ void ImageViewingWindow::setupUI()
     m_nextButton = new QPushButton(btnWrap);
     m_nextButton->setFixedSize(60, 60);
     m_nextButton->setStyleSheet(
-        "QPushButton{border:none;background-image:url(:/images/butt_music_next_up.png);background-repeat:no-repeat;background-position:center;}"
-        "QPushButton:hover{background-image:url(:/images/butt_music_next_down.png);}"
+        "QPushButton{border:none;background-color:transparent;background-image:url(:/images/butt_music_next_up.png);background-repeat:no-repeat;background-position:center;}"
+        "QPushButton:hover{background-color:transparent;background-image:url(:/images/butt_music_next_down.png);background-repeat:no-repeat;}"
+        "QPushButton:pressed{background-color:transparent;}"
     );
     connect(m_nextButton, &QPushButton::clicked, this, &ImageViewingWindow::onNextImage);
     m_nextButton->setFocusPolicy(Qt::NoFocus);
@@ -258,8 +261,9 @@ void ImageViewingWindow::setupUI()
     m_rotateButton = new QPushButton(btnWrap);
     m_rotateButton->setFixedSize(60, 60);
     m_rotateButton->setStyleSheet(
-        "QPushButton{border:none;background-image:url(:/images/butt_image_rotate_up.png);background-repeat:no-repeat;background-position:center;}"
-        "QPushButton:hover{background-image:url(:/images/butt_image_rotate_down.png);}"
+        "QPushButton{border:none;background-color:transparent;background-image:url(:/images/butt_image_rotate_up.png);background-repeat:no-repeat;background-position:center;}"
+        "QPushButton:hover{background-color:transparent;background-image:url(:/images/butt_image_rotate_down.png);background-repeat:no-repeat;}"
+        "QPushButton:pressed{background-color:transparent;}"
     );
     connect(m_rotateButton, &QPushButton::clicked, this, &ImageViewingWindow::onRotateImage);
     m_rotateButton->setFocusPolicy(Qt::NoFocus);
