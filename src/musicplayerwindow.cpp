@@ -267,9 +267,14 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
     // ── 功能按钮（收藏 1100,190,60×60；扫描 1100,324,60×60）─────────────
     QPushButton *collectBtn = new QPushButton(page);
     collectBtn->setGeometry(1100, 190, 60, 60);
+    collectBtn->setCheckable(true);
+    collectBtn->setAutoDefault(false);
+    collectBtn->setDefault(false);
     collectBtn->setStyleSheet(
         "QPushButton { border: none; background-image: url(:/images/butt_music_collection_up.png); background-repeat: no-repeat; }"
-        "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_collection_down.png); }");
+        "QPushButton:pressed { background-image: url(:/images/butt_music_collection_down.png); }"
+        "QPushButton:checked { background-image: url(:/images/butt_music_collection_down.png); }"
+        "QPushButton:checked:pressed { background-image: url(:/images/butt_music_collection_down.png); }");
     collectBtn->setCursor(Qt::PointingHandCursor);
 
     QPushButton *scanBtn = new QPushButton(page);
@@ -563,11 +568,12 @@ void MusicPlayerWindow::updateCollectButtonState()
     if (m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count())
         favorited = m_favoriteFiles.contains(m_musicFiles[m_currentIndex]);
 
-    m_collectButton->setStyleSheet(favorited
-        ? "QPushButton { border: none; background-image: url(:/images/butt_music_collection_down.png); background-repeat: no-repeat; }"
-          "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_collection_down.png); }"
-        : "QPushButton { border: none; background-image: url(:/images/butt_music_collection_up.png); background-repeat: no-repeat; }"
-          "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_collection_down.png); }");
+    m_collectButton->setChecked(favorited);
+    m_collectButton->setStyleSheet(
+        "QPushButton { border: none; background-image: url(:/images/butt_music_collection_up.png); background-repeat: no-repeat; }"
+        "QPushButton:pressed { background-image: url(:/images/butt_music_collection_down.png); }"
+        "QPushButton:checked { background-image: url(:/images/butt_music_collection_down.png); }"
+        "QPushButton:checked:pressed { background-image: url(:/images/butt_music_collection_down.png); }");
 }
 
 void MusicPlayerWindow::refreshFavoriteList()
@@ -595,6 +601,8 @@ void MusicPlayerWindow::onToggleCollect()
     m_favoriteFiles.removeDuplicates();
     saveFavoriteSongs();
     updateCollectButtonState();
+    if (m_listFavMode)
+        refreshFavoriteList();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
