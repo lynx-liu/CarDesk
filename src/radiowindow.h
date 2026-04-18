@@ -32,7 +32,6 @@ private slots:
     void onNext();
     void onToggleFavorite();
     void onToggleScan();
-    void onTogglePlay();
     void onSearch();
     void onOpenListDialog();
     void onScanTick();
@@ -65,7 +64,6 @@ private:
     QPushButton *m_fmTabBtn;
     QPushButton *m_amTabBtn;
     QPushButton *m_searchBtn;
-    QPushButton *m_playBtn;
     QPushButton *m_favoriteBtn;
     QPushButton *m_scanBtn;
     QListWidget *m_stationList;
@@ -82,8 +80,7 @@ private:
     int     m_tunerIndex;   // 当前使用的 V4L2 tuner 索引（0=FM/默认，部分驱动 1=AM）
     bool    m_favorite;
     bool    m_scanMode;     // 是否正在自动扫台（连续扫台模式）
-    bool    m_playing;
-
+    
     // ── 搜台（用户空间逐频点检测）────────────────────────────────────────
     bool    m_seekUpward;       // 搜台方向
     double  m_seekStartFreq;    // 本次搜台起始频率（用于绕圈检测）

@@ -140,7 +140,6 @@ RadioWindow::RadioWindow(QWidget *parent)
     , m_fmTabBtn(nullptr)
     , m_amTabBtn(nullptr)
     , m_searchBtn(nullptr)
-    , m_playBtn(nullptr)
     , m_favoriteBtn(nullptr)
     , m_scanBtn(nullptr)
     , m_stationList(nullptr)
@@ -153,7 +152,6 @@ RadioWindow::RadioWindow(QWidget *parent)
     , m_tunerIndex(0)
     , m_favorite(false)
     , m_scanMode(false)
-    , m_playing(false)
     , m_seekUpward(true)
     , m_seekStartFreq(95.9)
     , m_seekStepCount(0)
@@ -178,8 +176,6 @@ RadioWindow::RadioWindow(QWidget *parent)
 
     // 尝试打开硬件设备
     if (openDevice()) {
-        // 静音先关掉，等用户点播放再开
-        setMute(true);
         // tea685x 通过频率值自动切换 FM/AM，无需 VIDIOC_S_TUNER
         // 读回硬件当前频率；验证是否在当前频段有效范围内
         quint32 v = getFrequencyHz();
@@ -200,12 +196,17 @@ RadioWindow::RadioWindow(QWidget *parent)
     }
 
     updateFrequencyView();
+
+    // 进入收音机界面时自动切到收音机声道
+    T507SdkBridge::setAudioSource(true);
+    setMute(false);
+    // 开始播放后延迟300ms读取立体声状态
+    QTimer::singleShot(300, this, [this]() { updateTunerStatus(); });
 }
 
 RadioWindow::~RadioWindow()
 {
     stopScan();
-    if (m_playing) setMute(true);
     closeDevice();
     // 退出收音机：将 TM2313 功放输入切回媒体声道（IN2 = SoC DAC）
     T507SdkBridge::setAudioSource(false);
@@ -213,7 +214,6 @@ RadioWindow::~RadioWindow()
 
 void RadioWindow::closeEvent(QCloseEvent *event) {
     stopScan();
-    if (m_playing) setMute(true);
     closeDevice();
     // 退出收音机：将 TM2313 功放输入切回媒体声道（IN2 = SoC DAC）
     T507SdkBridge::setAudioSource(false);
@@ -469,6 +469,7 @@ void RadioWindow::updateTunerStatus()
 bool RadioWindow::startAutoSeek(bool upward)
 {
     if (m_fd < 0) return false;
+    setMute(true);           // 开始搜台时静音
     m_scanTimer->stop();      // 停止旧的搜台（如果有）
     m_seekUpward    = upward;
     m_seekStartFreq = m_frequency;
@@ -479,6 +480,7 @@ bool RadioWindow::startAutoSeek(bool upward)
 
 void RadioWindow::stopScan()
 {
+    setMute(false);
     if (m_scanTimer) m_scanTimer->stop();
     m_scanMode      = false;
     m_seekStepCount = 0;
@@ -540,7 +542,7 @@ void RadioWindow::setupUI() {
         lay->setSpacing(0);
         lay->addStretch();
         m_freqLabel = new QLabel(freqRow);
-        m_freqLabel->setStyleSheet("color:#fff;font-size:120px;background:transparent;");
+        m_freqLabel->setStyleSheet("color:#fff;font-size:108px;background:transparent;");
         m_freqLabel->setAlignment(Qt::AlignRight | Qt::AlignBottom);
         lay->addWidget(m_freqLabel);
         lay->addSpacing(21);   // CSS margin-left:21px on unit span
@@ -652,7 +654,7 @@ void RadioWindow::setupUI() {
     connect(listBtn, &QPushButton::clicked, this, &RadioWindow::onOpenListDialog);
 
     m_searchBtn = new QPushButton(btnRow);
-    m_searchBtn->setGeometry(180, 22, 60, 60);
+    m_searchBtn->setGeometry(248, 22, 60, 60);
     m_searchBtn->setStyleSheet(
         "QPushButton{border:none;background-image:url(:/images/butt_radio_search_up.png);}"
         "QPushButton:hover{background-image:url(:/images/butt_radio_search_down.png);}");
@@ -660,18 +662,8 @@ void RadioWindow::setupUI() {
     m_searchBtn->setFocusPolicy(Qt::NoFocus);
     connect(m_searchBtn, &QPushButton::clicked, this, &RadioWindow::onSearch);
 
-    m_playBtn = new QPushButton(btnRow);
-    m_playBtn->setGeometry(360, 10, 84, 84);
-    m_playBtn->setCursor(Qt::PointingHandCursor);
-    m_playBtn->setStyleSheet(
-        "QPushButton{border:none;background-image:url(:/images/butt_music_play_up.png);}"
-        "QPushButton:hover{background-image:url(:/images/butt_music_play_down.png);}"
-        "QPushButton:pressed{background-image:url(:/images/butt_music_play_down.png);}");
-    m_playBtn->setFocusPolicy(Qt::NoFocus);
-    connect(m_playBtn, &QPushButton::clicked, this, &RadioWindow::onTogglePlay);
-
     m_favoriteBtn = new QPushButton(btnRow);
-    m_favoriteBtn->setGeometry(564, 22, 60, 60);
+    m_favoriteBtn->setGeometry(496, 22, 60, 60);
     m_favoriteBtn->setCursor(Qt::PointingHandCursor);
     m_favoriteBtn->setFocusPolicy(Qt::NoFocus);
     connect(m_favoriteBtn, &QPushButton::clicked, this, &RadioWindow::onToggleFavorite);
@@ -882,6 +874,7 @@ void RadioWindow::onScanTick() {
                         }
                     });
                 }
+                setMute(false);  // 停止搜台后取消静音
                 return;
             }
         }
@@ -911,23 +904,6 @@ void RadioWindow::onScanTick() {
     if (m_freqLabel)
         m_freqLabel->setText(m_isFM ? QString::number(m_frequency, 'f', 1)
                                     : QString::number(m_frequency, 'f', 0));
-}
-
-void RadioWindow::onTogglePlay() {
-    m_playing = !m_playing;
-    setMute(!m_playing);
-    if (m_playBtn) {
-        m_playBtn->setStyleSheet(m_playing
-            ? "QPushButton{border:none;background-image:url(:/images/butt_music_stop_up.png);}"
-              "QPushButton:hover{background-image:url(:/images/butt_music_stop_down.png);}"
-              "QPushButton:pressed{background-image:url(:/images/butt_music_stop_down.png);}"
-            : "QPushButton{border:none;background-image:url(:/images/butt_music_play_up.png);}"
-              "QPushButton:hover{background-image:url(:/images/butt_music_play_down.png);}"
-              "QPushButton:pressed{background-image:url(:/images/butt_music_play_down.png);}"
-        );
-    }
-    // 开始播放后延迟300ms读取立体声状态
-    if (m_playing) QTimer::singleShot(300, this, [this]() { updateTunerStatus(); });
 }
 
 void RadioWindow::onSearch() {
