@@ -128,17 +128,16 @@ void TopBarRightWidget::onVolumeBtnClicked()
     }
     // Broadcast change globally so other TopBarRightWidget instances stay in sync.
     if (m_isMuted) {
-        // save previous level
         const QVariant cur = qApp->property("appVolumeLevel");
         const int curLv = cur.isValid() ? cur.toInt() : 10;
         qApp->setProperty("appVolumePrevLevel", curLv);
         qApp->setProperty("appVolumeLevel", 0);
-        AppSignals::instance()->volumeLevelChanged(0);
+        AppSignals::runAmixer({"sset", "LINEOUT volume", QString::number(0) + "%"}, this);
     } else {
         const QVariant prev = qApp->property("appVolumePrevLevel");
         const int restore = prev.isValid() ? prev.toInt() : 10;
         qApp->setProperty("appVolumeLevel", restore);
-        AppSignals::instance()->volumeLevelChanged(restore);
+        AppSignals::runAmixer({"sset", "LINEOUT volume", QString::number(restore * 10) + "%"}, this);
     }
 }
 
