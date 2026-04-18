@@ -492,10 +492,17 @@ bool RadioWindow::startAutoSeek(bool upward)
 
 void RadioWindow::stopScan()
 {
-    setMute(false);
-    if (m_scanTimer) m_scanTimer->stop();
     m_scanMode      = false;
+    if (m_scanTimer)
+        m_scanTimer->stop();
+
+    if (m_scanBtn) {
+        m_scanBtn->setChecked(false);
+        m_scanBtn->setDown(false);
+    }
     m_seekStepCount = 0;
+    setMute(false);
+    updateFrequencyView();
 }
 
 void RadioWindow::setupUI() {
@@ -660,18 +667,22 @@ void RadioWindow::setupUI() {
     listBtn->setGeometry(0, 22, 60, 60);
     listBtn->setStyleSheet(
         "QPushButton{border:none;background-image:url(:/images/butt_radio_list_up.png);}"
-        "QPushButton:hover{background-image:url(:/images/butt_radio_list_down.png);}");
+        "QPushButton:pressed{background-image:url(:/images/butt_radio_list_down.png);}");
     listBtn->setCursor(Qt::PointingHandCursor);
     listBtn->setFocusPolicy(Qt::NoFocus);
+    listBtn->setAutoDefault(false);
+    listBtn->setDefault(false);
     connect(listBtn, &QPushButton::clicked, this, &RadioWindow::onOpenListDialog);
 
     m_searchBtn = new QPushButton(btnRow);
     m_searchBtn->setGeometry(248, 22, 60, 60);
     m_searchBtn->setStyleSheet(
         "QPushButton{border:none;background-image:url(:/images/butt_radio_search_up.png);}"
-        "QPushButton:hover{background-image:url(:/images/butt_radio_search_down.png);}");
+        "QPushButton:pressed{background-image:url(:/images/butt_radio_search_down.png);}");
     m_searchBtn->setCursor(Qt::PointingHandCursor);
     m_searchBtn->setFocusPolicy(Qt::NoFocus);
+    m_searchBtn->setAutoDefault(false);
+    m_searchBtn->setDefault(false);
     connect(m_searchBtn, &QPushButton::clicked, this, &RadioWindow::onSearch);
 
     m_favoriteBtn = new QPushButton(btnRow);
@@ -684,6 +695,10 @@ void RadioWindow::setupUI() {
     m_scanBtn->setGeometry(744, 22, 60, 60);
     m_scanBtn->setCursor(Qt::PointingHandCursor);
     m_scanBtn->setFocusPolicy(Qt::NoFocus);
+    m_scanBtn->setCheckable(true);
+    m_scanBtn->setAutoDefault(false);
+    m_scanBtn->setDefault(false);
+    m_scanBtn->setChecked(false);
     connect(m_scanBtn, &QPushButton::clicked, this, &RadioWindow::onToggleScan);
 
     // ── 电台列表 (81,582,1118×118) ─────────────────────────────────────────
@@ -787,9 +802,13 @@ void RadioWindow::updateFrequencyView() {
               "QPushButton:hover{background-image:url(:/images/butt_music_collection_down.png);}");
     }
     if (m_scanBtn) {
+        m_scanBtn->setChecked(m_scanMode);
         m_scanBtn->setStyleSheet(m_scanMode
-            ? "QPushButton{border:none;background-image:url(:/images/butt_music_scan_down.png);}"
-            : "QPushButton{border:none;background-image:url(:/images/butt_music_scan_up.png);} QPushButton:hover{background-image:url(:/images/butt_music_scan_down.png);}"
+            ? "QPushButton{border:none;background-image:url(:/images/butt_music_scan_down.png);}" 
+              "QPushButton:pressed{background-image:url(:/images/butt_music_scan_down.png);}" 
+              "QPushButton:checked{background-image:url(:/images/butt_music_scan_down.png);}" 
+            : "QPushButton{border:none;background-image:url(:/images/butt_music_scan_up.png);}" 
+              "QPushButton:pressed{background-image:url(:/images/butt_music_scan_down.png);}" 
         );
     }
 }
@@ -851,8 +870,8 @@ void RadioWindow::onToggleScan() {
         // 开始连续自动扫台（用户空间逐频点）
         if (m_fd >= 0) startAutoSeek(true);
     } else {
-        m_scanTimer->stop();
-        m_seekStepCount = 0;
+        // 停止扫台
+        stopScan();
     }
     updateFrequencyView();
 }
@@ -881,6 +900,7 @@ void RadioWindow::onScanTick() {
             if (static_cast<quint32>(tuner.signal) > threshold) {
                 // 找到电台！
                 m_scanTimer->stop();
+                setMute(false);  // 扫到台了先取消静音
                 updateFrequencyView();
                 if (m_scanMode) {
                     // 连续扫台：停留1.5s后继续
@@ -889,10 +909,10 @@ void RadioWindow::onScanTick() {
                             m_seekStepCount = 0;
                             m_seekStartFreq = m_frequency;
                             m_scanTimer->start();
+                            setMute(true); // 继续搜台时再次静音
                         }
                     });
                 }
-                setMute(false);  // 停止搜台后取消静音
                 return;
             }
         }
@@ -900,8 +920,7 @@ void RadioWindow::onScanTick() {
 
     // ② 检测是否已绕一圈
     if (m_seekStepCount >= maxSteps) {
-        m_scanTimer->stop();
-        m_scanMode = false;
+        stopScan();
         updateFrequencyView();
         return;
     }
