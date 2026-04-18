@@ -12,6 +12,7 @@
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QSize>
 #include <QStackedWidget>
 #include <QTransform>
@@ -167,6 +168,7 @@ void ImageViewingWindow::setupUI()
     m_thumbnailList->setGridSize(QSize(188, 178));
     m_thumbnailList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_thumbnailList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_thumbnailList->setFixedWidth(960);
     m_thumbnailList->setFixedHeight(356);
     m_thumbnailList->setItemDelegate(new ImageListItemDelegate(m_thumbnailList));
     m_thumbnailList->setStyleSheet(
@@ -174,6 +176,14 @@ void ImageViewingWindow::setupUI()
         "QListWidget::item{border:none;color:#eaf3ff;font-size:20px;text-align:center;}"
         "QListWidget::item:selected{color:#00faff;}"
         "QListWidget::item:hover{color:#dff9ff;}"
+    );
+    m_thumbnailList->verticalScrollBar()->setStyleSheet(
+        "QScrollBar:vertical{width:12px;background:transparent;border-radius:6px;margin:0; padding:0;}"
+        "QScrollBar::groove:vertical{background:rgba(0,104,255,0.10);border-radius:3px;margin:0px 3px; padding:0;}"
+        "QScrollBar::handle:vertical{background:#0068FF;border-radius:3px;min-height:60px;margin:3px 3px;}"
+        "QScrollBar::handle:vertical:hover{background:#00faff;}"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical{height:0;background:none;border:none;}"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical{background:transparent;}"
     );
 
     m_detailLabel = new QLabel(listPage);
