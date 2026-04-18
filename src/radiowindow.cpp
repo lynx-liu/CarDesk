@@ -689,6 +689,9 @@ void RadioWindow::setupUI() {
     m_favoriteBtn->setGeometry(496, 22, 60, 60);
     m_favoriteBtn->setCursor(Qt::PointingHandCursor);
     m_favoriteBtn->setFocusPolicy(Qt::NoFocus);
+    m_favoriteBtn->setCheckable(true);
+    m_favoriteBtn->setAutoDefault(false);
+    m_favoriteBtn->setDefault(false);
     connect(m_favoriteBtn, &QPushButton::clicked, this, &RadioWindow::onToggleFavorite);
 
     m_scanBtn = new QPushButton(btnRow);
@@ -796,10 +799,13 @@ void RadioWindow::updateFrequencyView() {
     }
     if (m_favoriteBtn) {
         // m_favorite=true → 已收藏（_down状态常亮）；false → 未收藏（_up 普通，悬停显 _down）
+        m_favoriteBtn->setChecked(m_favorite);
         m_favoriteBtn->setStyleSheet(m_favorite
-            ? "QPushButton{border:none;background-image:url(:/images/butt_music_collection_down.png);}"
-            : "QPushButton{border:none;background-image:url(:/images/butt_music_collection_up.png);}"
-              "QPushButton:hover{background-image:url(:/images/butt_music_collection_down.png);}");
+            ? "QPushButton{border:none;background-image:url(:/images/butt_music_collection_down.png);}" 
+              "QPushButton:checked{background-image:url(:/images/butt_music_collection_down.png);}" 
+            : "QPushButton{border:none;background-image:url(:/images/butt_music_collection_up.png);}" 
+              "QPushButton:pressed{background-image:url(:/images/butt_music_collection_down.png);}" 
+        );
     }
     if (m_scanBtn) {
         m_scanBtn->setChecked(m_scanMode);
@@ -941,6 +947,7 @@ void RadioWindow::onScanTick() {
     if (m_freqLabel)
         m_freqLabel->setText(m_isFM ? QString::number(m_frequency, 'f', 1)
                                     : QString::number(m_frequency, 'f', 0));
+    updateFrequencyView();
 }
 
 void RadioWindow::onSearch() {
