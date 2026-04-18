@@ -675,10 +675,28 @@ QWidget *SystemSettingWindow::createDisplayPage()
     auto *modeRowLayout = new QHBoxLayout(modeRow);
     modeRowLayout->setContentsMargins(0, 0, 0, 0);
     modeRowLayout->setSpacing(2);
-    auto *dayBtn = makeModeButton(QStringLiteral("白天"), true,
+    const int actualSlider = Backlight::backlightToSlider(Backlight::get());
+    const int kDefaultDay   = 100;
+    const int kDefaultNight = 20;
+    QSettings settings;
+    const int daySlider   = settings.value("brightness/day", kDefaultDay).toInt();
+    const int nightSlider = settings.value("brightness/night", kDefaultNight).toInt();
+    const int autoSlider  = settings.value("brightness/auto", actualSlider).toInt();
+    int savedMode = settings.value("brightness/mode", -1).toInt();
+    if (savedMode < 0) {
+        if (actualSlider == daySlider) savedMode = 0;
+        else if (actualSlider == nightSlider) savedMode = 1;
+        else savedMode = 2;
+    }
+    const bool initDay   = (savedMode == 0);
+    const bool initNight = (savedMode == 1);
+    const bool initAuto  = (savedMode == 2);
+    const int initSliderVal = initDay ? daySlider : (initNight ? nightSlider : autoSlider);
+
+    auto *dayBtn = makeModeButton(QStringLiteral("白天"), initDay,
                                   "QPushButton{border-top-left-radius:22px;border-bottom-left-radius:22px;border-top-right-radius:0;border-bottom-right-radius:0;}");
-    auto *nightBtn = makeModeButton(QStringLiteral("夜晚"), false, "QPushButton{border-radius:0;}");
-    auto *autoBtn = makeModeButton(QStringLiteral("自动"), false,
+    auto *nightBtn = makeModeButton(QStringLiteral("夜晚"), initNight, "QPushButton{border-radius:0;}");
+    auto *autoBtn = makeModeButton(QStringLiteral("自动"), initAuto,
                                    "QPushButton{border-top-left-radius:0;border-bottom-left-radius:0;border-top-right-radius:22px;border-bottom-right-radius:22px;}");
     auto *modeGroup = new QButtonGroup(page);
     modeGroup->setExclusive(true);
@@ -697,7 +715,6 @@ QWidget *SystemSettingWindow::createDisplayPage()
     auto *lowIcon = new QLabel(brightnessRow);
     lowIcon->setFixedSize(24, 24);
     lowIcon->setPixmap(QPixmap(":/images/pict_brightness_low.png").scaled(24, 24, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    const int initSliderVal = Backlight::backlightToSlider(Backlight::get());
     auto *slider = new QSlider(Qt::Horizontal, brightnessRow);
     slider->setRange(0, 100);
     slider->setValue(initSliderVal);
@@ -714,17 +731,29 @@ QWidget *SystemSettingWindow::createDisplayPage()
     tips->setFixedSize(48, 38);
     tips->setAlignment(Qt::AlignCenter);
     tips->setStyleSheet("QLabel{background:url(:/images/pict_brightness_tips.png);font-size:24px;color:#fff;}");
-    connect(slider, &QSlider::valueChanged, tips, [tips](int v) {
+    auto saveModeValue = [dayBtn, nightBtn, autoBtn](int v) {
+        QSettings settings;
+        if (dayBtn->isChecked()) {
+            settings.setValue("brightness/day", v);
+            settings.setValue("brightness/mode", 0);
+        } else if (nightBtn->isChecked()) {
+            settings.setValue("brightness/night", v);
+            settings.setValue("brightness/mode", 1);
+        } else if (autoBtn->isChecked()) {
+            settings.setValue("brightness/auto", v);
+            settings.setValue("brightness/mode", 2);
+        }
+        settings.sync();
+    };
+
+    connect(slider, &QSlider::valueChanged, tips, [tips, saveModeValue](int v) {
         tips->setText(QString::number(v));
         Backlight::set(Backlight::sliderToBacklight(v));
+        saveModeValue(v);
     });
-    // 亮度模式预设（slider 0–100）：白天=100 / 夜晚=20 / 自动=打开时实测值
-    const int kDaySlider   = 100;
-    const int kNightSlider = 20;
-    const int kAutoSlider  = initSliderVal;
-    connect(dayBtn,   &QPushButton::toggled, slider, [slider, kDaySlider  ](bool on){ if (on) slider->setValue(kDaySlider);   });
-    connect(nightBtn, &QPushButton::toggled, slider, [slider, kNightSlider](bool on){ if (on) slider->setValue(kNightSlider); });
-    connect(autoBtn,  &QPushButton::toggled, slider, [slider, kAutoSlider ](bool on){ if (on) slider->setValue(kAutoSlider);  });
+    connect(dayBtn,   &QPushButton::toggled, this, [slider, daySlider](bool on){ if (on) slider->setValue(daySlider); });
+    connect(nightBtn, &QPushButton::toggled, this, [slider, nightSlider](bool on){ if (on) slider->setValue(nightSlider); });
+    connect(autoBtn,  &QPushButton::toggled, this, [slider, autoSlider ](bool on){ if (on) slider->setValue(autoSlider);  });
 
     brightnessLayout->addWidget(lowIcon);
     brightnessLayout->addWidget(slider, 1);
