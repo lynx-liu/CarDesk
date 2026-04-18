@@ -824,7 +824,6 @@ QWidget *SystemSettingWindow::createSoundPage()
 
     auto *volumeRow = new QWidget(page);
     volumeRow->setFixedHeight(122);
-    volumeRow->setStyleSheet("QWidget{border-bottom:2px solid rgba(255,255,255,0.1);}");
     auto *volumeLayout = new QHBoxLayout(volumeRow);
     volumeLayout->setContentsMargins(0, 30, 0, 30);
     volumeLayout->setSpacing(16);
@@ -882,9 +881,14 @@ QWidget *SystemSettingWindow::createSoundPage()
     vRightLayout->addWidget(tips);
     volumeLayout->addWidget(vRight, 1);
 
+    auto *volumeDivider = new QFrame(page);
+    volumeDivider->setFixedHeight(2);
+    volumeDivider->setStyleSheet("QFrame{background:rgba(255,255,255,0.1);border:none;}");
+    layout->addWidget(volumeRow);
+    layout->addWidget(volumeDivider);
+
     auto *touchRow = new QWidget(page);
     touchRow->setFixedHeight(98);
-    touchRow->setStyleSheet("QWidget{border-bottom:2px solid rgba(255,255,255,0.1);}");
     auto *touchLayout = new QHBoxLayout(touchRow);
     touchLayout->setContentsMargins(0, 24, 0, 24);
     touchLayout->setSpacing(16);
@@ -917,6 +921,12 @@ QWidget *SystemSettingWindow::createSoundPage()
         tabLayout->addWidget(btn);
     }
     touchLayout->addWidget(tabWrap, 1);
+
+    auto *touchDivider = new QFrame(page);
+    touchDivider->setFixedHeight(2);
+    touchDivider->setStyleSheet("QFrame{background:rgba(255,255,255,0.1);border:none;}");
+    layout->addWidget(touchRow);
+    layout->addWidget(touchDivider);
 
     auto *fieldRow = new QWidget(page);
     fieldRow->setFixedHeight(158);
@@ -1021,9 +1031,13 @@ QWidget *SystemSettingWindow::createSoundPage()
     });
     fieldLayout->addWidget(fieldBtn);
 
-    layout->addWidget(volumeRow);
-    layout->addWidget(touchRow);
     layout->addWidget(fieldRow);
+
+    auto *fieldDivider = new QFrame(page);
+    fieldDivider->setFixedHeight(2);
+    fieldDivider->setStyleSheet("QFrame{background:rgba(255,255,255,0.1);border:none;}");
+    layout->addWidget(fieldDivider);
+
     layout->addStretch();
     return page;
 }
