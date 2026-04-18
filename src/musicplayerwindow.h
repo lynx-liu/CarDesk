@@ -122,6 +122,7 @@ private slots:
     void onBackFromListPage();
     void onListSongsTabClicked();
     void onListFavTabClicked();
+    void onToggleCollect();
 
     void onMediaPositionChanged(qint64 position);
     void onMediaDurationChanged(qint64 duration);
@@ -138,6 +139,9 @@ private:
     void setupPlayerPage(QWidget *page);
     void setupListPage(QWidget *page);
     void loadDirectory(const QString &path);
+    void loadFavoriteSongs();
+    void saveFavoriteSongs();
+    void refreshFavoriteList();
     void scanFlatPlaylist();
     void playMusic(int index);
     void releaseAudioPlayer();
@@ -145,6 +149,7 @@ private:
     void updateProgressBar(qint64 posMs, qint64 durMs);
     void setPlayButtonState(bool playing);
     void refreshPlaylistWidget();
+    void updateCollectButtonState();
     static QString formatTime(qint64 ms);
 
     // ── Stacked pages ──
@@ -184,8 +189,11 @@ private:
     QPushButton *m_listFavTab         = nullptr;
 
     // ── 状态 ──
+    QPushButton *m_collectButton      = nullptr;
+    bool        m_listFavMode         = false;
     int         m_currentIndex       = -1;
     QStringList m_musicFiles;                    // 当前播放列表（平铺）
+    QStringList m_favoriteFiles;                // 由播放页添加到收藏的音频文件
     bool        m_isUsbMode          = true;
     QString     m_currentBrowsePath;             // 列表页当前浏览路径
     const QStringList m_audioExtensions = {

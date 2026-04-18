@@ -11,6 +11,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QDebug>
+#include <QSettings>
 #include <QScreen>
 #include <QApplication>
 #include <QMouseEvent>
@@ -141,6 +142,8 @@ MusicPlayerWindow::MusicPlayerWindow(QWidget *parent)
     // 初始扫描文件
     scanFlatPlaylist();
     refreshPlaylistWidget();
+    loadFavoriteSongs();
+    updateCollectButtonState();
 
     qDebug() << "MusicPlayerWindow created, found" << m_musicFiles.count() << "audio files";
 }
@@ -275,6 +278,8 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
         "QPushButton { border: none; background-image: url(:/images/butt_music_scan_up.png); background-repeat: no-repeat; }"
         "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_scan_down.png); }");
     scanBtn->setCursor(Qt::PointingHandCursor);
+    m_collectButton = collectBtn;
+    connect(collectBtn, &QPushButton::clicked, this, &MusicPlayerWindow::onToggleCollect);
     connect(scanBtn, &QPushButton::clicked, this, &MusicPlayerWindow::onRescan);
 
     // ── 进度区域 ─────────────────────────────────────────────────────────
@@ -539,6 +544,59 @@ void MusicPlayerWindow::loadDirectory(const QString &path)
     qDebug() << "MusicList: loaded" << m_musicListWidget->count() << "items from" << path;
 }
 
+void MusicPlayerWindow::loadFavoriteSongs()
+{
+    QSettings settings;
+    m_favoriteFiles = settings.value("music/favorites").toStringList();
+}
+
+void MusicPlayerWindow::saveFavoriteSongs()
+{
+    QSettings settings;
+    settings.setValue("music/favorites", m_favoriteFiles);
+}
+
+void MusicPlayerWindow::updateCollectButtonState()
+{
+    if (!m_collectButton) return;
+    bool favorited = false;
+    if (m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count())
+        favorited = m_favoriteFiles.contains(m_musicFiles[m_currentIndex]);
+
+    m_collectButton->setStyleSheet(favorited
+        ? "QPushButton { border: none; background-image: url(:/images/butt_music_collection_down.png); background-repeat: no-repeat; }"
+          "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_collection_down.png); }"
+        : "QPushButton { border: none; background-image: url(:/images/butt_music_collection_up.png); background-repeat: no-repeat; }"
+          "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_collection_down.png); }");
+}
+
+void MusicPlayerWindow::refreshFavoriteList()
+{
+    if (!m_musicListWidget) return;
+    m_musicListWidget->clear();
+    for (const QString &filePath : qAsConst(m_favoriteFiles)) {
+        QFileInfo fi(filePath);
+        QListWidgetItem *item = new QListWidgetItem(fi.fileName(), m_musicListWidget);
+        item->setData(Qt::UserRole, fi.absoluteFilePath());
+        item->setData(Qt::UserRole + 1, false);
+        m_musicListWidget->addItem(item);
+    }
+    m_listPathLabel->setText("我的收藏");
+}
+
+void MusicPlayerWindow::onToggleCollect()
+{
+    if (m_currentIndex < 0 || m_currentIndex >= m_musicFiles.count()) return;
+    const QString path = m_musicFiles[m_currentIndex];
+    if (m_favoriteFiles.contains(path))
+        m_favoriteFiles.removeAll(path);
+    else
+        m_favoriteFiles << path;
+    m_favoriteFiles.removeDuplicates();
+    saveFavoriteSongs();
+    updateCollectButtonState();
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // 递归扫描平铺播放列表（播放页用）
 // ══════════════════════════════════════════════════════════════════════════════
@@ -601,6 +659,7 @@ void MusicPlayerWindow::playMusic(int index)
     updateNowPlaying();
     if (m_playlistWidget)
         m_playlistWidget->setCurrentRow(m_currentIndex);
+    updateCollectButtonState();
 
     const QString musicPath = m_musicFiles[m_currentIndex];
     qDebug() << "MusicPlayer: playing" << musicPath;
@@ -727,22 +786,32 @@ void MusicPlayerWindow::onMusicListItemClicked(QListWidgetItem *item)
         // 进入子目录
         loadDirectory(itemPath);
     } else {
-        // 播放文件：以当前目录内所有音频组建播放列表，切换到播放页
-        QDir dir(m_currentBrowsePath);
-        dir.setFilter(QDir::Files | QDir::NoDotAndDotDot | QDir::NoSymLinks);
-        dir.setSorting(QDir::Name);
+        // 播放文件：收藏页和目录页分别构建播放列表
         QStringList newPlaylist;
         int playIndex = 0;
-        for (const QFileInfo &fi : dir.entryInfoList()) {
-            if (m_audioExtensions.contains(fi.suffix().toLower())) {
-                if (fi.absoluteFilePath() == itemPath)
-                    playIndex = newPlaylist.count();
-                newPlaylist << fi.absoluteFilePath();
+        if (m_listFavMode) {
+            newPlaylist = m_favoriteFiles;
+            for (int i = 0; i < newPlaylist.count(); ++i) {
+                if (newPlaylist[i] == itemPath) {
+                    playIndex = i;
+                    break;
+                }
             }
-        }
-        if (newPlaylist.isEmpty()) {
-            newPlaylist << itemPath;
-            playIndex = 0;
+        } else {
+            QDir dir(m_currentBrowsePath);
+            dir.setFilter(QDir::Files | QDir::NoDotAndDotDot | QDir::NoSymLinks);
+            dir.setSorting(QDir::Name);
+            for (const QFileInfo &fi : dir.entryInfoList()) {
+                if (m_audioExtensions.contains(fi.suffix().toLower())) {
+                    if (fi.absoluteFilePath() == itemPath)
+                        playIndex = newPlaylist.count();
+                    newPlaylist << fi.absoluteFilePath();
+                }
+            }
+            if (newPlaylist.isEmpty()) {
+                newPlaylist << itemPath;
+                playIndex = 0;
+            }
         }
         m_musicFiles = newPlaylist;
         refreshPlaylistWidget();
@@ -798,14 +867,22 @@ void MusicPlayerWindow::onRescan()
 
 void MusicPlayerWindow::onOpenListPage()
 {
-    // 打开列表页时，加载当前浏览路径（默认 /mnt）
-    loadDirectory(m_currentBrowsePath);
+    // 打开列表页时，根据当前 tab 决定显示本地目录或收藏列表
+    if (m_listFavMode)
+        refreshFavoriteList();
+    else
+        loadDirectory(m_currentBrowsePath);
     m_stackedWidget->setCurrentIndex(kPageList);
 }
 
 void MusicPlayerWindow::onBackFromListPage()
 {
-    // 如果在子目录，先返回上一级；如果已经在根，返回播放页
+    // 如果当前是收藏页，直接返回播放页；否则在目录页返回上一级
+    if (m_listFavMode) {
+        m_stackedWidget->setCurrentIndex(kPagePlayer);
+        return;
+    }
+
     QDir dir(m_currentBrowsePath);
     if (dir.cdUp() && dir.absolutePath() != m_currentBrowsePath &&
         m_currentBrowsePath != "/mnt" && m_currentBrowsePath != "/") {
@@ -818,6 +895,7 @@ void MusicPlayerWindow::onBackFromListPage()
 
 void MusicPlayerWindow::onListSongsTabClicked()
 {
+    m_listFavMode = false;
     m_listSongsTab->setStyleSheet(
         "QPushButton { border: none; background: url(:/images/butt_tab_right_on.png); color: #fff; font-size: 28px; }"
         "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_on.png); color: #fff; font-size: 28px; }");
@@ -829,15 +907,14 @@ void MusicPlayerWindow::onListSongsTabClicked()
 
 void MusicPlayerWindow::onListFavTabClicked()
 {
+    m_listFavMode = true;
     m_listFavTab->setStyleSheet(
         "QPushButton { border: none; background: url(:/images/butt_tab_left_on.png); color: #fff; font-size: 28px; }"
         "QPushButton:pressed { border: none; background: url(:/images/butt_tab_left_on.png); color: #fff; font-size: 28px; }");
     m_listSongsTab->setStyleSheet(
         "QPushButton { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }"
         "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }");
-    // 收藏列表（暂为空）
-    m_musicListWidget->clear();
-    m_listPathLabel->setText("我的收藏");
+    refreshFavoriteList();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
