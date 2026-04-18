@@ -787,7 +787,6 @@ QWidget *SystemSettingWindow::createDisplayPage()
         const bool init24h = qApp->property("appClock24h").toBool();
         auto *clockRow = new QWidget(page);
         clockRow->setFixedHeight(98);
-        clockRow->setStyleSheet("QWidget{border-bottom:2px solid rgba(255,255,255,0.1);}");
         auto *h = new QHBoxLayout(clockRow);
         h->setContentsMargins(0, 27, 0, 27);
         h->setSpacing(16);
