@@ -185,16 +185,19 @@ RadioWindow::RadioWindow(QWidget *parent)
     // 尝试打开硬件设备
     if (openDevice()) {
         // tea685x 通过频率值自动切换 FM/AM，无需 VIDIOC_S_TUNER
-        // 读回硬件当前频率；验证是否在当前频段有效范围内
+        // 读回硬件当前频率；根据返回值判断驱动当前是 FM 还是 AM 并设置显示
         quint32 v = getFrequencyHz();
         if (v > 0) {
-            double freq = m_isFM ? v4l2ToMhz(v) : v4l2ToKhz(v);
-            const double minFreq = m_isFM ? 87.0 : 522.0;
-            const double maxFreq = m_isFM ? 108.0 : 1710.0;
-            if (freq >= minFreq && freq <= maxFreq) {
-                m_frequency = freq;   // 驱动频率与当前频段一致，直接使用
+            const double mhz = v4l2ToMhz(v);
+            const double khz = v4l2ToKhz(v);
+            if (mhz >= 87.0 && mhz <= 108.0) {
+                m_isFM = true;
+                m_frequency = mhz;
+            } else if (khz >= 522.0 && khz <= 1710.0) {
+                m_isFM = false;
+                m_frequency = khz;
             } else {
-                // 驱动处于另一频段，强制写入目标频段默认频率（驱动自动切换）
+                // 未识别频率，保持当前 m_isFM 并写回默认频率到硬件
                 setFrequencyHz(m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency));
             }
         } else {
