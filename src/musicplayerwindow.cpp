@@ -24,6 +24,8 @@
 // T507 SDK 全局音频资源（进程内单例，只创建一次）
 // ══════════════════════════════════════════════════════════════════════════════
 #ifdef CAR_DESK_USE_T507_SDK
+extern "C" void log_set_level(unsigned level);
+static const unsigned kCdxLogLevelWarning = 5;
 
 static XPlayer   *g_sdkMusicPlayer    = nullptr;
 static SoundCtrl *g_sdkMusicSoundCtrl = nullptr;
@@ -49,6 +51,7 @@ static bool ensureSdkMusicResourcesCreated()
 {
     if (g_sdkMusicPlayer) return true;
 
+    log_set_level(kCdxLogLevelWarning);
     g_sdkMusicSoundCtrl = SoundDeviceCreate();
     if (!g_sdkMusicSoundCtrl) {
         qWarning() << "MusicSDK: SoundDeviceCreate failed";
@@ -194,7 +197,7 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
     // ── 顶部栏 (0,0,1280,82 topbar.png) ──────────────────────────────────
     QWidget *topBar = new QWidget(page);
     topBar->setGeometry(0, 0, 1280, 82);
-    topBar->setStyleSheet("background: url(:/images/topbar.png) no-repeat; background-size: cover;");
+    topBar->setStyleSheet("background: url(:/images/topbar.png) no-repeat;");
 
     // HOME 按钮 (12,12,48,48)
     m_homeButton = new QPushButton(topBar);
@@ -427,7 +430,7 @@ void MusicPlayerWindow::setupListPage(QWidget *page)
     // ── 顶部栏（与播放页完全相同）────────────────────────────────────────
     QWidget *topBar = new QWidget(page);
     topBar->setGeometry(0, 0, 1280, 82);
-    topBar->setStyleSheet("background: url(:/images/topbar.png) no-repeat; background-size: cover;");
+    topBar->setStyleSheet("background: url(:/images/topbar.png) no-repeat;");
 
     // HOME 按钮（标题栏内 x:12, y:17）
     auto *listTopHomeBtn = new QPushButton(topBar);
