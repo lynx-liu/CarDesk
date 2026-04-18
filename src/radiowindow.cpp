@@ -370,18 +370,6 @@ bool RadioWindow::openDevice()
             qDebug() << "RadioWindow: V4L2_CID_BAND_STOP_FILTER not supported";
     }
 
-    // ── 探测额外 tuner 索引（部分驱动将 AM 暴露为 tuner[1]）────────────────────
-    for (int ti = 1; ti <= 3; ++ti) {
-        struct v4l2_tuner t2;
-        memset(&t2, 0, sizeof(t2));
-        t2.index = static_cast<__u32>(ti);
-        t2.type  = V4L2_TUNER_RADIO;
-        if (::ioctl(m_fd, VIDIOC_G_TUNER, &t2) != 0) break;
-        qDebug("RadioWindow: tuner[%d] '%s' cap=0x%X range=%u-%u",
-               ti, reinterpret_cast<const char*>(t2.name),
-               t2.capability, t2.rangelow, t2.rangehigh);
-    }
-
     // ── 探测频段列表（VIDIOC_ENUM_FREQ_BANDS，Linux ≥ 3.14）────────────────────
     for (int bi = 0; bi <= 7; ++bi) {
         struct v4l2_frequency_band fb;
@@ -395,28 +383,6 @@ bool RadioWindow::openDevice()
         }
         qDebug("RadioWindow: freq_band[%d] mod=0x%X range=%u-%u cap=0x%X",
                bi, fb.modulation, fb.rangelow, fb.rangehigh, fb.capability);
-    }
-
-    // ── 探测音频输入（VIDIOC_ENUMAUDIO，某些驱动用音频输入选择频段）──────────────
-    for (int ai = 0; ai <= 3; ++ai) {
-        struct v4l2_audio audio;
-        memset(&audio, 0, sizeof(audio));
-        audio.index = static_cast<__u32>(ai);
-        if (::ioctl(m_fd, VIDIOC_ENUMAUDIO, &audio) != 0) {
-            if (!ai) qDebug() << "RadioWindow: VIDIOC_ENUMAUDIO not supported";
-            break;
-        }
-        qDebug("RadioWindow: audio_input[%d] '%s' cap=0x%X mode=0x%X",
-               ai, reinterpret_cast<const char*>(audio.name),
-               audio.capability, audio.mode);
-    }
-
-    // ── sysfs 设备路径（BSP 驱动可能在此暴露 band 切换属性文件）──────────────────
-    {
-        char syspath[512] = {};
-        ssize_t n = readlink("/sys/class/video4linux/radio0", syspath, sizeof(syspath)-1);
-        if (n > 0)
-            qDebug("RadioWindow: sysfs radio0 -> %s", syspath);
     }
 
     return true;
@@ -1294,155 +1260,24 @@ void RadioWindow::switchBand(bool fm) {
     m_frequency = m_isFM ? 95.9 : 937.0;
 
     if (m_fd >= 0) {
-        // tea685x 驱动根据上次设置的频率锁定频段（FM 模式拒绝 AM 频率，反之亦然）
-        m_tunerIndex = 0;  // 频段切换时先重置 tuner 索引为默认值
+        // 按驱动实现：仅使用 VIDIOC_S_TUNER 携带 rangelow/rangehigh 切换频段
+        // tea685x 的 vidioc_s_tuner 实现通过比较 rangelow/rangehigh 与 bands[] 来选择
+        m_tunerIndex = 0;
         quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
-        const quint32 driverFreq = m_tunerCapLow ? fhz : (fhz / 1000u);
-        bool ok = false;
-
-        // ── 方式 0：VIDIOC_S_TUNER + rangelow/rangehigh（tea685x 正确切频段方式）──
-        // 驱动 vidioc_s_tuner 通过比较 rangelow/rangehigh 与 bands[] 表来选择频段：
-        //   FM bands[0]: rangelow=8700*160=1392000  rangehigh=10800*160=1728000
-        //   AM bands[1]: rangelow=522*16=8352        rangehigh=1710*16=27360
-        {
-            struct v4l2_tuner t;
-            memset(&t, 0, sizeof(t));
-            t.index     = 0;
-            t.type      = V4L2_TUNER_RADIO;
-            t.audmode   = V4L2_TUNER_MODE_STEREO;
-            t.rangelow  = m_isFM ? 1392000u : 8352u;
-            t.rangehigh = m_isFM ? 1728000u : 27360u;
-            if (::ioctl(m_fd, VIDIOC_S_TUNER, &t) == 0) {
-                qDebug() << "RadioWindow: band switch via VIDIOC_S_TUNER rangelow/rangehigh OK";
-                ok = setFrequencyHz(fhz);
-            } else {
-                qWarning() << "RadioWindow: VIDIOC_S_TUNER band switch failed:" << strerror(errno);
-            }
-        }
-
-        // ── 方式 1：直接写入目标频率 ───────────────────────────────────────────
-        ok = setFrequencyHz(fhz);
-
-        // ── 方式 2：V4L2_CID_BAND_STOP_FILTER（某些 Allwinner BSP 驱动将其复用为频段选择器）
-        if (!ok) {
-            struct v4l2_control ctrl;
-            memset(&ctrl, 0, sizeof(ctrl));
-            ctrl.id    = V4L2_CID_BAND_STOP_FILTER;   // V4L2_CID_BASE + 33
-            ctrl.value = m_isFM ? 0 : 1;              // 0=FM, 1=AM
-            if (::ioctl(m_fd, VIDIOC_S_CTRL, &ctrl) == 0) {
-                qDebug() << "RadioWindow: band switch via V4L2_CID_BAND_STOP_FILTER";
-                ok = setFrequencyHz(fhz);
-            } else {
-                // 也试 value=1(FM)/0(AM)，反过来
-                ctrl.value = m_isFM ? 1 : 0;
-                if (::ioctl(m_fd, VIDIOC_S_CTRL, &ctrl) == 0) {
-                    qDebug() << "RadioWindow: band switch via V4L2_CID_BAND_STOP_FILTER (inv)";
-                    ok = setFrequencyHz(fhz);
-                }
-            }
-        }
-
-        // ── 方式 3：先 G_FREQUENCY 保留原结构体，仅改 frequency 字段再 S_FREQUENCY ─
-        //          与 Qt 官方 v4lradiocontrol 实现一致；某些驱动用 reserved[] 保存频段
-        if (!ok) {
-            struct v4l2_frequency vfg;
-            memset(&vfg, 0, sizeof(vfg));
-            vfg.tuner = 0;
-            vfg.type  = V4L2_TUNER_RADIO;
-            if (::ioctl(m_fd, VIDIOC_G_FREQUENCY, &vfg) == 0) {
-                vfg.frequency = driverFreq;
-                if (::ioctl(m_fd, VIDIOC_S_FREQUENCY, &vfg) == 0) {
-                    qDebug() << "RadioWindow: band switch via G_FREQ→modify→S_FREQ";
-                    ok = true;
-                }
-            }
-        }
-
-        // ── 方式 4：VIDIOC_S_FREQUENCY 中 reserved[0] 置为频段标志 ─────────────
-        //          部分 BSP 驱动将 reserved[0]=0 解释为 FM，=1 解释为 AM
-        if (!ok) {
-            for (int bandVal = 0; bandVal <= 3 && !ok; ++bandVal) {
-                struct v4l2_frequency vfr;
-                memset(&vfr, 0, sizeof(vfr));
-                vfr.tuner      = 0;
-                vfr.type       = V4L2_TUNER_RADIO;
-                vfr.frequency  = driverFreq;
-                vfr.reserved[0] = static_cast<__u32>(bandVal);
-                if (::ioctl(m_fd, VIDIOC_S_FREQUENCY, &vfr) == 0) {
-                    qDebug() << "RadioWindow: band switch via S_FREQ reserved[0]=" << bandVal;
-                    ok = true;
-                }
-            }
-        }
-
-        // ── 方式 5：私有控制 V4L2_CID_PRIVATE_BASE + 0..31 ──────────────────────
-        if (!ok) {
-            for (int ofs = 0; ofs <= 31 && !ok; ++ofs) {
-                struct v4l2_control ctrl;
-                memset(&ctrl, 0, sizeof(ctrl));
-                ctrl.id    = static_cast<__u32>(V4L2_CID_PRIVATE_BASE + ofs);
-                ctrl.value = m_isFM ? 0 : 1;
-                if (::ioctl(m_fd, VIDIOC_S_CTRL, &ctrl) == 0) {
-                    qDebug() << "RadioWindow: band switch via V4L2_CID_PRIVATE_BASE+" << ofs;
-                    ok = setFrequencyHz(fhz);
-                }
-            }
-        }
-
-        // ── 方式 6：VIDIOC_S_TUNER audmode 设为非标准值 ─────────────────────────
-        //          某些驱动用 audmode=0 代表 AM，audmode=1 代表 FM
-        if (!ok) {
-            static const int auds[] = {0, 4, 8, 16, 3, 5};
-            for (int audi : auds) {
-                struct v4l2_tuner t;
-                memset(&t, 0, sizeof(t));
-                t.index   = 0;
-                t.type    = V4L2_TUNER_RADIO;
-                t.audmode = static_cast<__u32>(audi);
-                if (::ioctl(m_fd, VIDIOC_S_TUNER, &t) == 0) {
-                    qDebug() << "RadioWindow: band switch via S_TUNER audmode=" << audi;
-                    ok = setFrequencyHz(fhz);
-                    if (ok) break;
-                }
-            }
-        }
-
-        // ── 方式 7：尝试不同 tuner 索引（部分驱动将 AM 作为 tuner[1] 暴露）──────
-        if (!ok) {
-            for (int ti = 1; ti <= 3 && !ok; ++ti) {
-                struct v4l2_frequency vft;
-                memset(&vft, 0, sizeof(vft));
-                vft.tuner     = static_cast<__u32>(ti);
-                vft.type      = V4L2_TUNER_RADIO;
-                vft.frequency = driverFreq;
-                if (::ioctl(m_fd, VIDIOC_S_FREQUENCY, &vft) == 0) {
-                    qDebug() << "RadioWindow: band switch via tuner index" << ti;
-                    m_tunerIndex = ti;  // 记录 AM 使用的 tuner 索引
-                    ok = true;
-                }
-            }
-        }
-
-        // ── 方式 8：音频输入选择（VIDIOC_S_AUDIO，某些驱动用输入区分 FM/AM）────────
-        if (!ok) {
-            const int targetAudio = m_isFM ? 0 : 1;
-            struct v4l2_audio audio;
-            memset(&audio, 0, sizeof(audio));
-            audio.index = static_cast<__u32>(targetAudio);
-            if (::ioctl(m_fd, VIDIOC_S_AUDIO, &audio) == 0) {
-                qDebug() << "RadioWindow: band switch via VIDIOC_S_AUDIO index" << targetAudio;
-                ok = setFrequencyHz(fhz);
-                if (!ok) {
-                    // 失败则恢复默认音频输入
-                    audio.index = 0;
-                    ::ioctl(m_fd, VIDIOC_S_AUDIO, &audio);
-                }
-            }
-        }
-
-        if (!ok) {
-            qWarning() << "RadioWindow: band switch to" << (m_isFM ? "FM" : "AM")
-                       << "failed — all methods exhausted";
+        struct v4l2_tuner t;
+        memset(&t, 0, sizeof(t));
+        t.index     = 0;
+        t.type      = V4L2_TUNER_RADIO;
+        t.audmode   = V4L2_TUNER_MODE_STEREO;
+        t.rangelow  = m_isFM ? 1392000u : 8352u;
+        t.rangehigh = m_isFM ? 1728000u : 27360u;
+        if (::ioctl(m_fd, VIDIOC_S_TUNER, &t) == 0) {
+            qDebug() << "RadioWindow: band switch via VIDIOC_S_TUNER rangelow/rangehigh OK";
+            if (!setFrequencyHz(fhz))
+                qWarning() << "RadioWindow: setFrequencyHz failed after S_TUNER:" << strerror(errno);
+        } else {
+            qWarning() << "RadioWindow: VIDIOC_S_TUNER band switch failed:" << strerror(errno)
+                       << "(driver must support S_TUNER with rangelow/rangehigh)";
         }
     }
 
