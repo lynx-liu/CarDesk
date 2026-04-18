@@ -640,9 +640,15 @@ QWidget *SystemSettingWindow::createDisplayPage()
         return btn;
     };
 
+    auto makeDivider = [page]() {
+        auto *div = new QFrame(page);
+        div->setFixedHeight(2);
+        div->setStyleSheet("QFrame{background:rgba(255,255,255,0.1);border:none;}");
+        return div;
+    };
+
     auto *row1 = new QWidget(page);
     row1->setFixedHeight(172);
-    row1->setStyleSheet("QWidget{border-bottom:2px solid rgba(255,255,255,0.1);}");
     auto *row1Layout = new QHBoxLayout(row1);
     row1Layout->setContentsMargins(0, 0, 0, 0);
     row1Layout->setSpacing(16);
@@ -723,7 +729,6 @@ QWidget *SystemSettingWindow::createDisplayPage()
     auto makeSwitchRow = [page](const QString &name, const QString &l, const QString &r) {
         auto *row = new QWidget(page);
         row->setFixedHeight(98);
-        row->setStyleSheet("QWidget{border-bottom:2px solid rgba(255,255,255,0.1);}");
         auto *h = new QHBoxLayout(row);
         h->setContentsMargins(0, 27, 0, 27);
         h->setSpacing(16);
@@ -764,7 +769,9 @@ QWidget *SystemSettingWindow::createDisplayPage()
     };
 
     layout->addWidget(row1);
+    layout->addWidget(makeDivider());
     layout->addWidget(makeSwitchRow(QStringLiteral("关屏时钟"), QStringLiteral("数字"), QStringLiteral("模拟")));
+    layout->addWidget(makeDivider());
 
     // 时钟制式行（单独实现以便连接 AppSignals::clockFormatChanged）
     {
@@ -809,6 +816,7 @@ QWidget *SystemSettingWindow::createDisplayPage()
         });
         h->addWidget(container);
         layout->addWidget(clockRow);
+        layout->addWidget(makeDivider());
     }
 
     layout->addStretch();
