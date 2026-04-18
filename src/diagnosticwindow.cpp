@@ -351,24 +351,14 @@ QWidget *DiagnosticWindow::createPdfPage()
     topOverlay->setGeometry(0, 0, 1280, 72);
     topOverlay->setStyleSheet("background:rgba(0,0,0,0.5);");
 
-    auto *homeBtn = new QPushButton(topOverlay);
-    homeBtn->setGeometry(12, 12, 48, 48);
-    homeBtn->setCursor(Qt::PointingHandCursor);
-    homeBtn->setStyleSheet(
-        "QPushButton{border:none;background-image:url(:/images/pict_home_up.png);background-repeat:no-repeat;}"
-        "QPushButton:hover{background-image:url(:/images/pict_home_down.png);}"
-    );
-    connect(homeBtn, &QPushButton::clicked, this, [this]() {
-        emit requestReturnToMain();
-        hide();
-    });
-
     auto *backBtn = new QPushButton(topOverlay);
-    backBtn->setGeometry(60, 12, 48, 48);
+    backBtn->setGeometry(12, 12, 48, 48);
     backBtn->setCursor(Qt::PointingHandCursor);
     backBtn->setStyleSheet(
-        "QPushButton{border:none;background-image:url(:/images/butt_video_back_up.png);background-repeat:no-repeat;background-position:center;}"
-        "QPushButton:hover{background-image:url(:/images/butt_video_back_down.png);}"
+        "QPushButton{border:none;background:transparent url(:/images/butt_video_back_up.png) no-repeat center center;outline:none;}"
+        "QPushButton:hover{background:transparent url(:/images/butt_video_back_down.png) no-repeat center center;outline:none;}"
+        "QPushButton:pressed{background:transparent url(:/images/butt_video_back_down.png) no-repeat center center;outline:none;border:none;}"
+        "QPushButton:focus{outline:none;border:none;}"
     );
     connect(backBtn, &QPushButton::clicked, this, [this]() { openPage(2); });
 
@@ -377,7 +367,6 @@ QWidget *DiagnosticWindow::createPdfPage()
     title->setAlignment(Qt::AlignCenter);
     title->setStyleSheet("QLabel{color:#fff;font-size:36px;background:transparent;}");
     title->setAttribute(Qt::WA_TransparentForMouseEvents);
-    homeBtn->raise();
 
     m_pdfHeaderLabel = new QLabel(topOverlay);
     m_pdfHeaderLabel->setGeometry(1148, 18, 120, 36);
@@ -401,20 +390,21 @@ QWidget *DiagnosticWindow::createPdfPage()
     prevBtn->setFixedSize(60, 60);
     prevBtn->setCursor(Qt::PointingHandCursor);
     prevBtn->setStyleSheet(
-        "QPushButton{border:none;background-image:url(:/images/butt_music_prev_up.png);}"
-        "QPushButton:hover{background-image:url(:/images/butt_music_prev_down.png);}"
+        "QPushButton{border:none;background:transparent url(:/images/butt_music_prev_up.png) no-repeat center center;outline:none;}"
+        "QPushButton:hover{background:transparent url(:/images/butt_music_prev_down.png) no-repeat center center;outline:none;}"
+        "QPushButton:pressed{background:transparent url(:/images/butt_music_prev_down.png) no-repeat center center;outline:none;border:none;}"
+        "QPushButton:focus{outline:none;border:none;}"
     );
     connect(prevBtn, &QPushButton::clicked, this, &DiagnosticWindow::onPrevPage);
-
-    auto *hiddenCenter = new QWidget(m_pdfBottomNormal);
-    hiddenCenter->setFixedSize(84, 84);
 
     auto *nextBtn = new QPushButton(m_pdfBottomNormal);
     nextBtn->setFixedSize(60, 60);
     nextBtn->setCursor(Qt::PointingHandCursor);
     nextBtn->setStyleSheet(
-        "QPushButton{border:none;background-image:url(:/images/butt_music_next_up.png);}"
-        "QPushButton:hover{background-image:url(:/images/butt_music_next_down.png);}"
+        "QPushButton{border:none;background:transparent url(:/images/butt_music_next_up.png) no-repeat center center;outline:none;}"
+        "QPushButton:hover{background:transparent url(:/images/butt_music_next_down.png) no-repeat center center;outline:none;}"
+        "QPushButton:pressed{background:transparent url(:/images/butt_music_next_down.png) no-repeat center center;outline:none;border:none;}"
+        "QPushButton:focus{outline:none;border:none;}"
     );
     connect(nextBtn, &QPushButton::clicked, this, &DiagnosticWindow::onNextPage);
 
@@ -422,14 +412,17 @@ QWidget *DiagnosticWindow::createPdfPage()
     searchBtn->setFixedSize(60, 60);
     searchBtn->setCursor(Qt::PointingHandCursor);
     searchBtn->setStyleSheet(
-        "QPushButton{border:none;background-image:url(:/images/butt_radio_search_up.png);}"
-        "QPushButton:hover{background-image:url(:/images/butt_radio_search_down.png);}"
+        "QPushButton{border:none;background:transparent url(:/images/butt_radio_search_up.png) no-repeat center center;outline:none;}"
+        "QPushButton:hover{background:transparent url(:/images/butt_radio_search_down.png) no-repeat center center;outline:none;}"
+        "QPushButton:pressed{background:transparent url(:/images/butt_radio_search_down.png) no-repeat center center;outline:none;border:none;}"
+        "QPushButton:focus{outline:none;border:none;}"
     );
     connect(searchBtn, &QPushButton::clicked, this, &DiagnosticWindow::onOpenPdfSearchPage);
 
     btnLayout->addWidget(prevBtn);
-    btnLayout->addWidget(hiddenCenter);
+    btnLayout->addStretch(1);
     btnLayout->addWidget(nextBtn);
+    btnLayout->addStretch(1);
     btnLayout->addWidget(searchBtn);
 
     m_pdfBottomSearch = new QWidget(page);
@@ -443,8 +436,10 @@ QWidget *DiagnosticWindow::createPdfPage()
     closeResultBtn->setFixedSize(48, 48);
     closeResultBtn->setCursor(Qt::PointingHandCursor);
     closeResultBtn->setStyleSheet(
-        "QPushButton{border:none;background-image:url(:/images/butt_radio_search_del_all_up.png);}"
-        "QPushButton:hover{background-image:url(:/images/butt_radio_search_del_all_down.png);}"
+        "QPushButton{border:none;background:transparent;background-image:url(:/images/butt_radio_search_del_all_up.png);background-repeat:no-repeat;outline:none;}"
+        "QPushButton:hover{background:transparent;background-image:url(:/images/butt_radio_search_del_all_down.png);outline:none;}"
+        "QPushButton:pressed{background:transparent;outline:none;}"
+        "QPushButton:focus{outline:none;}"
     );
     connect(closeResultBtn, &QPushButton::clicked, this, [this]() {
         if (m_pdfBottomNormal && m_pdfBottomSearch) {
@@ -468,8 +463,10 @@ QWidget *DiagnosticWindow::createPdfPage()
     prevResult->setFixedSize(48, 72);
     prevResult->setCursor(Qt::PointingHandCursor);
     prevResult->setStyleSheet(
-        "QPushButton{border:none;background:url(:/images/butt_pdf_serch_result_pre_up.png) no-repeat center center;}"
-        "QPushButton:hover{background:url(:/images/butt_pdf_serch_result_pre_down.png) no-repeat center center;}"
+        "QPushButton{border:none;background:transparent;background-image:url(:/images/butt_pdf_serch_result_pre_up.png);background-repeat:no-repeat;outline:none;}"
+        "QPushButton:hover{background:transparent;background-image:url(:/images/butt_pdf_serch_result_pre_down.png);background-repeat:no-repeat;outline:none;}"
+        "QPushButton:pressed{background:transparent;outline:none;}"
+        "QPushButton:focus{outline:none;}"
     );
     connect(prevResult, &QPushButton::clicked, this, &DiagnosticWindow::onPrevSearchResult);
 
@@ -480,8 +477,10 @@ QWidget *DiagnosticWindow::createPdfPage()
     nextResult->setFixedSize(48, 72);
     nextResult->setCursor(Qt::PointingHandCursor);
     nextResult->setStyleSheet(
-        "QPushButton{border:none;background:url(:/images/butt_pdf_serch_result_next_up.png) no-repeat center center;}"
-        "QPushButton:hover{background:url(:/images/butt_pdf_serch_result_next_down.png) no-repeat center center;}"
+        "QPushButton{border:none;background:transparent;background-image:url(:/images/butt_pdf_serch_result_next_up.png);background-repeat:no-repeat;outline:none;}"
+        "QPushButton:hover{background:transparent;background-image:url(:/images/butt_pdf_serch_result_next_down.png);background-repeat:no-repeat;outline:none;}"
+        "QPushButton:pressed{background:transparent;outline:none;}"
+        "QPushButton:focus{outline:none;}"
     );
     connect(nextResult, &QPushButton::clicked, this, &DiagnosticWindow::onNextSearchResult);
 
