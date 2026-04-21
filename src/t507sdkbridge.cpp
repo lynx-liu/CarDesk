@@ -11,6 +11,7 @@
 static const int TM2313_LOUDNESS               = 10000; // arg: 1=开, 0=关
 static const int TM2313_TREBLE                 = 10002; // arg: 0-15，TDA7313编码(0=+14dB,7=0dB,8=-2dB,15=-14dB)
 static const int TM2313_BASS                   = 10003; // arg: 同上
+static const int TM2313_MUTE_ENABLE            = 10008; // arg: 1=取消静音, 0=静音
 static const int TM2313_INPUT_SWITCH_STEREO_1  = 10011; // 切换到 IN1（收音机 / TEA685x 模拟输出）
 static const int TM2313_INPUT_SWITCH_STEREO_2  = 10012; // 切换到 IN2（媒体声道 / SoC DAC，默认）
 
@@ -83,11 +84,13 @@ void T507SdkBridge::setAudioSource(bool radioMode)
     // radioMode=true  → STEREO_1 (0x40, IN1): TEA685x FM/AM 模拟输出
     // radioMode=false → STEREO_2 (0x41, IN2): SoC DAC 媒体声道（默认）
     ::ioctl(fd, radioMode ? TM2313_INPUT_SWITCH_STEREO_1 : TM2313_INPUT_SWITCH_STEREO_2, 0);
+    ::ioctl(fd, TM2313_MUTE_ENABLE, 1); // 取消静音，确保切换后有声音
     ::close(fd);
 #else
     Q_UNUSED(radioMode)
     Q_UNUSED(TM2313_INPUT_SWITCH_STEREO_1)
     Q_UNUSED(TM2313_INPUT_SWITCH_STEREO_2)
+    Q_UNUSED(TM2313_MUTE_ENABLE)
 #endif
 }
 
