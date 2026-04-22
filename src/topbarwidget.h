@@ -34,9 +34,11 @@ private slots:
     void onVolumeChanged(int level);
     void onVolumeBtnClicked();
     void onClockTick();
+    void onBluetoothStateChanged(bool connected);
     void updateUsbState();
 
 private:
+    QPushButton *m_btBtn    = nullptr;
     QPushButton *m_usbBtn   = nullptr;
     QPushButton *m_volBtn    = nullptr;
     QLabel      *m_volLabel  = nullptr;

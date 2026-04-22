@@ -902,12 +902,11 @@ QWidget *SystemSettingWindow::createSoundPage()
     lowIcon->setFixedSize(36, 36);
     lowIcon->setPixmap(QPixmap(":/images/pict_volume_low.png").scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     auto *slider = new QSlider(Qt::Horizontal, vRight);
-    slider->setRange(0, 100);
-    // 初始值从全局 appVolumeLevel 同步（0..10 -> 0..100）
+    slider->setRange(0, 10);
+    // 初始值从全局 appVolumeLevel 同步（0..10）
     const QVariant vp = qApp->property("appVolumeLevel");
-    const int lv = vp.isValid() ? vp.toInt() : 10;
-    const int initPerc = qBound(0, lv * 10, 100);
-    slider->setValue(initPerc);
+    const int lv = qBound(0, vp.isValid() ? vp.toInt() : 10, 10);
+    slider->setValue(lv);
     slider->setFixedHeight(44);
     slider->setStyleSheet(
         "QSlider::groove:horizontal{height:8px;background:rgba(255,255,255,0.28);border-radius:4px;}"
@@ -917,7 +916,7 @@ QWidget *SystemSettingWindow::createSoundPage()
     auto *highIcon = new QLabel(vRight);
     highIcon->setFixedSize(36, 36);
     highIcon->setPixmap(QPixmap(":/images/pict_volume_loud.png").scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    auto *tips = new QLabel(QString::number(initPerc), vRight);
+    auto *tips = new QLabel(QString::number(lv), vRight);
     tips->setFixedSize(48, 38);
     tips->setAlignment(Qt::AlignCenter);
     tips->setStyleSheet("QLabel{background:url(:/images/pict_brightness_tips.png);font-size:24px;color:#fff;}");
@@ -926,16 +925,16 @@ QWidget *SystemSettingWindow::createSoundPage()
     });
     // 用户拖动滑块时，设置系统音量（使用 amixer）
     connect(slider, &QSlider::valueChanged, this, [slider](int v) {
-        // 将百分比 v 转发给 amixer（示例："50%"）
-        AppSignals::runAmixer({"sset", "LINEOUT volume", QString::number(v) + "%"}, slider);
+        // 将 0..10 映射到百分比 0..100 转发给 amixer
+        AppSignals::runAmixer({"sset", "LINEOUT volume", QString::number(v * 10) + "%"}, slider);
     });
     // 当外部（按键或其它窗口）改变音量时，更新滑块（避免产生 valueChanged 循环）
     connect(AppSignals::instance(), &AppSignals::volumeLevelChanged, this, [slider, tips](int level){
-        const int perc = qBound(0, level * 10, 100);
+        const int bounded = qBound(0, level, 10);
         bool wasBlocked = slider->blockSignals(true);
-        slider->setValue(perc);
+        slider->setValue(bounded);
         slider->blockSignals(wasBlocked);
-        tips->setText(QString::number(perc));
+        tips->setText(QString::number(bounded));
     });
     vRightLayout->addWidget(lowIcon);
     vRightLayout->addWidget(slider, 1);

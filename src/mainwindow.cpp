@@ -218,6 +218,22 @@ void MainWindow::adjustForDevice() {
 
 void MainWindow::setupConnections() {
     // TopBarRightWidget 自行管理时钟和音量显示 / 响应 AppSignals，无需在主界面重复处理
+    if (m_bluetoothManager) {
+        const bool initConnected = m_bluetoothManager->isConnected();
+        qApp->setProperty("appBluetoothConnected", initConnected);
+        AppSignals::instance()->bluetoothConnectedChanged(initConnected);
+
+        connect(m_bluetoothManager, &BluetoothManager::deviceConnected,
+                AppSignals::instance(), [](const QString &) {
+                    qApp->setProperty("appBluetoothConnected", true);
+                    AppSignals::instance()->bluetoothConnectedChanged(true);
+                });
+        connect(m_bluetoothManager, &BluetoothManager::deviceDisconnected,
+                AppSignals::instance(), []() {
+                    qApp->setProperty("appBluetoothConnected", false);
+                    AppSignals::instance()->bluetoothConnectedChanged(false);
+                });
+    }
 }
 
 void MainWindow::setupSystemInfo() {

@@ -18,16 +18,17 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     outerLay->setSpacing(16);
 
     // ── 蓝牙图标 ────────────────────────────────────────────────────────────
-    auto *btBtn = new QPushButton(this);
-    btBtn->setFixedSize(48, 48);
-    btBtn->setFocusPolicy(Qt::NoFocus);
-    btBtn->setCursor(Qt::PointingHandCursor);
-    btBtn->setToolTip("蓝牙");
-    btBtn->setStyleSheet(
-        "QPushButton { border: none; background-image: url(:/images/pict_buetooth.png); "
-        "background-repeat: no-repeat; background-position: center; }"
-        "QPushButton:hover { background-image: url(:/images/pict_buetooth_on.png); }");
-    outerLay->addWidget(btBtn);
+    m_btBtn = new QPushButton(this);
+    m_btBtn->setFixedSize(48, 48);
+    m_btBtn->setFocusPolicy(Qt::NoFocus);
+    m_btBtn->setCursor(Qt::PointingHandCursor);
+    m_btBtn->setToolTip("蓝牙");
+    outerLay->addWidget(m_btBtn);
+
+    const bool initialBtConnected = qApp->property("appBluetoothConnected").toBool();
+    onBluetoothStateChanged(initialBtConnected);
+    connect(AppSignals::instance(), &AppSignals::bluetoothConnectedChanged,
+            this, &TopBarRightWidget::onBluetoothStateChanged);
 
     // ── USB 图标 ─────────────────────────────────────────────────────────────
     m_usbBtn = new QPushButton(this);
@@ -122,6 +123,20 @@ void TopBarRightWidget::onVolumeChanged(int level)
     }
 }
 
+void TopBarRightWidget::onBluetoothStateChanged(bool connected)
+{
+    if (!m_btBtn)
+        return;
+
+    const QString icon = connected
+        ? QStringLiteral(":/images/pict_bluetooth_on.png")
+        : QStringLiteral(":/images/pict_bluetooth.png");
+    m_btBtn->setStyleSheet(
+        QString("QPushButton { border: none; background-image: url(%1); "
+                "background-repeat: no-repeat; background-position: center; }"
+                "QPushButton:hover { background-image: url(%1); }").arg(icon));
+}
+
 void TopBarRightWidget::onVolumeBtnClicked()
 {
     m_isMuted = !m_isMuted;
@@ -133,7 +148,6 @@ void TopBarRightWidget::onVolumeBtnClicked()
             QString("QPushButton { border: none; background-image: url(%1); "
                     "background-repeat: no-repeat; background-position: center; }").arg(icon));
     }
-    // Broadcast change globally so other TopBarRightWidget instances stay in sync.
     if (m_isMuted) {
         const QVariant cur = qApp->property("appVolumeLevel");
         const int curLv = cur.isValid() ? cur.toInt() : 10;

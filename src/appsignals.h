@@ -35,6 +35,9 @@ signals:
     /** 时钟制式变化：true=24小时，false=12小时 */
     void clockFormatChanged(bool use24h);
 
+    /** 蓝牙连接状态变化：true=已连接，false=已断开 */
+    void bluetoothConnectedChanged(bool connected);
+
 private:
     AppSignals() = default;
 };
