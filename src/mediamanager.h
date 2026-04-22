@@ -9,6 +9,8 @@ class VideoListWindow;
 class VideoPlayWindow;
 class MusicPlayerWindow;
 
+class BluetoothManager;
+
 class MediaManager : public QObject {
     Q_OBJECT
 
@@ -16,6 +18,7 @@ public:
     explicit MediaManager(QObject *parent = nullptr);
     ~MediaManager();
     
+    void setBluetoothManager(BluetoothManager *manager);
     void openVideoList();
     void openMusicPlayer();
     void playMedia(const QString &filePath);
@@ -43,6 +46,7 @@ private:
     VideoListWindow *m_videoListWindow;
     VideoPlayWindow *m_videoPlayWindow;
     MusicPlayerWindow *m_musicWindow;
+    BluetoothManager *m_bluetoothManager;
 };
 
 #endif // MEDIAMANAGER_H

@@ -10,11 +10,13 @@ class QLabel;
 class QStackedWidget;
 class QWidget;
 
+class BluetoothManager;
+
 class PhoneWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit PhoneWindow(QWidget *parent = nullptr);
+    explicit PhoneWindow(BluetoothManager *bluetoothManager, QWidget *parent = nullptr);
 
 signals:
     void requestReturnToMain();
@@ -25,6 +27,7 @@ protected:
 
 private slots:
     void onDial();
+    void onAnswer();
     void onHangup();
     void onDialTab();
     void onHistoryTab();
@@ -44,6 +47,7 @@ private:
     void showContactDetail(const QString &name, const QString &number);
     void hideContactDetail();
 
+    BluetoothManager *m_bluetoothManager;
     QStackedWidget *m_tabStack;
     QPushButton *m_tabDial;
     QPushButton *m_tabHistory;
@@ -60,6 +64,7 @@ private:
     QLabel *m_detailNumberLabel;
     QWidget *m_callOverlay;
     QWidget *m_callKeyboardPanel;
+    QWidget *m_bottomActions;
     QPushButton *m_answerButton;
 };
 

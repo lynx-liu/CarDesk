@@ -1,4 +1,5 @@
 #include "musicplayerwindow.h"
+#include "bluetoothmanager.h"
 #include "devicedetect.h"
 #include "topbarwidget.h"
 #include "appsignals.h"
@@ -111,6 +112,8 @@ MusicPlayerWindow::MusicPlayerWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_currentBrowsePath("/mnt")
     , m_mediaPlayer(new QMediaPlayer(this))
+    , m_bluetoothManager(nullptr)
+    , m_btPlaying(false)
 {
     setWindowTitle("音乐播放");
     setFixedSize(1280, 720);
@@ -149,6 +152,11 @@ MusicPlayerWindow::MusicPlayerWindow(QWidget *parent)
     updateCollectButtonState();
 
     qDebug() << "MusicPlayerWindow created, found" << m_musicFiles.count() << "audio files";
+}
+
+void MusicPlayerWindow::setBluetoothManager(BluetoothManager *manager)
+{
+    m_bluetoothManager = manager;
 }
 
 MusicPlayerWindow::~MusicPlayerWindow()
@@ -739,6 +747,13 @@ void MusicPlayerWindow::releaseAudioPlayer()
 
 void MusicPlayerWindow::onPlayPause()
 {
+    if (!m_isUsbMode && m_bluetoothManager) {
+        m_bluetoothManager->playPauseMusic();
+        m_btPlaying = !m_btPlaying;
+        setPlayButtonState(m_btPlaying);
+        return;
+    }
+
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer) {
         if (m_sdkPlayer && m_sdkPlaying) {
@@ -768,6 +783,10 @@ void MusicPlayerWindow::onPlayPause()
 
 void MusicPlayerWindow::onNextMusic()
 {
+    if (!m_isUsbMode && m_bluetoothManager) {
+        m_bluetoothManager->nextTrack();
+        return;
+    }
     if (m_musicFiles.isEmpty()) return;
     int next = (m_currentIndex + 1 >= m_musicFiles.count()) ? 0 : m_currentIndex + 1;
     playMusic(next);
@@ -775,6 +794,10 @@ void MusicPlayerWindow::onNextMusic()
 
 void MusicPlayerWindow::onPreviousMusic()
 {
+    if (!m_isUsbMode && m_bluetoothManager) {
+        m_bluetoothManager->previousTrack();
+        return;
+    }
     if (m_musicFiles.isEmpty()) return;
     int prev = (m_currentIndex <= 0) ? m_musicFiles.count() - 1 : m_currentIndex - 1;
     playMusic(prev);
@@ -836,6 +859,9 @@ void MusicPlayerWindow::onMusicListItemClicked(QListWidgetItem *item)
 void MusicPlayerWindow::onUsbTabClicked()
 {
     if (m_isUsbMode) return;
+    if (m_bluetoothManager) {
+        m_bluetoothManager->disconnectA2dp();
+    }
     m_isUsbMode = true;
     m_usbTab->setStyleSheet(
         "QPushButton { border: none; background: url(:/images/butt_tab_left_on.png); color: #fff; font-size: 28px; }"
@@ -851,7 +877,11 @@ void MusicPlayerWindow::onBtTabClicked()
 {
     if (!m_isUsbMode) return;
     m_isUsbMode = false;
+    if (m_bluetoothManager) {
+        m_bluetoothManager->connectLastA2dpDevice();
+    }
     releaseAudioPlayer();
+    m_btPlaying = false;
     m_usbTab->setStyleSheet(
         "QPushButton { border: none; background: url(:/images/butt_tab_left_down.png); color: #fff; font-size: 28px; }"
         "QPushButton:pressed { border: none; background: url(:/images/butt_tab_left_down.png); color: #fff; font-size: 28px; }");

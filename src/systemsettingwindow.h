@@ -14,11 +14,14 @@ class QPushButton;
 class QWidget;
 class OTAManager;
 
+class BluetoothManager;
+
 class SystemSettingWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit SystemSettingWindow(QWidget *parent = nullptr);
+    explicit SystemSettingWindow(BluetoothManager *bluetoothManager, QWidget *parent = nullptr);
+    void setBluetoothManager(BluetoothManager *bluetoothManager);
 
 signals:
     void requestReturnToMain();
@@ -55,6 +58,13 @@ private:
 
     QStackedWidget *m_pages;
     QListWidget *m_subnavList;
+    BluetoothManager *m_bluetoothManager;
+    QLabel *m_bluetoothIntroLabel;
+    QString m_bluetoothDeviceName;
+    QString m_bluetoothPairPin;
+    bool m_bluetoothEnabled;
+    bool m_bluetoothPairedDevicesLoaded;
+    QTimer *m_bluetoothConnectionTimer;
 
     // 应用升级相关
     QLabel *m_updateStateLabel;

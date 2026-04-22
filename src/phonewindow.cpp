@@ -1,4 +1,5 @@
 #include "phonewindow.h"
+#include "bluetoothmanager.h"
 #include "topbarwidget.h"
 #include "appsignals.h"
 
@@ -20,8 +21,9 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
-PhoneWindow::PhoneWindow(QWidget *parent)
+PhoneWindow::PhoneWindow(BluetoothManager *bluetoothManager, QWidget *parent)
     : QMainWindow(parent)
+    , m_bluetoothManager(bluetoothManager)
     , m_tabStack(nullptr)
     , m_tabDial(nullptr)
     , m_tabHistory(nullptr)
@@ -37,6 +39,7 @@ PhoneWindow::PhoneWindow(QWidget *parent)
     , m_detailNumberLabel(nullptr)
     , m_callOverlay(nullptr)
     , m_callKeyboardPanel(nullptr)
+    , m_bottomActions(nullptr)
     , m_answerButton(nullptr) {
     setWindowTitle("蓝牙电话");
     setFixedSize(1280, 720);
@@ -347,7 +350,7 @@ void PhoneWindow::setupUI() {
     m_answerButton->setCursor(Qt::PointingHandCursor);
     m_answerButton->setStyleSheet("QPushButton{border:none;color:#fff;font-size:32px;background:url(:/images/butt_calling_anwer_up.png) no-repeat top center;padding-top:100px;}"
                                   "QPushButton:hover{background-image:url(:/images/butt_calling_anwer_down.png);}");
-    connect(m_answerButton, &QPushButton::clicked, this, [this]() { updateCallPanel(false); });
+    connect(m_answerButton, &QPushButton::clicked, this, &PhoneWindow::onAnswer);
 
     callBtnLayout->addWidget(hangup);
     callBtnLayout->addWidget(m_answerButton);
@@ -375,6 +378,7 @@ void PhoneWindow::setupUI() {
 
     auto *bottomActions = new QWidget(m_callOverlay);
     bottomActions->setGeometry(324, 262, 552, 182);
+    m_bottomActions = bottomActions;
     auto *bottomLayout = new QHBoxLayout(bottomActions);
     bottomLayout->setContentsMargins(0, 0, 0, 0);
     bottomLayout->setSpacing(92);
@@ -391,9 +395,14 @@ void PhoneWindow::setupUI() {
     auto *muteBtn = makeActionBtn(QStringLiteral("静音"), QStringLiteral(":/images/butt_calling_mute_up.png"), QStringLiteral(":/images/butt_calling_mute_down.png"));
     auto *keyboardBtn = makeActionBtn(QStringLiteral("键盘"), QStringLiteral(":/images/butt_calling_keyboard_up.png"), QStringLiteral(":/images/butt_calling_keyboard_down.png"));
     auto *recordBtn = makeActionBtn(QStringLiteral("录音"), QStringLiteral(":/images/butt_calling_recording_up.png"), QStringLiteral(":/images/butt_calling_recording_down.png"));
-    connect(keyboardBtn, &QPushButton::clicked, this, [this]() {
-        if (m_callKeyboardPanel) {
-            m_callKeyboardPanel->setVisible(!m_callKeyboardPanel->isVisible());
+    connect(keyboardBtn, &QPushButton::clicked, this, [this, bottomActions]() {
+        if (!m_callKeyboardPanel) {
+            return;
+        }
+        const bool visible = !m_callKeyboardPanel->isVisible();
+        m_callKeyboardPanel->setVisible(visible);
+        if (bottomActions) {
+            bottomActions->setVisible(!visible);
         }
     });
     bottomLayout->addWidget(muteBtn);
@@ -424,19 +433,23 @@ void PhoneWindow::setupUI() {
     };
     for (int i = 0; i < inCallKeys.size(); ++i) {
         auto *btn = new QPushButton(QString(), keyboardWrap);
+        btn->setProperty("digit", inCallKeys.at(i));
         btn->setFixedSize(198, 120);
         btn->setStyleSheet(QString("QPushButton{color:transparent;font-size:64px;font-weight:bold;border:none;background:url(%1) no-repeat center center;}"
                                     "QPushButton:hover{background-image:url(%2);}").arg(inCallUp.at(i), inCallDown.at(i)));
-        connect(btn, &QPushButton::clicked, this, [this, btn]() { appendDigit(btn->text()); });
+        connect(btn, &QPushButton::clicked, this, [this, btn]() { appendDigit(btn->property("digit").toString()); });
         keyboardGrid->addWidget(btn, i / 3, i % 3);
     }
     auto *hideKeyboardBtn = new QPushButton(QStringLiteral("隐藏"), m_callKeyboardPanel);
     hideKeyboardBtn->setGeometry(681, 87, 54, 240);
     hideKeyboardBtn->setStyleSheet("QPushButton{border:none;background:#0068FF;color:#fff;font-size:48px;font-weight:bold;}"
                                    "QPushButton:hover{background:#00FAFF;}");
-    connect(hideKeyboardBtn, &QPushButton::clicked, this, [this]() {
+    connect(hideKeyboardBtn, &QPushButton::clicked, this, [this, bottomActions]() {
         if (m_callKeyboardPanel) {
             m_callKeyboardPanel->hide();
+        }
+        if (bottomActions) {
+            bottomActions->show();
         }
     });
 
@@ -480,10 +493,26 @@ void PhoneWindow::activateTab(int index) {
 }
 
 void PhoneWindow::onDial() {
+    if (m_bluetoothManager && m_numberEdit) {
+        const QString number = m_numberEdit->text().trimmed();
+        if (!number.isEmpty()) {
+            m_bluetoothManager->dialNumber(number);
+        }
+    }
     showCallOverlay(false);
 }
 
+void PhoneWindow::onAnswer() {
+    if (m_bluetoothManager) {
+        m_bluetoothManager->answerCall();
+    }
+    updateCallPanel(false);
+}
+
 void PhoneWindow::onHangup() {
+    if (m_bluetoothManager) {
+        m_bluetoothManager->hangupCall();
+    }
     if (m_callOverlay) {
         m_callOverlay->hide();
     }
@@ -656,6 +685,9 @@ void PhoneWindow::showCallOverlay(bool incoming) {
     updateCallPanel(incoming);
     if (m_callKeyboardPanel) {
         m_callKeyboardPanel->hide();
+    }
+    if (m_bottomActions) {
+        m_bottomActions->show();
     }
     if (m_callOverlay) {
         m_callOverlay->show();

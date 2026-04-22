@@ -43,6 +43,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_imageViewingWindow(nullptr)
     , m_usbManager(new USBManager(this))
 {
+    m_mediaManager->setBluetoothManager(m_bluetoothManager);
     setupWindowSize();
     setupUI();
     adjustForDevice();
@@ -277,7 +278,7 @@ void MainWindow::onPhoneClicked() {
     qDebug() << "Phone button clicked";
 
     if (!m_phoneWindow) {
-        m_phoneWindow = new PhoneWindow();
+        m_phoneWindow = new PhoneWindow(m_bluetoothManager);
         m_phoneWindow->setAttribute(Qt::WA_DeleteOnClose);
         connect(m_phoneWindow, &PhoneWindow::requestReturnToMain, this, [this]() {
             this->show();
@@ -352,7 +353,7 @@ void MainWindow::onSystemSettingsClicked() {
     qDebug() << "System settings button clicked";
 
     if (!m_systemSettingWindow) {
-        m_systemSettingWindow = new SystemSettingWindow();
+        m_systemSettingWindow = new SystemSettingWindow(m_bluetoothManager);
         m_systemSettingWindow->setAttribute(Qt::WA_DeleteOnClose);
         connect(m_systemSettingWindow, &SystemSettingWindow::requestReturnToMain, this, [this]() {
             this->show();

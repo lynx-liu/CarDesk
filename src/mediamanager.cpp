@@ -1,4 +1,5 @@
 #include "mediamanager.h"
+#include "bluetoothmanager.h"
 #include "videolistwindow.h"
 #include "videoplaywindow.h"
 #include "musicplayerwindow.h"
@@ -12,6 +13,7 @@ MediaManager::MediaManager(QObject *parent)
     , m_videoListWindow(nullptr)
     , m_videoPlayWindow(nullptr)
     , m_musicWindow(nullptr)
+    , m_bluetoothManager(nullptr)
 {
 }
 
@@ -49,12 +51,22 @@ MusicPlayerWindow *MediaManager::musicWindow() const {
     return m_musicWindow;
 }
 
+void MediaManager::setBluetoothManager(BluetoothManager *manager) {
+    m_bluetoothManager = manager;
+    if (m_musicWindow) {
+        m_musicWindow->setBluetoothManager(manager);
+    }
+}
+
 void MediaManager::openMusicPlayer() {
     qDebug() << "Opening music player...";
 
     if (!m_musicWindow) {
         // 不使用 WA_DeleteOnClose：窗口复用，避免析构时 XPlayerReset 时序问题
         m_musicWindow = new MusicPlayerWindow();
+        if (m_bluetoothManager) {
+            m_musicWindow->setBluetoothManager(m_bluetoothManager);
+        }
     }
     m_musicWindow->showNormal();
     m_musicWindow->raise();

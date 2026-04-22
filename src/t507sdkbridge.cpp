@@ -131,12 +131,3 @@ QString T507SdkBridge::emmcUdiskMountPath()
 {
     return QStringLiteral("/mnt/UDISK");
 }
-
-QStringList T507SdkBridge::bluetoothInitCommands()
-{
-    return {
-        QStringLiteral("insmod /lib/modules/4.9.170/xr829.ko"),
-        QStringLiteral("insmod /lib/modules/4.9.170/xradio_btlpm.ko"),
-        QStringLiteral("hciattach -s 115200 /dev/ttyS1 xradio")
-    };
-}

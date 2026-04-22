@@ -1,4 +1,5 @@
 #include "systemsettingwindow.h"
+#include "bluetoothmanager.h"
 #include "otamanager.h"
 #include "devicedetect.h"
 #include "topbarwidget.h"
@@ -58,10 +59,17 @@ static void performFactoryReset()
 }
 }
 
-SystemSettingWindow::SystemSettingWindow(QWidget *parent)
+SystemSettingWindow::SystemSettingWindow(BluetoothManager *bluetoothManager, QWidget *parent)
     : QMainWindow(parent)
     , m_pages(nullptr)
     , m_subnavList(nullptr)
+    , m_bluetoothManager(bluetoothManager)
+    , m_bluetoothIntroLabel(nullptr)
+    , m_bluetoothDeviceName(QStringLiteral("wodelanya"))
+    , m_bluetoothPairPin(QStringLiteral("0000"))
+    , m_bluetoothEnabled(false)
+    , m_bluetoothPairedDevicesLoaded(false)
+    , m_bluetoothConnectionTimer(new QTimer(this))
     , m_updateStateLabel(nullptr)
     , m_updateProgressText(nullptr)
     , m_updateProgressBar(nullptr)
@@ -96,6 +104,8 @@ SystemSettingWindow::SystemSettingWindow(QWidget *parent)
 
     setupUI();
 
+    m_bluetoothConnectionTimer->setSingleShot(true);
+
     m_updateTimer->setInterval(120);
     connect(m_updateTimer, &QTimer::timeout, this, &SystemSettingWindow::onTickUpdate);
     
@@ -120,6 +130,13 @@ void SystemSettingWindow::onSubnavChanged(int index)
         return;
     }
     m_pages->setCurrentIndex(index);
+
+    if (index == 2 && m_bluetoothManager && m_bluetoothEnabled) {
+        m_bluetoothManager->queryConnectedDevice();
+        if (m_bluetoothManager->getBluetoothName().isEmpty() || m_bluetoothManager->getBluetoothPin().isEmpty()) {
+            m_bluetoothManager->queryBluetoothSettings();
+        }
+    }
 }
 
 void SystemSettingWindow::onStartUpdate()
@@ -1113,7 +1130,8 @@ QWidget *SystemSettingWindow::createBluetoothPage()
         btn->setFixedSize(w, 54);
         btn->setStyleSheet(
             "QPushButton{background:none;border:2px solid #0068ff;color:#fff;font-size:24px;}"
-            "QPushButton:hover{border-color:#00faff;color:#00faff;}"
+            "QPushButton:hover:enabled{border-color:#00faff;color:#00faff;}"
+            "QPushButton:disabled{border-color:rgba(255,255,255,0.18);color:rgba(255,255,255,0.36);}" 
         );
         return btn;
     };
@@ -1133,7 +1151,6 @@ QWidget *SystemSettingWindow::createBluetoothPage()
     switchLabel->setFixedWidth(170);
     auto *enableBtn = new QPushButton(switchRow);
     enableBtn->setCheckable(true);
-    enableBtn->setChecked(true);
     enableBtn->setFixedSize(88, 44);
     enableBtn->setStyleSheet(
         "QPushButton{border:none;background:url(:/images/butt_setting_close.png) no-repeat center;}"
@@ -1145,25 +1162,87 @@ QWidget *SystemSettingWindow::createBluetoothPage()
 
     // HTML: 在移动设备上启动蓝牙，并搜索本设备name：<a>wodelanya</a><br>匹配密码：0000
     // CSS .bluetooth_intro a { color:#00FAFF }  设备名称不换行显示
-    auto *deviceName = new QString(QStringLiteral("wodelanya"));
-    auto *pairPwd = new QString(QStringLiteral("0000"));
-
     auto *intro = new QLabel(openTab);
     intro->setTextFormat(Qt::RichText);
-    intro->setText(QStringLiteral(
-        "在移动设备上启动蓝牙，并搜索本设备name：<a href='rename' style='color:#00FAFF;text-decoration:none;'>%1</a><br>匹配密码：%2"
-    ).arg(*deviceName, *pairPwd));
     intro->setStyleSheet("QLabel{font-size:28px;line-height:42px;color:#eaf2ff;}");
     intro->setOpenExternalLinks(false);
+    m_bluetoothIntroLabel = intro;
+
+    auto updateIntroText = [this]() {
+        if (!m_bluetoothIntroLabel)
+            return;
+        const QString content = QStringLiteral(
+            "在移动设备上启动蓝牙，并搜索本设备name：<a href='rename' style='color:#00FAFF;text-decoration:none;'>%1</a><br>匹配密码：%2"
+        ).arg(m_bluetoothDeviceName, m_bluetoothPairPin);
+        if (!m_bluetoothEnabled) {
+            m_bluetoothIntroLabel->setText(QStringLiteral(
+                "<span style='color:#7a7a7a;'>%1</span>"
+            ).arg(content));
+            return;
+        }
+        m_bluetoothIntroLabel->setText(content);
+    };
+
+    if (m_bluetoothManager) {
+        m_bluetoothEnabled = m_bluetoothManager->isBluetoothEnabled();
+        const QString cachedName = m_bluetoothManager->getBluetoothName();
+        const QString cachedPin = m_bluetoothManager->getBluetoothPin();
+        if (!cachedName.isEmpty()) {
+            m_bluetoothDeviceName = cachedName;
+        }
+        if (!cachedPin.isEmpty()) {
+            m_bluetoothPairPin = cachedPin;
+        }
+        enableBtn->blockSignals(true);
+        enableBtn->setChecked(m_bluetoothEnabled);
+        enableBtn->blockSignals(false);
+        updateIntroText();
+
+        connect(enableBtn, &QPushButton::toggled, this, [this, openTab](bool checked) {
+            if (m_bluetoothManager) {
+                m_bluetoothManager->setBluetoothOn(checked);
+                if (checked && m_pages && m_pages->currentWidget() == openTab
+                        && (m_bluetoothManager->getBluetoothName().isEmpty() || m_bluetoothManager->getBluetoothPin().isEmpty())) {
+                    m_bluetoothManager->queryBluetoothSettings();
+                }
+            }
+        });
+
+        connect(m_bluetoothManager, &BluetoothManager::bluetoothEnabledChanged,
+                this, [this, enableBtn, updateIntroText](bool enabled) {
+            if (enableBtn) {
+                enableBtn->blockSignals(true);
+                enableBtn->setChecked(enabled);
+                enableBtn->blockSignals(false);
+            }
+            m_bluetoothEnabled = enabled;
+            updateIntroText();
+        });
+        connect(m_bluetoothManager, &BluetoothManager::bluetoothNameChanged,
+                this, [this, updateIntroText](const QString &name) {
+            if (!name.isEmpty()) {
+                m_bluetoothDeviceName = name;
+                updateIntroText();
+            }
+        });
+        connect(m_bluetoothManager, &BluetoothManager::bluetoothPinChanged,
+                this, [this, updateIntroText](const QString &pin) {
+            if (!pin.isEmpty()) {
+                m_bluetoothPairPin = pin;
+                updateIntroText();
+            }
+        });
+    }
+
     // 点击设备名称 → 重命名对话框
-    connect(intro, &QLabel::linkActivated, this, [this, intro, deviceName, pairPwd](const QString &link) {
+    connect(intro, &QLabel::linkActivated, this, [this, updateIntroText](const QString &link) {
         if (link != QStringLiteral("rename")) return;
         QDialog dialog(this);
         dialog.setWindowTitle(QStringLiteral("蓝牙名称"));
         dialog.setFixedSize(680, 220);
         dialog.setStyleSheet("QDialog{background:#0d1f3f;color:#fff;border:1px solid #0068ff;}");
         auto *dLayout = new QVBoxLayout(&dialog);
-        auto *line = new QLineEdit(*deviceName, &dialog);
+        auto *line = new QLineEdit(m_bluetoothDeviceName, &dialog);
         line->setStyleSheet("QLineEdit{height:54px;background:rgba(255,255,255,0.08);border:1px solid #0068ff;color:#fff;font-size:28px;padding-left:16px;}");
         auto *ok = new QPushButton(QStringLiteral("确认"), &dialog);
         ok->setFixedSize(168, 54);
@@ -1173,10 +1252,11 @@ QWidget *SystemSettingWindow::createBluetoothPage()
         dLayout->addLayout(r);
         connect(ok, &QPushButton::clicked, &dialog, &QDialog::accept);
         if (dialog.exec() == QDialog::Accepted && !line->text().trimmed().isEmpty()) {
-            *deviceName = line->text().trimmed();
-            intro->setText(QStringLiteral(
-                "在移动设备上启动蓝牙，并搜索本设备name：<a href='rename' style='color:#00FAFF;text-decoration:none;'>%1</a><br>匹配密码：%2"
-            ).arg(*deviceName, *pairPwd));
+            m_bluetoothDeviceName = line->text().trimmed();
+            if (m_bluetoothManager) {
+                m_bluetoothManager->setDeviceName(m_bluetoothDeviceName);
+            }
+            updateIntroText();
         }
     });
 
@@ -1206,6 +1286,19 @@ QWidget *SystemSettingWindow::createBluetoothPage()
     currentDevice->setAlignment(Qt::AlignCenter);
     currentDevice->setStyleSheet(
         "QLabel{height:60px;border:1px solid #0068FF;background:rgba(255,255,255,0.10);font-size:28px;color:#fff;}");
+    if (m_bluetoothManager && m_bluetoothManager->isConnected()) {
+        QString currentName = m_bluetoothManager->getConnectedDeviceName();
+        if (currentName.isEmpty()) {
+            currentName = m_bluetoothManager->getConnectedDeviceAddress();
+        }
+        if (!currentName.isEmpty()) {
+            currentDevice->setText(currentName);
+        } else {
+            currentDevice->setText(QStringLiteral("已连接设备"));
+        }
+    } else {
+        currentDevice->setText(QStringLiteral("未连接"));
+    }
     pairRow1H->addWidget(currentDevice);
 
     // ── 第二行：选择连接手机（last-child: height:290; border:none）──
@@ -1213,7 +1306,7 @@ QWidget *SystemSettingWindow::createBluetoothPage()
     auto *pairRow2H = new QHBoxLayout(pairRow2);
     pairRow2H->setContentsMargins(0, 25, 0, 0);
     pairRow2H->setSpacing(0);
-    auto *pairDt2 = new QLabel(QStringLiteral("请选择需要\n连接的手机"), pairRow2);
+    auto *pairDt2 = new QLabel(QStringLiteral("请选择需要连接的手机"), pairRow2);
     pairDt2->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;line-height:48px;}");
     pairRow2H->addWidget(pairDt2);
     pairRow2H->addStretch();
@@ -1225,8 +1318,6 @@ QWidget *SystemSettingWindow::createBluetoothPage()
     pairDdLayout->setSpacing(0);
 
     auto *pairList = new QListWidget(pairDdWidget);
-    pairList->addItems({QStringLiteral("手机：13723467654"), QStringLiteral("手机：13723467655"), QStringLiteral("手机：13723467656")});
-    pairList->setCurrentRow(0);
     pairList->setFixedHeight(192);
     pairList->setStyleSheet(
         "QListWidget{border:none;background:transparent;outline:none;font-size:28px;color:#fff;}"
@@ -1237,11 +1328,35 @@ QWidget *SystemSettingWindow::createBluetoothPage()
         "QScrollBar::handle:vertical{background:#0068FF;border-radius:3px;min-height:30px;}"
         "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;background:none;}"
     );
+    if (m_bluetoothManager) {
+        connect(m_bluetoothManager, &BluetoothManager::pairedDeviceFound, this, [pairList](const QString &name, const QString &addr) {
+            for (int i = 0; i < pairList->count(); ++i) {
+                if (pairList->item(i)->data(Qt::UserRole).toString() == addr)
+                    return;
+            }
+            const QString displayName = name.isEmpty() ? addr : name;
+            auto *item = new QListWidgetItem(displayName);
+            item->setData(Qt::UserRole, addr);
+            pairList->addItem(item);
+        });
+        connect(m_bluetoothManager, &BluetoothManager::pairedDeviceCleared, this, [pairList](const QString &address) {
+            for (int i = 0; i < pairList->count(); ++i) {
+                auto *item = pairList->item(i);
+                if (item->data(Qt::UserRole).toString() == address) {
+                    delete pairList->takeItem(i);
+                    break;
+                }
+            }
+        });
+        connect(m_bluetoothManager, &BluetoothManager::pairedQueryFinished, this, [pairList]() {
+            Q_UNUSED(pairList);
+        });
+    }
 
     // CSS .bluetooth_list .page_btn { width:326; justify-content:space-between; margin:0 auto }
     // button.bluetooth_btn { w:112; h:54; border:2px solid #0068FF }
     auto *pairBtnWrap = new QWidget(pairDdWidget);
-    pairBtnWrap->setFixedSize(326, 74);
+    pairBtnWrap->setFixedSize(260, 74);
     auto *pairBtnH = new QHBoxLayout(pairBtnWrap);
     pairBtnH->setContentsMargins(0, 20, 0, 0);
     pairBtnH->setSpacing(0);
@@ -1250,12 +1365,80 @@ QWidget *SystemSettingWindow::createBluetoothPage()
     pairBtnH->addWidget(connectBtn);
     pairBtnH->addStretch();
     pairBtnH->addWidget(disconnectBtn);
-    connect(connectBtn, &QPushButton::clicked, this, [pairList, currentDevice]() {
-        if (pairList->currentItem())
-            currentDevice->setText(pairList->currentItem()->text());
+    auto updatePairControlState = [this, pairList, connectBtn, disconnectBtn]() {
+        const bool enabled = m_bluetoothEnabled && m_bluetoothManager;
+        const bool hasSelection = pairList->currentItem() && !pairList->currentItem()->data(Qt::UserRole).toString().isEmpty();
+        connectBtn->setEnabled(enabled && hasSelection && !m_bluetoothManager->isConnected());
+        disconnectBtn->setEnabled(enabled && m_bluetoothManager && m_bluetoothManager->isConnected());
+    };
+    connect(connectBtn, &QPushButton::clicked, this, [this, pairList, currentDevice, connectBtn, disconnectBtn]() {
+        if (!m_bluetoothManager || !pairList->currentItem()) return;
+        const QString address = pairList->currentItem()->data(Qt::UserRole).toString();
+        if (!address.isEmpty()) {
+            currentDevice->setText(QStringLiteral("连接中..."));
+            connectBtn->setEnabled(false);
+            disconnectBtn->setEnabled(false);
+            m_bluetoothManager->connectDevice(address);
+            m_bluetoothConnectionTimer->start(8000);
+        }
     });
-    connect(disconnectBtn, &QPushButton::clicked, this, [currentDevice]() {
+    connect(disconnectBtn, &QPushButton::clicked, this, [this, currentDevice, connectBtn, disconnectBtn, updatePairControlState]() {
+        if (m_bluetoothManager) {
+            m_bluetoothManager->disconnectDevice();
+        }
+        if (m_bluetoothConnectionTimer->isActive()) {
+            m_bluetoothConnectionTimer->stop();
+        }
         currentDevice->setText(QStringLiteral("未连接"));
+        updatePairControlState();
+    });
+    if (m_bluetoothManager) {
+        connect(m_bluetoothManager, &BluetoothManager::deviceConnected, this, [currentDevice, connectBtn, disconnectBtn, this](const QString &name) {
+            if (m_bluetoothConnectionTimer->isActive()) {
+                m_bluetoothConnectionTimer->stop();
+            }
+            currentDevice->setText(name);
+            connectBtn->setEnabled(false);
+            disconnectBtn->setEnabled(true);
+        });
+        connect(m_bluetoothManager, &BluetoothManager::deviceDisconnected, this, [currentDevice, connectBtn, disconnectBtn, this, updatePairControlState]() {
+            if (m_bluetoothConnectionTimer->isActive()) {
+                m_bluetoothConnectionTimer->stop();
+            }
+            currentDevice->setText(QStringLiteral("未连接"));
+            updatePairControlState();
+        });
+        connect(m_bluetoothManager, &BluetoothManager::bluetoothEnabledChanged, this, [this, pairList, connectBtn, disconnectBtn](bool enabled) {
+            m_bluetoothEnabled = enabled;
+            const bool hasSelection = pairList->currentItem() && !pairList->currentItem()->data(Qt::UserRole).toString().isEmpty();
+            connectBtn->setEnabled(enabled && hasSelection && !m_bluetoothManager->isConnected());
+            disconnectBtn->setEnabled(enabled && m_bluetoothManager && m_bluetoothManager->isConnected());
+        });
+    }
+    connect(pairList, &QListWidget::currentRowChanged, this, [this, pairList, connectBtn](int) {
+        const bool hasSelection = pairList->currentItem() && !pairList->currentItem()->data(Qt::UserRole).toString().isEmpty();
+        connectBtn->setEnabled(m_bluetoothEnabled && hasSelection && !m_bluetoothManager->isConnected());
+    });
+
+    connect(m_bluetoothConnectionTimer, &QTimer::timeout, this, [this, currentDevice, connectBtn, disconnectBtn, pairList]() {
+        if (!m_bluetoothManager) return;
+        if (!m_bluetoothManager->isConnected()) {
+            currentDevice->setText(QStringLiteral("连接超时"));
+            connectBtn->setEnabled(m_bluetoothEnabled && pairList->currentItem() && !pairList->currentItem()->data(Qt::UserRole).toString().isEmpty());
+            disconnectBtn->setEnabled(false);
+            m_bluetoothManager->queryConnectedDevice();
+            m_bluetoothManager->queryPairedDevices();
+        }
+    });
+
+    updatePairControlState();
+
+    connect(tabs, &QTabWidget::currentChanged, this, [this, pairList](int index) {
+        if (index != 1 || !m_bluetoothManager || m_bluetoothPairedDevicesLoaded)
+            return;
+        m_bluetoothPairedDevicesLoaded = true;
+        pairList->clear();
+        m_bluetoothManager->queryPairedDevices();
     });
 
     pairDdLayout->addWidget(pairList);
@@ -1288,6 +1471,19 @@ QWidget *SystemSettingWindow::createBluetoothPage()
     delCurrentDevice->setAlignment(Qt::AlignCenter);
     delCurrentDevice->setStyleSheet(
         "QLabel{height:60px;border:1px solid #0068FF;background:rgba(255,255,255,0.10);font-size:28px;color:#fff;}");
+    if (m_bluetoothManager && m_bluetoothManager->isConnected()) {
+        QString currentName = m_bluetoothManager->getConnectedDeviceName();
+        if (currentName.isEmpty()) {
+            currentName = m_bluetoothManager->getConnectedDeviceAddress();
+        }
+        if (!currentName.isEmpty()) {
+            delCurrentDevice->setText(currentName);
+        } else {
+            delCurrentDevice->setText(QStringLiteral("已连接设备"));
+        }
+    } else {
+        delCurrentDevice->setText(QStringLiteral("未连接"));
+    }
     delRow1H->addWidget(delCurrentDevice);
 
     // 第二行：选择要删除的设备
@@ -1295,7 +1491,7 @@ QWidget *SystemSettingWindow::createBluetoothPage()
     auto *delRow2H = new QHBoxLayout(delRow2);
     delRow2H->setContentsMargins(0, 25, 0, 0);
     delRow2H->setSpacing(0);
-    auto *delDt2 = new QLabel(QStringLiteral("请选择需要\n删除的手机"), delRow2);
+    auto *delDt2 = new QLabel(QStringLiteral("请选择需要删除的手机"), delRow2);
     delDt2->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;line-height:48px;}");
     delRow2H->addWidget(delDt2);
     delRow2H->addStretch();
@@ -1307,34 +1503,69 @@ QWidget *SystemSettingWindow::createBluetoothPage()
     delDdLayout->setSpacing(0);
 
     auto *removeList = new QListWidget(delDdWidget);
-    removeList->addItems({QStringLiteral("手机：13723467654"), QStringLiteral("手机：13723467655"), QStringLiteral("手机：13723467656")});
-    removeList->setCurrentRow(0);
-    removeList->setFixedHeight(216);
+    removeList->setFixedHeight(192);
     removeList->setStyleSheet(
         "QListWidget{border:none;background:transparent;outline:none;font-size:28px;color:#fff;}"
-        "QListWidget::item{height:60px;border:1px solid #0068FF;background:rgba(255,255,255,0.10);text-align:center;margin-bottom:12px;}"
+        "QListWidget::item{height:60px;border:1px solid #0068FF;background:rgba(255,255,255,0.10);text-align:center;}"
         "QListWidget::item:selected{border:2px solid #00FAFF;color:#00FAFF;}"
         "QListWidget::item:hover{border:2px solid #00FAFF;color:#00FAFF;}"
         "QScrollBar:vertical{width:6px;background:rgba(0,104,255,0.10);border-radius:3px;}"
         "QScrollBar::handle:vertical{background:#0068FF;border-radius:3px;min-height:30px;}"
         "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;background:none;}"
     );
+    if (m_bluetoothManager) {
+        connect(m_bluetoothManager, &BluetoothManager::pairedDeviceFound, this, [removeList](const QString &name, const QString &addr) {
+            for (int i = 0; i < removeList->count(); ++i) {
+                if (removeList->item(i)->data(Qt::UserRole).toString() == addr)
+                    return;
+            }
+            QString displayName = name.trimmed();
+            if (displayName.isEmpty()) {
+                displayName = QStringLiteral("已配对设备");
+            }
+            auto *item = new QListWidgetItem(displayName);
+            item->setData(Qt::UserRole, addr);
+            removeList->addItem(item);
+        });
+        connect(m_bluetoothManager, &BluetoothManager::pairedQueryFinished, this, [removeList]() {
+            Q_UNUSED(removeList);
+        });
+        connect(m_bluetoothManager, &BluetoothManager::pairedDeviceCleared, this, [removeList](const QString &address) {
+            for (int i = 0; i < removeList->count(); ++i) {
+                auto *item = removeList->item(i);
+                if (item->data(Qt::UserRole).toString() == address) {
+                    delete removeList->takeItem(i);
+                    break;
+                }
+            }
+        });
+        connect(m_bluetoothManager, &BluetoothManager::deviceConnected, this, [delCurrentDevice](const QString &name) {
+            delCurrentDevice->setText(name);
+        });
+        connect(m_bluetoothManager, &BluetoothManager::deviceDisconnected, this, [delCurrentDevice]() {
+            delCurrentDevice->setText(QStringLiteral("未连接"));
+        });
+    }
 
     // HTML: justify-content:center → 只有一个确认按钮居中
     auto *delBtnWrap = new QWidget(delDdWidget);
-    delBtnWrap->setFixedSize(326, 74);
+    delBtnWrap->setFixedSize(260, 74);
     auto *delBtnH = new QHBoxLayout(delBtnWrap);
     delBtnH->setContentsMargins(0, 20, 0, 0);
     auto *removeBtn = makeBlueBtn(QStringLiteral("确认"));
     delBtnH->addStretch();
     delBtnH->addWidget(removeBtn);
     delBtnH->addStretch();
-    connect(removeBtn, &QPushButton::clicked, this, [removeList, delCurrentDevice]() {
-        if (removeList->currentRow() >= 0) {
-            delete removeList->takeItem(removeList->currentRow());
-            if (removeList->count() == 0)
-                delCurrentDevice->setText(QStringLiteral("未连接"));
+    connect(removeBtn, &QPushButton::clicked, this, [this, removeList, delCurrentDevice]() {
+        if (!m_bluetoothManager || removeList->currentRow() < 0) return;
+        auto *item = removeList->currentItem();
+        const QString address = item->data(Qt::UserRole).toString();
+        if (!address.isEmpty()) {
+            m_bluetoothManager->clearPairedDevice(address);
         }
+        delete removeList->takeItem(removeList->currentRow());
+        if (removeList->count() == 0)
+            delCurrentDevice->setText(QStringLiteral("未连接"));
     });
 
     delDdLayout->addWidget(removeList);
@@ -1369,8 +1600,8 @@ QWidget *SystemSettingWindow::createBluetoothPage()
     //     .radio_search_con>div>span { right:24px; top:12px; 48×48 }
     auto *pwdInputWrap = new QWidget(pwdContainer);
     pwdInputWrap->setFixedHeight(80);
-    auto *pwdEdit = new QLineEdit(QStringLiteral("1234"), pwdInputWrap);
-    pwdEdit->setReadOnly(true);
+    auto *pwdEdit = new QLineEdit(m_bluetoothPairPin, pwdInputWrap);
+    pwdEdit->setMaxLength(8);
     pwdEdit->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     pwdEdit->setGeometry(0, 4, 816, 72);
     pwdEdit->setStyleSheet(
@@ -1471,14 +1702,22 @@ QWidget *SystemSettingWindow::createBluetoothPage()
     confirmBtn->setStyleSheet(
         "QPushButton{border:none;background:#0068FF;color:#fff;font-size:48px;font-weight:bold;}"
         "QPushButton:hover{background:#00FAFF;}");
-    connect(confirmBtn, &QPushButton::clicked, this, [pairPwd, pwdEdit, intro, deviceName](){
+    connect(confirmBtn, &QPushButton::clicked, this, [this, pwdEdit, intro, updateIntroText](){
         if (!pwdEdit->text().isEmpty()) {
-            *pairPwd = pwdEdit->text();
-            intro->setText(QStringLiteral(
-                "在移动设备上启动蓝牙，并搜索本设备name：<a href='rename' style='color:#00FAFF;text-decoration:none;'>%1</a><br>匹配密码：%2"
-            ).arg(*deviceName, *pairPwd));
+            m_bluetoothPairPin = pwdEdit->text();
+            if (m_bluetoothManager) {
+                m_bluetoothManager->setPin(m_bluetoothPairPin);
+            }
+            updateIntroText();
         }
     });
+    if (m_bluetoothManager) {
+        connect(m_bluetoothManager, &BluetoothManager::bluetoothPinChanged, this, [pwdEdit](const QString &pin) {
+            if (!pin.isEmpty()) {
+                pwdEdit->setText(pin);
+            }
+        });
+    }
     kbdH->addWidget(dialBtn);
 
     passwordLayout->addWidget(pwdInputWrap);
@@ -1492,6 +1731,11 @@ QWidget *SystemSettingWindow::createBluetoothPage()
 
     layout->addWidget(tabs, 0, Qt::AlignLeft);
     return page;
+}
+
+void SystemSettingWindow::setBluetoothManager(BluetoothManager *bluetoothManager)
+{
+    m_bluetoothManager = bluetoothManager;
 }
 
 QWidget *SystemSettingWindow::createInfoPage()
