@@ -372,7 +372,10 @@ int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
     // 设备 buildroot 默认 LANG=C，强制 UTF-8 避免中文文件名乱码
     QTextCodec::setCodecForLocale(QTextCodec::codecForName("UTF-8"));
-    app.setOverrideCursor(Qt::BlankCursor);  // 触控设备隐藏鼠标指针
+    const DeviceDetect &device = DeviceDetect::instance();
+    if (device.getDeviceType() != DeviceDetect::DEVICE_TYPE_PC) {
+        app.setOverrideCursor(Qt::BlankCursor);  // 触控设备隐藏鼠标指针
+    }
     app.setProperty("appClock24h", false);  // 默认 12 小时制（与原始行为一致）
     app.setProperty("appSoundMode", QStringLiteral("立体声"));  // 默认声场模式
     T507SdkBridge::setSoundMode(QStringLiteral("立体声"));  // 应用默认声场到 TM2313
@@ -431,8 +434,6 @@ int main(int argc, char *argv[]) {
         }
     }
     // 检测设备信息
-    const DeviceDetect &device = DeviceDetect::instance();
-    
     qDebug() << "========== CarDesk Application Started ==========";
     qDebug() << "Device Type:" << device.getDeviceTypeString();
     qDebug() << "Platform:" << device.getPlatform();
