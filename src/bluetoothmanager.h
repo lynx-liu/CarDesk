@@ -45,6 +45,7 @@ public:
     bool previousTrack();
     bool connectLastA2dpDevice();
     bool disconnectA2dp();
+    bool queryA2dpTrackInfo();
 
 signals:
     void deviceFound(const QString &name, const QString &address);
@@ -64,6 +65,9 @@ signals:
     void bluetoothEnabledChanged(bool enabled);
     void bluetoothNameChanged(const QString &name);
     void bluetoothPinChanged(const QString &pin);
+    void a2dpTrackInfoChanged(const QString &title, const QString &artist, const QString &album, const QString &time, int index, int total);
+    void a2dpPlaybackStateChanged(bool playing);
+    void a2dpProgressChanged(qint64 positionMs, qint64 totalMs);
     void error(const QString &errorMsg);
 
 private slots:
@@ -73,7 +77,7 @@ private:
     bool ensureInitialized();
     bool openSerialPort();
     bool sendAtCommand(const QString &command);
-    void parseLine(const QString &line);
+    void parseLine(const QByteArray &line);
     QString normalizeAddress(const QString &addr) const;
 
     enum class BluetoothQueryState {
@@ -88,6 +92,8 @@ private:
     QString m_connectedDeviceAddress;
     QString m_deviceName;
     QString m_pinCode;
+    bool m_a2dpPlaying = false;
+    qint64 m_a2dpDurationMs = 0;
     BluetoothQueryState m_queryState;
 
     QSerialPort *m_port;

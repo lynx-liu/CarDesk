@@ -3,6 +3,7 @@
 #include <QDebug>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QTimer>
 
 BluetoothManager::BluetoothManager(QObject *parent)
     : QObject(parent)
@@ -219,12 +220,25 @@ bool BluetoothManager::stopMusic() {
 
 bool BluetoothManager::nextTrack() {
     if (!ensureInitialized()) return false;
-    return sendAtCommand(QStringLiteral("MD"));
+    const bool ok = sendAtCommand(QStringLiteral("MD"));
+    if (ok) {
+        QTimer::singleShot(500, this, &BluetoothManager::queryA2dpTrackInfo);
+    }
+    return ok;
 }
 
 bool BluetoothManager::previousTrack() {
     if (!ensureInitialized()) return false;
-    return sendAtCommand(QStringLiteral("ME"));
+    const bool ok = sendAtCommand(QStringLiteral("ME"));
+    if (ok) {
+        QTimer::singleShot(500, this, &BluetoothManager::queryA2dpTrackInfo);
+    }
+    return ok;
+}
+
+bool BluetoothManager::queryA2dpTrackInfo() {
+    if (!ensureInitialized()) return false;
+    return sendAtCommand(QStringLiteral("MK"));
 }
 
 bool BluetoothManager::connectLastA2dpDevice() {
@@ -294,8 +308,7 @@ void BluetoothManager::onSerialReadyRead() {
             line.chop(1);
         if (line.isEmpty())
             continue;
-        const QString text = QString::fromUtf8(line).trimmed();
-        parseLine(text);
+        parseLine(line);
     }
 }
 
@@ -351,10 +364,11 @@ bool BluetoothManager::sendAtCommand(const QString &command) {
     return true;
 }
 
-void BluetoothManager::parseLine(const QString &line) {
-    qDebug() << "BluetoothManager: received:" << line;
+void BluetoothManager::parseLine(const QByteArray &line) {
+    const QString text = QString::fromUtf8(line).trimmed();
+    qDebug() << "BluetoothManager: received:" << text;
 
-    if (line == QLatin1String("SH")) {
+    if (text == "SH") {
         if (m_scanning) {
             m_scanning = false;
             emit scanFinished();
@@ -362,7 +376,7 @@ void BluetoothManager::parseLine(const QString &line) {
         return;
     }
 
-    if (line.startsWith(QStringLiteral("SF["))) {
+    if (text.startsWith("SF[")) {
         static const QRegularExpression re(QStringLiteral("^SF\\[([^;]+);(.+)\\]$"));
         const QRegularExpressionMatch match = re.match(line);
         if (match.hasMatch()) {
@@ -375,7 +389,7 @@ void BluetoothManager::parseLine(const QString &line) {
         return;
     }
 
-    if (line.startsWith(QStringLiteral("MX"))) {
+    if (text.startsWith("MX")) {
         static const QRegularExpression reBracket(QStringLiteral("^MX\\d*\\[([^\\]]+)\\]\\[(.*)\\]$"));
         QRegularExpressionMatch match = reBracket.match(line);
         if (match.hasMatch()) {
@@ -400,8 +414,8 @@ void BluetoothManager::parseLine(const QString &line) {
         return;
     }
 
-    if (line.startsWith(QStringLiteral("PB"))) {
-        static const QRegularExpression re(QStringLiteral("^PB\[(.*?)\]\[FF\]\[(.*?)\]$"));
+    if (text.startsWith("PB")) {
+        static const QRegularExpression re(QStringLiteral(R"(^PB\[(.*?)\]\[FF\]\[(.*?)\]$)"));
         QRegularExpressionMatch match = re.match(line);
         if (match.hasMatch()) {
             emit phonebookEntryReceived(match.captured(1).trimmed(), match.captured(2).trimmed());
@@ -410,8 +424,8 @@ void BluetoothManager::parseLine(const QString &line) {
         return;
     }
 
-    if (line.startsWith(QStringLiteral("PD"))) {
-        static const QRegularExpression re(QStringLiteral("^PD\[type:(\d+)\]\[FF\]\[(.*?)\]\[FF\]\[(.*?)\]\[FF\]?$"));
+    if (text.startsWith("PD")) {
+        static const QRegularExpression re(QStringLiteral(R"(^PD\[type:(\d+)\]\[FF\]\[(.*?)\]\[FF\]\[(.*?)\]\[FF\]?$)"));
         QRegularExpressionMatch match = re.match(line);
         if (match.hasMatch()) {
             emit callLogEntryReceived(match.captured(1).toInt(), match.captured(2).trimmed(), match.captured(3).trimmed());
@@ -420,18 +434,18 @@ void BluetoothManager::parseLine(const QString &line) {
         return;
     }
 
-    if (line == QLatin1String("PC")) {
+    if (text == QLatin1String("PC")) {
         emit phonebookDownloadFinished();
         return;
     }
 
-    if (line == QLatin1String("PE")) {
+    if (text == QLatin1String("PE")) {
         emit callLogDownloadFinished();
         return;
     }
 
-    if (line.startsWith(QStringLiteral("MG"))) {
-        static const QRegularExpression re(QStringLiteral("^MG\[index:(\d+)\]$"));
+    if (text.startsWith("MG")) {
+        static const QRegularExpression re(QStringLiteral(R"(^MG\[index:(\d+)\]$)"));
         const QRegularExpressionMatch match = re.match(line);
         if (match.hasMatch()) {
             const int status = match.captured(1).toInt();
@@ -440,9 +454,9 @@ void BluetoothManager::parseLine(const QString &line) {
         return;
     }
 
-    if (line.startsWith(QStringLiteral("IR")) || line.startsWith(QStringLiteral("IH")) || line.startsWith(QStringLiteral("IN"))) {
-        const QString source = line.left(2);
-        QString number = line.mid(2).trimmed();
+    if (text.startsWith("IR") || text.startsWith("IH") || text.startsWith("IN")) {
+        const QString source = text.left(2);
+        QString number = text.mid(2).trimmed();
         if (number.startsWith(QLatin1Char('[')) && number.endsWith(QLatin1Char(']')) && number.size() >= 2) {
             number = number.mid(1, number.size() - 2);
         }
@@ -450,8 +464,8 @@ void BluetoothManager::parseLine(const QString &line) {
         return;
     }
 
-    if (line.startsWith(QStringLiteral("CL"))) {
-        static const QRegularExpression re(QStringLiteral("^CL\[index;?(\d+)\]\[status:(\d+)\]\[(.*?)\]$"));
+    if (text.startsWith("CL")) {
+        static const QRegularExpression re(QStringLiteral(R"(^CL\[index;?(\d+)\]\[status:(\d+)\]\[(.*?)\]$)"));
         const QRegularExpressionMatch match = re.match(line);
         if (match.hasMatch()) {
             const int status = match.captured(2).toInt();
@@ -462,8 +476,8 @@ void BluetoothManager::parseLine(const QString &line) {
         return;
     }
 
-    if (line.startsWith(QStringLiteral("P"))) {
-        const QString payload = line.mid(1).trimmed();
+    if (text.startsWith("P")) {
+        const QString payload = text.mid(1).trimmed();
         if (payload == QLatin1String("1") || payload == QLatin1String("0")) {
             const bool enabled = (payload == QLatin1String("1"));
             if (m_btEnabled != enabled) {
@@ -481,8 +495,8 @@ void BluetoothManager::parseLine(const QString &line) {
         }
     }
 
-    if (line.startsWith(QStringLiteral("MM"))) {
-        QString payload = line.mid(2).trimmed();
+    if (text.startsWith("MM")) {
+        QString payload = text.mid(2).trimmed();
         if (payload.startsWith(QLatin1Char('[')) && payload.endsWith(QLatin1Char(']')) && payload.size() >= 2) {
             payload = payload.mid(1, payload.size() - 2).trimmed();
         }
@@ -498,8 +512,8 @@ void BluetoothManager::parseLine(const QString &line) {
         return;
     }
 
-    if (line.startsWith(QStringLiteral("MN"))) {
-        QString payload = line.mid(2).trimmed();
+    if (text.startsWith("MN")) {
+        QString payload = text.mid(2).trimmed();
         if (payload.startsWith(QLatin1Char('[')) && payload.endsWith(QLatin1Char(']')) && payload.size() >= 2) {
             payload = payload.mid(1, payload.size() - 2).trimmed();
         }
@@ -512,7 +526,118 @@ void BluetoothManager::parseLine(const QString &line) {
         return;
     }
 
-    if (line == QLatin1String("OK")) {
+    if (text == QLatin1String("MB")) {
+        if (!m_a2dpPlaying) {
+            m_a2dpPlaying = true;
+            emit a2dpPlaybackStateChanged(true);
+        }
+        return;
+    }
+
+    if (text == QLatin1String("MA")) {
+        if (m_a2dpPlaying) {
+            m_a2dpPlaying = false;
+            emit a2dpPlaybackStateChanged(false);
+        }
+        return;
+    }
+
+    if (line.startsWith(QByteArrayLiteral("MI")) || text.startsWith("MI")) {
+        const QByteArray payload = line.mid(2);
+        QStringList fields;
+        const char separator = static_cast<char>(0xFF);
+        if (payload.contains(separator)) {
+            const QList<QByteArray> rawFields = payload.split(separator);
+            for (const QByteArray &field : rawFields) {
+                if (field.isEmpty())
+                    continue;
+                fields << QString::fromUtf8(field).trimmed();
+            }
+        } else {
+            const QString payloadText = QString::fromUtf8(payload).trimmed();
+            QRegularExpression re(QStringLiteral("\\[([^\\]]*)\\]"));
+            QRegularExpressionMatchIterator it = re.globalMatch(payloadText);
+            while (it.hasNext()) {
+                fields << it.next().captured(1);
+            }
+        }
+        if (fields.size() >= 6) {
+            const QString title = fields[0].trimmed();
+            const QString artist = fields[1].trimmed();
+            const QString album = fields[2].trimmed();
+            const QString time = fields[3].trimmed();
+            const int index = fields[4].toInt();
+            const int total = fields[5].toInt();
+            const qint64 durationMs = time.toLongLong();
+            if (durationMs > 0) {
+                // MI time field is typically reported in milliseconds.
+                m_a2dpDurationMs = (durationMs >= 1000) ? durationMs : durationMs * 1000;
+            }
+            if (!m_isConnected) {
+                m_isConnected = true;
+                if (m_connectedDeviceName.isEmpty()) {
+                    m_connectedDeviceName = QStringLiteral("蓝牙音乐");
+                }
+                emit deviceConnected(m_connectedDeviceName);
+            }
+            qDebug() << "BluetoothManager: parsed MI track info:" << title << artist << album << time << index << total << "durationMs=" << m_a2dpDurationMs;
+            emit a2dpTrackInfoChanged(title, artist, album, time, index, total);
+        } else {
+            qDebug() << "BluetoothManager: MI parse failed, fields=" << fields.size() << "payload=" << payload.toHex();
+        }
+        return;
+    }
+
+    if (line.startsWith(QByteArrayLiteral("MP")) || text.startsWith("MP")) {
+        const QByteArray payload = line.mid(2);
+        bool handled = false;
+        if (payload.size() >= 4) {
+            bool ok1 = false;
+            const QString posHex = QString::fromLatin1(payload.mid(0, 4));
+            const qint64 posSec = posHex.toInt(&ok1, 16);
+            if (ok1) {
+                const qint64 posMs = posSec * 1000;
+                qint64 totalMs = m_a2dpDurationMs;
+                if (totalMs <= 0 && payload.size() >= 8) {
+                    bool ok2 = false;
+                    const QString lenHex = QString::fromLatin1(payload.mid(4, 4));
+                    const qint64 lenSec = lenHex.toInt(&ok2, 16);
+                    if (ok2) {
+                        totalMs = lenSec * 1000;
+                    }
+                }
+                if (totalMs > 0) {
+                    qDebug() << "BluetoothManager: parsed MP progress:" << posSec << "totalSec=" << (totalMs / 1000);
+                    emit a2dpProgressChanged(posMs, totalMs);
+                    handled = true;
+                } else {
+                    qDebug() << "BluetoothManager: parsed MP pos only, no total yet:" << posSec;
+                    emit a2dpProgressChanged(posMs, 0);
+                    handled = true;
+                }
+            }
+        }
+        if (!handled) {
+            const QString lineText = QString::fromUtf8(line).trimmed();
+            static const QRegularExpression re(QStringLiteral("^MP\\[(?:pos:)?(\\d+)\\]\\[(?:length:)?(\\d+)\\]$"));
+            const QRegularExpressionMatch match = re.match(lineText);
+            if (match.hasMatch()) {
+                qint64 posMs = match.captured(1).toLongLong();
+                qint64 durMs = match.captured(2).toLongLong();
+                if (durMs > 0 && durMs < 1000) {
+                    posMs *= 1000;
+                    durMs *= 1000;
+                }
+                qDebug() << "BluetoothManager: parsed MP progress text:" << posMs << durMs;
+                emit a2dpProgressChanged(posMs, durMs);
+                return;
+            }
+            qDebug() << "BluetoothManager: MP parse failed payload=" << payload.toHex();
+        }
+        return;
+    }
+
+    if (text == QLatin1String("OK")) {
         if (m_queryingPaired) {
             m_queryingPaired = false;
             emit pairedQueryFinished();
@@ -526,7 +651,7 @@ void BluetoothManager::parseLine(const QString &line) {
         return;
     }
 
-    if (line == QLatin1String("ER")) {
+    if (text == QLatin1String("ER")) {
         if (m_queryingPaired) {
             m_queryingPaired = false;
             emit pairedQueryFinished();
@@ -535,7 +660,7 @@ void BluetoothManager::parseLine(const QString &line) {
         return;
     }
 
-    if (line.startsWith(QStringLiteral("IB")) || line.startsWith(QStringLiteral("JH"))) {
+    if (text.startsWith("IB") || text.startsWith("JH")) {
         static const QRegularExpression reBracket(QStringLiteral("^[A-Z]{2}\\[([^\\]]+)\\]$"));
         QRegularExpressionMatch match = reBracket.match(line);
         if (!match.hasMatch()) {
@@ -552,7 +677,7 @@ void BluetoothManager::parseLine(const QString &line) {
         return;
     }
 
-    if (line.startsWith(QStringLiteral("SA"))) {
+    if (text.startsWith("SA")) {
         static const QRegularExpression reBracket(QStringLiteral("^[A-Z]{2}\\[(.*)\\]$"));
         QRegularExpressionMatch match = reBracket.match(line);
         if (!match.hasMatch()) {
@@ -569,7 +694,7 @@ void BluetoothManager::parseLine(const QString &line) {
         return;
     }
 
-    if (line == QLatin1String("MY")) {
+    if (text == QLatin1String("MY")) {
         if (m_isConnected) {
             m_isConnected = false;
             emit deviceDisconnected();

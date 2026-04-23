@@ -233,6 +233,9 @@ void MainWindow::setupConnections() {
                     qApp->setProperty("appBluetoothConnected", false);
                     AppSignals::instance()->bluetoothConnectedChanged(false);
                 });
+
+        // 启动时预先查询蓝牙连接状态，避免只有进入设置页面时才刷新菜单栏状态
+        m_bluetoothManager->queryConnectedDevice();
     }
 }
 

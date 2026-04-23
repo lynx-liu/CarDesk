@@ -13,6 +13,8 @@
 #include <QStyledItemDelegate>
 #include <QPainter>
 
+class QShowEvent;
+
 #ifdef CAR_DESK_USE_T507_SDK
 #include <xplayer.h>
 #include <soundControl_tinyalsa.h>
@@ -107,6 +109,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void showEvent(QShowEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
 
 signals:
@@ -129,11 +132,15 @@ private slots:
     void onBluetoothDeviceConnected(const QString &name);
     void onBluetoothDeviceDisconnected();
     void onBluetoothError(const QString &errorMsg);
+    void onBluetoothA2dpTrackInfoChanged(const QString &title, const QString &artist, const QString &album, const QString &time, int index, int total);
+    void onBluetoothA2dpProgressChanged(qint64 posMs, qint64 durMs);
+    void onBluetoothA2dpPlaybackStateChanged(bool playing);
 
     void onMediaPositionChanged(qint64 position);
     void onMediaDurationChanged(qint64 duration);
     void onMediaStatusChanged(QMediaPlayer::MediaStatus status);
     void onMediaStateChanged(QMediaPlayer::State state);
+    void onMediaMetaDataChanged();
 
 #ifdef CAR_DESK_USE_T507_SDK
     void onSdkTick();
@@ -152,11 +159,13 @@ private:
     void playMusic(int index);
     void releaseAudioPlayer();
     void updateNowPlaying();
+    void updateMetadata();
     void updatePlayModeUI();
     void updateProgressBar(qint64 posMs, qint64 durMs);
     void setPlayButtonState(bool playing);
     void refreshPlaylistWidget();
     void updateCollectButtonState();
+    void tryConnectLastA2dpDevice();
     static QString formatTime(qint64 ms);
 
     // ── Stacked pages ──
