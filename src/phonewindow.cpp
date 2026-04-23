@@ -116,6 +116,7 @@ void PhoneWindow::setupUI() {
     connect(m_tabHistory, &QPushButton::clicked, this, &PhoneWindow::onHistoryTab);
     connect(m_tabContacts, &QPushButton::clicked, this, &PhoneWindow::onContactsTab);
 
+    m_tabWrap = tabWrap;
     main->addWidget(tabWrap);
 
     m_tabStack = new QStackedWidget(this);
@@ -322,14 +323,16 @@ void PhoneWindow::setupUI() {
     detailListLayout->addWidget(createDetailLogRow(QStringLiteral("2026.01.22 23:26"), QStringLiteral("00:02:04"), QStringLiteral(":/images/pict_callinglist_state_1.png")));
     detailListLayout->addStretch();
 
-    m_callOverlay = new QWidget(central);
+    m_callOverlay = new QWidget(this);
     m_callOverlay->setObjectName("callOverlay");
-    m_callOverlay->setGeometry(40, 90, 1200, 610);
     m_callOverlay->setStyleSheet("QWidget#callOverlay{background:transparent;}");
-    m_callOverlay->hide();
+    m_callOverlay->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    auto *callPageLayout = new QVBoxLayout(m_callOverlay);
+    callPageLayout->setContentsMargins(40, 8, 40, 20);
+    callPageLayout->setSpacing(0);
 
     auto *callTop = new QWidget(m_callOverlay);
-    callTop->setGeometry(0, 8, 1200, 180);
+    callTop->setFixedHeight(180);
     callTop->setStyleSheet("background:rgba(255,255,255,0.1);border:1px solid #0068FF;border-radius:5px;");
 
     auto *callBtnWrap = new QWidget(callTop);
@@ -341,14 +344,16 @@ void PhoneWindow::setupUI() {
     QPushButton *hangup = new QPushButton(QStringLiteral("挂断"), callBtnWrap);
     hangup->setFixedSize(84, 132);
     hangup->setCursor(Qt::PointingHandCursor);
-    hangup->setStyleSheet("QPushButton{border:none;color:#fff;font-size:32px;background:url(:/images/butt_calling_hangup_up.png) no-repeat top center;padding-top:100px;}"
-                            "QPushButton:hover{background-image:url(:/images/butt_calling_hangup_down.png);}");
+    hangup->setFlat(true);
+    hangup->setStyleSheet("QPushButton{border:none;background:transparent;color:#fff;font-size:32px;background-image:url(:/images/butt_calling_hangup_up.png);background-repeat:no-repeat;background-position:top center;padding-top:100px;}" 
+                         "QPushButton:hover{background-image:url(:/images/butt_calling_hangup_down.png);}");
     connect(hangup, &QPushButton::clicked, this, &PhoneWindow::onHangup);
 
     m_answerButton = new QPushButton(QStringLiteral("接听"), callBtnWrap);
     m_answerButton->setFixedSize(84, 132);
     m_answerButton->setCursor(Qt::PointingHandCursor);
-    m_answerButton->setStyleSheet("QPushButton{border:none;color:#fff;font-size:32px;background:url(:/images/butt_calling_anwer_up.png) no-repeat top center;padding-top:100px;}"
+    m_answerButton->setFlat(true);
+    m_answerButton->setStyleSheet("QPushButton{border:none;background:transparent;color:#fff;font-size:32px;background-image:url(:/images/butt_calling_anwer_up.png);background-repeat:no-repeat;background-position:top center;padding-top:100px;}"
                                   "QPushButton:hover{background-image:url(:/images/butt_calling_anwer_down.png);}");
     connect(m_answerButton, &QPushButton::clicked, this, &PhoneWindow::onAnswer);
 
@@ -372,12 +377,8 @@ void PhoneWindow::setupUI() {
     m_callTimer->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     m_callTimer->setStyleSheet("QLabel{color:#fff;font-size:30px;background:transparent;}");
 
-    auto *callingBg = new QLabel(m_callOverlay);
-    callingBg->setGeometry(0, 188, 1200, 442);
-    callingBg->setPixmap(QPixmap(":/images/pict_calling_phone_bg.png").scaled(1200, 442, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
-
     auto *bottomActions = new QWidget(m_callOverlay);
-    bottomActions->setGeometry(324, 262, 552, 182);
+    bottomActions->setFixedHeight(182);
     m_bottomActions = bottomActions;
     auto *bottomLayout = new QHBoxLayout(bottomActions);
     bottomLayout->setContentsMargins(0, 0, 0, 0);
@@ -408,6 +409,11 @@ void PhoneWindow::setupUI() {
     bottomLayout->addWidget(muteBtn);
     bottomLayout->addWidget(keyboardBtn);
     bottomLayout->addWidget(recordBtn);
+
+    callPageLayout->addWidget(callTop);
+    callPageLayout->addSpacing(82);
+    callPageLayout->addWidget(bottomActions, 0, Qt::AlignHCenter);
+    callPageLayout->addStretch();
 
     m_callKeyboardPanel = new QWidget(m_callOverlay);
     m_callKeyboardPanel->setGeometry(232, 188, 736, 414);
@@ -453,9 +459,11 @@ void PhoneWindow::setupUI() {
         }
     });
 
+    m_tabStack->addWidget(m_callOverlay);
+
     auto timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, [this]() {
-        if (!m_callOverlay || !m_callOverlay->isVisible() || !m_callTimer || !m_callStateLabel) {
+        if (!m_callOverlay || !m_callTimer || !m_callStateLabel) {
             return;
         }
         if (m_callStateLabel->text() != QStringLiteral("通话中...")) {
@@ -513,11 +521,17 @@ void PhoneWindow::onHangup() {
     if (m_bluetoothManager) {
         m_bluetoothManager->hangupCall();
     }
-    if (m_callOverlay) {
-        m_callOverlay->hide();
-    }
     if (m_callKeyboardPanel) {
         m_callKeyboardPanel->hide();
+    }
+    if (m_tabWrap) {
+        m_tabWrap->show();
+    }
+    if (m_tabStack) {
+        m_tabStack->setCurrentIndex(0);
+    }
+    if (m_numberEdit) {
+        m_numberEdit->show();
     }
     if (m_historyList && m_callNumber) {
         auto *item = new QListWidgetItem(m_historyList);
@@ -686,12 +700,17 @@ void PhoneWindow::showCallOverlay(bool incoming) {
     if (m_callKeyboardPanel) {
         m_callKeyboardPanel->hide();
     }
+    if (m_tabWrap) {
+        m_tabWrap->hide();
+    }
+    if (m_tabStack && m_callOverlay) {
+        m_tabStack->setCurrentWidget(m_callOverlay);
+    }
+    if (m_numberEdit) {
+        m_numberEdit->hide();
+    }
     if (m_bottomActions) {
         m_bottomActions->show();
-    }
-    if (m_callOverlay) {
-        m_callOverlay->show();
-        m_callOverlay->raise();
     }
 }
 
@@ -748,6 +767,15 @@ void PhoneWindow::showContactDetail(const QString &name, const QString &number) 
     if (m_detailNumberLabel) {
         m_detailNumberLabel->setText(number);
     }
+    if (m_tabWrap) {
+        m_tabWrap->hide();
+    }
+    if (m_tabStack) {
+        m_tabStack->hide();
+    }
+    if (m_numberEdit) {
+        m_numberEdit->hide();
+    }
     if (m_detailOverlay) {
         m_detailOverlay->show();
         m_detailOverlay->raise();
@@ -757,6 +785,15 @@ void PhoneWindow::showContactDetail(const QString &name, const QString &number) 
 void PhoneWindow::hideContactDetail() {
     if (m_detailOverlay) {
         m_detailOverlay->hide();
+    }
+    if (m_tabWrap) {
+        m_tabWrap->show();
+    }
+    if (m_tabStack) {
+        m_tabStack->setCurrentIndex(0);
+    }
+    if (m_numberEdit) {
+        m_numberEdit->show();
     }
 }
 

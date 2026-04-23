@@ -133,7 +133,6 @@
         <file alias="butt_calllinglist_answer_down.png">ui/images/butt_calllinglist_answer_down.png</file>
         <file alias="pic_calling_user.png">ui/images/pic_calling_user.png</file>
         <file alias="pict_calling_bg.png">ui/images/pict_calling_bg.png</file>
-        <file alias="pict_calling_phone_bg.png">ui/images/pict_calling_phone_bg.png</file>
         <file alias="pict_callinglist_bg.png">ui/images/pict_callinglist_bg.png</file>
         <file alias="pict_callingdetail_bg.png">ui/images/pict_callingdetail_bg.png</file>
         <file alias="pict_callinglist_user.png">ui/images/pict_callinglist_user.png</file>

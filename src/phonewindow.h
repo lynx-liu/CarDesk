@@ -48,6 +48,7 @@ private:
     void hideContactDetail();
 
     BluetoothManager *m_bluetoothManager;
+    QWidget *m_tabWrap;
     QStackedWidget *m_tabStack;
     QPushButton *m_tabDial;
     QPushButton *m_tabHistory;
