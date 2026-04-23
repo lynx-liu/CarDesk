@@ -1,13 +1,16 @@
 #ifndef PHONEWINDOW_H
 #define PHONEWINDOW_H
 
+#include <QList>
 #include <QMainWindow>
+#include <QString>
 
 class QLineEdit;
 class QListWidget;
 class QPushButton;
 class QLabel;
 class QStackedWidget;
+class QVBoxLayout;
 class QWidget;
 
 class BluetoothManager;
@@ -32,13 +35,25 @@ private slots:
     void onDialTab();
     void onHistoryTab();
     void onContactsTab();
+    void onBluetoothCallStatusChanged(int status);
+    void onBluetoothCallNumberUpdated(const QString &number, const QString &source);
+    void onBluetoothPhonebookEntryReceived(const QString &name, const QString &number);
+    void onBluetoothCallLogEntryReceived(int type, const QString &name, const QString &number);
+    void onBluetoothPhonebookDownloadFinished();
+    void onBluetoothCallLogDownloadFinished();
 
 private:
     void setupUI();
     void appendDigit(const QString &text);
+    void cacheDialNumber(const QString &number);
     void activateTab(int index);
     void populateHistoryList();
     void populateContactList();
+    void rebuildHistoryList();
+    void rebuildContactList();
+    void rebuildDetailList(const QString &number);
+    void addCallLogEntry(int type, const QString &name, const QString &number);
+    void addContactEntry(const QString &name, const QString &number);
     QWidget *createHistoryRow(const QString &name, const QString &number, const QString &timeText, const QString &stateIcon, bool detailButton);
     QWidget *createContactRow(const QString &name, const QString &number);
     QWidget *createDetailLogRow(const QString &timeText, const QString &durationText, const QString &stateIcon);
@@ -47,12 +62,28 @@ private:
     void showContactDetail(const QString &name, const QString &number);
     void hideContactDetail();
 
+    struct CallLogEntry {
+        int type;
+        QString name;
+        QString number;
+        QString timeText;
+    };
+
     BluetoothManager *m_bluetoothManager;
+    QWidget *m_topBar;
     QWidget *m_tabWrap;
     QStackedWidget *m_tabStack;
     QPushButton *m_tabDial;
+    int m_previousTabIndex;
     QPushButton *m_tabHistory;
     QPushButton *m_tabContacts;
+    static QString s_cachedDialNumber;
+
+    QList<QPair<QString, QString>> m_contactEntries;
+    QList<CallLogEntry> m_callEntries;
+
+    QVBoxLayout *m_detailListLayout;
+    QString m_detailCurrentNumber;
 
     QLineEdit *m_numberEdit;
     QLabel *m_callNumber;

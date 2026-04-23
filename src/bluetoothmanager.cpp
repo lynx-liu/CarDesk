@@ -197,37 +197,47 @@ void BluetoothManager::hangupCall() {
     sendAtCommand(QStringLiteral("CG"));
 }
 
-void BluetoothManager::playPauseMusic() {
+void BluetoothManager::requestPhonebookDownload() {
     if (!ensureInitialized()) return;
-    sendAtCommand(QStringLiteral("MA"));
+    sendAtCommand(QStringLiteral("PA[status:1]"));
 }
 
-void BluetoothManager::stopMusic() {
+void BluetoothManager::requestCallLogDownload() {
     if (!ensureInitialized()) return;
-    sendAtCommand(QStringLiteral("MC"));
+    sendAtCommand(QStringLiteral("PA[status:1]"));
 }
 
-void BluetoothManager::nextTrack() {
-    if (!ensureInitialized()) return;
-    sendAtCommand(QStringLiteral("MD"));
+bool BluetoothManager::playPauseMusic() {
+    if (!ensureInitialized()) return false;
+    return sendAtCommand(QStringLiteral("MA"));
 }
 
-void BluetoothManager::previousTrack() {
-    if (!ensureInitialized()) return;
-    sendAtCommand(QStringLiteral("ME"));
+bool BluetoothManager::stopMusic() {
+    if (!ensureInitialized()) return false;
+    return sendAtCommand(QStringLiteral("MC"));
 }
 
-void BluetoothManager::connectLastA2dpDevice() {
+bool BluetoothManager::nextTrack() {
+    if (!ensureInitialized()) return false;
+    return sendAtCommand(QStringLiteral("MD"));
+}
+
+bool BluetoothManager::previousTrack() {
+    if (!ensureInitialized()) return false;
+    return sendAtCommand(QStringLiteral("ME"));
+}
+
+bool BluetoothManager::connectLastA2dpDevice() {
     if (!ensureInitialized()) {
         emit error(QStringLiteral("无法初始化蓝牙串口"));
-        return;
+        return false;
     }
-    sendAtCommand(QStringLiteral("MI"));
+    return sendAtCommand(QStringLiteral("MI"));
 }
 
-void BluetoothManager::disconnectA2dp() {
-    if (!ensureInitialized()) return;
-    sendAtCommand(QStringLiteral("DA"));
+bool BluetoothManager::disconnectA2dp() {
+    if (!ensureInitialized()) return false;
+    return sendAtCommand(QStringLiteral("DA"));
 }
 
 void BluetoothManager::setBluetoothOn(bool enabled) {
@@ -321,21 +331,24 @@ bool BluetoothManager::openSerialPort() {
     return true;
 }
 
-void BluetoothManager::sendAtCommand(const QString &command) {
+bool BluetoothManager::sendAtCommand(const QString &command) {
     if (!m_port->isOpen()) {
         qWarning() << "BluetoothManager: serial port not open, cannot send" << command;
-        return;
+        return false;
     }
 
     const QByteArray payload = QStringLiteral("AT#%1\r\n").arg(command).toLatin1();
     qint64 written = m_port->write(payload);
     if (written != payload.size()) {
         qWarning() << "BluetoothManager: failed to write full command:" << command;
+        return false;
     }
     if (!m_port->waitForBytesWritten(200)) {
         qWarning() << "BluetoothManager: timeout writing command" << command;
+        return false;
     }
     qDebug() << "BluetoothManager: " << payload.trimmed() << " sent";
+    return true;
 }
 
 void BluetoothManager::parseLine(const QString &line) {
@@ -383,6 +396,68 @@ void BluetoothManager::parseLine(const QString &line) {
             if (!addr.isEmpty()) {
                 emit pairedDeviceFound(name, addr);
             }
+        }
+        return;
+    }
+
+    if (line.startsWith(QStringLiteral("PB"))) {
+        static const QRegularExpression re(QStringLiteral("^PB\[(.*?)\]\[FF\]\[(.*?)\]$"));
+        QRegularExpressionMatch match = re.match(line);
+        if (match.hasMatch()) {
+            emit phonebookEntryReceived(match.captured(1).trimmed(), match.captured(2).trimmed());
+            return;
+        }
+        return;
+    }
+
+    if (line.startsWith(QStringLiteral("PD"))) {
+        static const QRegularExpression re(QStringLiteral("^PD\[type:(\d+)\]\[FF\]\[(.*?)\]\[FF\]\[(.*?)\]\[FF\]?$"));
+        QRegularExpressionMatch match = re.match(line);
+        if (match.hasMatch()) {
+            emit callLogEntryReceived(match.captured(1).toInt(), match.captured(2).trimmed(), match.captured(3).trimmed());
+            return;
+        }
+        return;
+    }
+
+    if (line == QLatin1String("PC")) {
+        emit phonebookDownloadFinished();
+        return;
+    }
+
+    if (line == QLatin1String("PE")) {
+        emit callLogDownloadFinished();
+        return;
+    }
+
+    if (line.startsWith(QStringLiteral("MG"))) {
+        static const QRegularExpression re(QStringLiteral("^MG\[index:(\d+)\]$"));
+        const QRegularExpressionMatch match = re.match(line);
+        if (match.hasMatch()) {
+            const int status = match.captured(1).toInt();
+            emit callStatusChanged(status);
+        }
+        return;
+    }
+
+    if (line.startsWith(QStringLiteral("IR")) || line.startsWith(QStringLiteral("IH")) || line.startsWith(QStringLiteral("IN"))) {
+        const QString source = line.left(2);
+        QString number = line.mid(2).trimmed();
+        if (number.startsWith(QLatin1Char('[')) && number.endsWith(QLatin1Char(']')) && number.size() >= 2) {
+            number = number.mid(1, number.size() - 2);
+        }
+        emit callNumberUpdated(number, source);
+        return;
+    }
+
+    if (line.startsWith(QStringLiteral("CL"))) {
+        static const QRegularExpression re(QStringLiteral("^CL\[index;?(\d+)\]\[status:(\d+)\]\[(.*?)\]$"));
+        const QRegularExpressionMatch match = re.match(line);
+        if (match.hasMatch()) {
+            const int status = match.captured(2).toInt();
+            const QString number = match.captured(3).trimmed();
+            emit callStatusChanged(status);
+            emit callNumberUpdated(number, QStringLiteral("CL"));
         }
         return;
     }

@@ -36,19 +36,27 @@ public:
     void answerCall();
     void rejectCall();
     void hangupCall();
+    void requestPhonebookDownload();
+    void requestCallLogDownload();
 
-    void playPauseMusic();
-    void stopMusic();
-    void nextTrack();
-    void previousTrack();
-    void connectLastA2dpDevice();
-    void disconnectA2dp();
+    bool playPauseMusic();
+    bool stopMusic();
+    bool nextTrack();
+    bool previousTrack();
+    bool connectLastA2dpDevice();
+    bool disconnectA2dp();
 
 signals:
     void deviceFound(const QString &name, const QString &address);
     void pairedDeviceFound(const QString &name, const QString &address);
     void deviceConnected(const QString &name);
     void deviceDisconnected();
+    void callStatusChanged(int status);
+    void callNumberUpdated(const QString &number, const QString &source);
+    void phonebookEntryReceived(const QString &name, const QString &number);
+    void callLogEntryReceived(int type, const QString &name, const QString &number);
+    void phonebookDownloadFinished();
+    void callLogDownloadFinished();
     void scanStarted();
     void scanFinished();
     void pairedQueryFinished();
@@ -64,7 +72,7 @@ private slots:
 private:
     bool ensureInitialized();
     bool openSerialPort();
-    void sendAtCommand(const QString &command);
+    bool sendAtCommand(const QString &command);
     void parseLine(const QString &line);
     QString normalizeAddress(const QString &addr) const;
 

@@ -156,7 +156,24 @@ MusicPlayerWindow::MusicPlayerWindow(QWidget *parent)
 
 void MusicPlayerWindow::setBluetoothManager(BluetoothManager *manager)
 {
+    if (m_bluetoothManager == manager) return;
+
     m_bluetoothManager = manager;
+    if (m_bluetoothManager) {
+        connect(m_bluetoothManager, &BluetoothManager::deviceConnected,
+                this, &MusicPlayerWindow::onBluetoothDeviceConnected);
+        connect(m_bluetoothManager, &BluetoothManager::deviceDisconnected,
+                this, &MusicPlayerWindow::onBluetoothDeviceDisconnected);
+        connect(m_bluetoothManager, &BluetoothManager::error,
+                this, &MusicPlayerWindow::onBluetoothError);
+        if (m_bluetoothManager->isConnected()) {
+            if (!m_isUsbMode)
+                onBluetoothDeviceConnected(m_bluetoothManager->getConnectedDeviceName());
+        } else {
+            if (!m_isUsbMode)
+                onBluetoothDeviceDisconnected();
+        }
+    }
 }
 
 MusicPlayerWindow::~MusicPlayerWindow()
@@ -243,9 +260,9 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
     m_btTab->setCursor(Qt::PointingHandCursor);
 
     // ── 专辑封面（120,182,210,210）────────────────────────────────────────
-    QLabel *albumImg = new QLabel(page);
-    albumImg->setGeometry(120, 182, 210, 210);
-    albumImg->setPixmap(QPixmap(":/images/music_show.png").scaled(210, 210, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    m_albumImage = new QLabel(page);
+    m_albumImage->setGeometry(120, 182, 320, 320);
+    m_albumImage->setPixmap(QPixmap(":/images/music_show.png").scaled(320, 320, Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
     // ── 歌曲名（x:410, y:183, 字号:48, 行高:72）─────────────────────────
     m_nowPlayingLabel = new QLabel("未播放", page);
@@ -259,10 +276,10 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
     singerIcon->setPixmap(QPixmap(":/images/pict_music_singer_icon.png").scaled(40, 40, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     singerIcon->setStyleSheet("background: transparent;");
 
-    QLabel *singerLbl = new QLabel("--", page);
-    singerLbl->setGeometry(466, 279, 600, 48);
-    singerLbl->setStyleSheet("color: #fff; font-size: 32px; background: transparent;");
-    singerLbl->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    m_singerLabel = new QLabel("--", page);
+    m_singerLabel->setGeometry(466, 279, 600, 48);
+    m_singerLabel->setStyleSheet("color: #fff; font-size: 32px; background: transparent;");
+    m_singerLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
     // ── 专辑（图标 410,347,40×40；文字 466,343,字号:32）─────────────────
     QLabel *albumIcon = new QLabel(page);
@@ -270,10 +287,10 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
     albumIcon->setPixmap(QPixmap(":/images/pict_music_album_icon.png").scaled(40, 40, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     albumIcon->setStyleSheet("background: transparent;");
 
-    QLabel *albumLbl = new QLabel("--", page);
-    albumLbl->setGeometry(466, 343, 600, 48);
-    albumLbl->setStyleSheet("color: #fff; font-size: 32px; background: transparent;");
-    albumLbl->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    m_albumLabel = new QLabel("--", page);
+    m_albumLabel->setGeometry(466, 343, 600, 48);
+    m_albumLabel->setStyleSheet("color: #fff; font-size: 32px; background: transparent;");
+    m_albumLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
     // ── 功能按钮（收藏 1100,190,60×60；扫描 1100,324,60×60）─────────────
     QPushButton *collectBtn = new QPushButton(page);
@@ -288,15 +305,15 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
         "QPushButton:checked:pressed { background-image: url(:/images/butt_music_collection_down.png); }");
     collectBtn->setCursor(Qt::PointingHandCursor);
 
-    QPushButton *scanBtn = new QPushButton(page);
-    scanBtn->setGeometry(1100, 324, 60, 60);
-    scanBtn->setStyleSheet(
+    m_scanButton = new QPushButton(page);
+    m_scanButton->setGeometry(1100, 324, 60, 60);
+    m_scanButton->setStyleSheet(
         "QPushButton { border: none; background-image: url(:/images/butt_music_scan_up.png); background-repeat: no-repeat; }"
         "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_scan_down.png); }");
-    scanBtn->setCursor(Qt::PointingHandCursor);
+    m_scanButton->setCursor(Qt::PointingHandCursor);
     m_collectButton = collectBtn;
     connect(collectBtn, &QPushButton::clicked, this, &MusicPlayerWindow::onToggleCollect);
-    connect(scanBtn, &QPushButton::clicked, this, &MusicPlayerWindow::onRescan);
+    connect(m_scanButton, &QPushButton::clicked, this, &MusicPlayerWindow::onRescan);
 
     // ── 进度区域 ─────────────────────────────────────────────────────────
     // 播放时间（x:120, y:408, 字号:24, 行高:36）
@@ -424,6 +441,7 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
               "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_circle_down.png); }");
     });
 
+    updatePlayModeUI();
     Q_UNUSED(m_progressSlider);
 }
 
@@ -748,9 +766,14 @@ void MusicPlayerWindow::releaseAudioPlayer()
 void MusicPlayerWindow::onPlayPause()
 {
     if (!m_isUsbMode && m_bluetoothManager) {
-        m_bluetoothManager->playPauseMusic();
-        m_btPlaying = !m_btPlaying;
-        setPlayButtonState(m_btPlaying);
+        if (m_bluetoothManager->playPauseMusic()) {
+            m_btPlaying = !m_btPlaying;
+            setPlayButtonState(m_btPlaying);
+            if (m_nowPlayingLabel) {
+                m_nowPlayingLabel->setText(m_btPlaying ? QStringLiteral("蓝牙音乐 播放中")
+                                                       : QStringLiteral("蓝牙音乐 已暂停"));
+            }
+        }
         return;
     }
 
@@ -871,17 +894,29 @@ void MusicPlayerWindow::onUsbTabClicked()
         "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }");
     scanFlatPlaylist();
     refreshPlaylistWidget();
+    updatePlayModeUI();
+    updateNowPlaying();
 }
 
 void MusicPlayerWindow::onBtTabClicked()
 {
     if (!m_isUsbMode) return;
     m_isUsbMode = false;
+    if (m_nowPlayingLabel) {
+        m_nowPlayingLabel->setText(QStringLiteral("蓝牙连接中..."));
+    }
     if (m_bluetoothManager) {
-        m_bluetoothManager->connectLastA2dpDevice();
+        if (!m_bluetoothManager->connectLastA2dpDevice()) {
+            if (m_nowPlayingLabel) {
+                m_nowPlayingLabel->setText(QStringLiteral("蓝牙A2DP连接失败"));
+            }
+        }
     }
     releaseAudioPlayer();
     m_btPlaying = false;
+    if (m_nowPlayingLabel && m_bluetoothManager && m_bluetoothManager->isConnected()) {
+        m_nowPlayingLabel->setText(QStringLiteral("已连接：%1").arg(m_bluetoothManager->getConnectedDeviceName()));
+    }
     m_usbTab->setStyleSheet(
         "QPushButton { border: none; background: url(:/images/butt_tab_left_down.png); color: #fff; font-size: 28px; }"
         "QPushButton:pressed { border: none; background: url(:/images/butt_tab_left_down.png); color: #fff; font-size: 28px; }");
@@ -890,9 +925,42 @@ void MusicPlayerWindow::onBtTabClicked()
         "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_on.png); color: #fff; font-size: 28px; }");
     m_musicFiles.clear();
     refreshPlaylistWidget();
-    m_nowPlayingLabel->setText("蓝牙音乐");
+    if (m_nowPlayingLabel && m_bluetoothManager && m_bluetoothManager->isConnected()) {
+        m_nowPlayingLabel->setText(QStringLiteral("已连接：%1").arg(m_bluetoothManager->getConnectedDeviceName()));
+    } else if (m_nowPlayingLabel) {
+        m_nowPlayingLabel->setText(QStringLiteral("蓝牙音乐"));
+    }
     updateProgressBar(0, 0);
     setPlayButtonState(false);
+    updatePlayModeUI();
+}
+
+void MusicPlayerWindow::onBluetoothDeviceConnected(const QString &name)
+{
+    if (m_isUsbMode) return;
+    if (m_nowPlayingLabel) {
+        m_nowPlayingLabel->setText(name.isEmpty() ? QStringLiteral("蓝牙音乐") : name);
+    }
+}
+
+void MusicPlayerWindow::onBluetoothDeviceDisconnected()
+{
+    if (m_isUsbMode) return;
+    if (m_nowPlayingLabel) {
+        m_nowPlayingLabel->setText(QStringLiteral("蓝牙未连接"));
+    }
+    if (m_nowPlayingLabel) {
+        m_nowPlayingLabel->setText(QStringLiteral("蓝牙音乐"));
+    }
+    m_btPlaying = false;
+    setPlayButtonState(false);
+}
+
+void MusicPlayerWindow::onBluetoothError(const QString &errorMsg)
+{
+    if (!m_isUsbMode && m_nowPlayingLabel) {
+        m_nowPlayingLabel->setText(errorMsg);
+    }
 }
 
 void MusicPlayerWindow::onRescan()
@@ -969,6 +1037,29 @@ void MusicPlayerWindow::updateNowPlaying()
         m_nowPlayingLabel->setText(QFileInfo(m_musicFiles[m_currentIndex]).baseName());
     else
         m_nowPlayingLabel->setText("未播放");
+}
+
+void MusicPlayerWindow::updatePlayModeUI()
+{
+    if (m_isUsbMode) {
+        if (m_listButton) m_listButton->show();
+        if (m_loopButton) m_loopButton->show();
+        if (m_playlistWidget) m_playlistWidget->show();
+        if (m_collectButton) m_collectButton->show();
+        if (m_scanButton) m_scanButton->show();
+        if (m_prevButton) m_prevButton->setGeometry(418, 466, 60, 60);
+        if (m_playButton) m_playButton->setGeometry(598, 454, 84, 84);
+        if (m_nextButton) m_nextButton->setGeometry(802, 466, 60, 60);
+    } else {
+        if (m_listButton) m_listButton->hide();
+        if (m_loopButton) m_loopButton->hide();
+        if (m_playlistWidget) m_playlistWidget->hide();
+        if (m_collectButton) m_collectButton->hide();
+        if (m_scanButton) m_scanButton->hide();
+        if (m_prevButton) m_prevButton->setGeometry(478, 466, 60, 60);
+        if (m_playButton) m_playButton->setGeometry(598, 454, 84, 84);
+        if (m_nextButton) m_nextButton->setGeometry(718, 466, 60, 60);
+    }
 }
 
 void MusicPlayerWindow::updateProgressBar(qint64 posMs, qint64 durMs)

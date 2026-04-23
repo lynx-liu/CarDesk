@@ -126,6 +126,9 @@ private slots:
     void onListSongsTabClicked();
     void onListFavTabClicked();
     void onToggleCollect();
+    void onBluetoothDeviceConnected(const QString &name);
+    void onBluetoothDeviceDisconnected();
+    void onBluetoothError(const QString &errorMsg);
 
     void onMediaPositionChanged(qint64 position);
     void onMediaDurationChanged(qint64 duration);
@@ -149,6 +152,7 @@ private:
     void playMusic(int index);
     void releaseAudioPlayer();
     void updateNowPlaying();
+    void updatePlayModeUI();
     void updateProgressBar(qint64 posMs, qint64 durMs);
     void setPlayButtonState(bool playing);
     void refreshPlaylistWidget();
@@ -163,6 +167,9 @@ private:
     // ── 播放页控件（绝对坐标，匹配 music_usb_play.html）──
     QLabel      *m_titleLabel     = nullptr;
     QLabel      *m_nowPlayingLabel = nullptr;
+    QLabel      *m_albumImage      = nullptr;
+    QLabel      *m_singerLabel     = nullptr;
+    QLabel      *m_albumLabel      = nullptr;
     QPushButton *m_homeButton     = nullptr;
     QPushButton *m_usbTab         = nullptr;
     QPushButton *m_btTab          = nullptr;
@@ -171,6 +178,7 @@ private:
     QPushButton *m_playButton     = nullptr;
     QPushButton *m_nextButton     = nullptr;
     QPushButton *m_loopButton     = nullptr;
+    QPushButton *m_scanButton     = nullptr;
     QLabel      *m_posLabel       = nullptr;
     QLabel      *m_durLabel       = nullptr;
     QSlider     *m_progressSlider = nullptr;
