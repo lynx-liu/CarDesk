@@ -333,10 +333,11 @@ void PhoneWindow::setupUI() {
 
     auto *callTop = new QWidget(m_callOverlay);
     callTop->setFixedHeight(180);
-    callTop->setStyleSheet("background:rgba(255,255,255,0.1);border:1px solid #0068FF;border-radius:5px;");
+    callTop->setStyleSheet("background:#000000;border:1px solid #0068FF;border-radius:5px;");
 
     auto *callBtnWrap = new QWidget(callTop);
     callBtnWrap->setGeometry(60, 23, 240, 132);
+    callBtnWrap->setStyleSheet("border:none;background:transparent;");
     auto *callBtnLayout = new QHBoxLayout(callBtnWrap);
     callBtnLayout->setContentsMargins(0, 0, 0, 0);
     callBtnLayout->setSpacing(72);
@@ -344,17 +345,21 @@ void PhoneWindow::setupUI() {
     QPushButton *hangup = new QPushButton(QStringLiteral("挂断"), callBtnWrap);
     hangup->setFixedSize(84, 132);
     hangup->setCursor(Qt::PointingHandCursor);
+    hangup->setFocusPolicy(Qt::NoFocus);
     hangup->setFlat(true);
-    hangup->setStyleSheet("QPushButton{border:none;background:transparent;color:#fff;font-size:32px;background-image:url(:/images/butt_calling_hangup_up.png);background-repeat:no-repeat;background-position:top center;padding-top:100px;}" 
-                         "QPushButton:hover{background-image:url(:/images/butt_calling_hangup_down.png);}");
+    hangup->setStyleSheet("QPushButton{border:none;outline:none;background:transparent;color:#fff;font-size:32px;background-image:url(:/images/butt_calling_hangup_up.png);background-repeat:no-repeat;background-position:top center;padding-top:100px;}" 
+                         "QPushButton:hover{background-image:url(:/images/butt_calling_hangup_down.png);}" 
+                         "QPushButton:focus{border:none;outline:none;}");
     connect(hangup, &QPushButton::clicked, this, &PhoneWindow::onHangup);
 
     m_answerButton = new QPushButton(QStringLiteral("接听"), callBtnWrap);
     m_answerButton->setFixedSize(84, 132);
     m_answerButton->setCursor(Qt::PointingHandCursor);
+    m_answerButton->setFocusPolicy(Qt::NoFocus);
     m_answerButton->setFlat(true);
-    m_answerButton->setStyleSheet("QPushButton{border:none;background:transparent;color:#fff;font-size:32px;background-image:url(:/images/butt_calling_anwer_up.png);background-repeat:no-repeat;background-position:top center;padding-top:100px;}"
-                                  "QPushButton:hover{background-image:url(:/images/butt_calling_anwer_down.png);}");
+    m_answerButton->setStyleSheet("QPushButton{border:none;outline:none;background:transparent;color:#fff;font-size:32px;background-image:url(:/images/butt_calling_anwer_up.png);background-repeat:no-repeat;background-position:top center;padding-top:100px;}"
+                                  "QPushButton:hover{background-image:url(:/images/butt_calling_anwer_down.png);}" 
+                                  "QPushButton:focus{border:none;outline:none;}");
     connect(m_answerButton, &QPushButton::clicked, this, &PhoneWindow::onAnswer);
 
     callBtnLayout->addWidget(hangup);
@@ -362,10 +367,12 @@ void PhoneWindow::setupUI() {
 
     auto *userAvatar = new QLabel(callTop);
     userAvatar->setGeometry(652, 23, 132, 132);
+    userAvatar->setStyleSheet("border:none;background:transparent;");
     userAvatar->setPixmap(QPixmap(":/images/pic_calling_user.png").scaled(132, 132, Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
     auto *msgWrap = new QWidget(callTop);
     msgWrap->setGeometry(808, 40, 296, 100);
+    msgWrap->setStyleSheet("border:none;background:transparent;");
     m_callNumber = new QLabel(QStringLiteral("18800001234"), msgWrap);
     m_callNumber->setGeometry(0, 0, 296, 48);
     m_callNumber->setStyleSheet("QLabel{color:#fff;font-size:48px;font-weight:bold;background:transparent;}");
