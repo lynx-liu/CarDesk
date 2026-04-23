@@ -423,38 +423,72 @@ void PhoneWindow::setupUI() {
     callPageLayout->addStretch();
 
     m_callKeyboardPanel = new QWidget(m_callOverlay);
-    m_callKeyboardPanel->setGeometry(232, 188, 736, 414);
+    m_callKeyboardPanel->setGeometry(232, 188, 816, 414);
     m_callKeyboardPanel->hide();
     auto *keyboardWrap = new QWidget(m_callKeyboardPanel);
-    keyboardWrap->setGeometry(63, 0, 610, 414);
+    keyboardWrap->setGeometry(0, 0, 610, 414);
+    keyboardWrap->setStyleSheet("background:transparent;");
     auto *keyboardGrid = new QGridLayout(keyboardWrap);
     keyboardGrid->setContentsMargins(0, 0, 0, 0);
     keyboardGrid->setHorizontalSpacing(8);
     keyboardGrid->setVerticalSpacing(8);
     const QStringList inCallKeys = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"};
-    const QStringList inCallUp = {
-        ":/images/butt_calling_num1_up.png", ":/images/butt_calling_num2_up.png", ":/images/butt_calling_num3_up.png",
-        ":/images/butt_calling_num4_up.png", ":/images/butt_calling_num5_up.png", ":/images/butt_calling_num6_up.png",
-        ":/images/butt_calling_num7_up.png", ":/images/butt_calling_num8_up.png", ":/images/butt_calling_num9_up.png",
-        ":/images/butt_calling_num10_up.png", ":/images/butt_calling_num0_up.png", ":/images/butt_calling_num12_up.png"
-    };
-    const QStringList inCallDown = {
-        ":/images/butt_calling_num1_down.png", ":/images/butt_calling_num2_down.png", ":/images/butt_calling_num3_down.png",
-        ":/images/butt_calling_num4_down.png", ":/images/butt_calling_num5_down.png", ":/images/butt_calling_num6_down.png",
-        ":/images/butt_calling_num7_down.png", ":/images/butt_calling_num8_down.png", ":/images/butt_calling_num9_down.png",
-        ":/images/butt_calling_num10_down.png", ":/images/butt_calling_num0_down.png", ":/images/butt_calling_num12_down.png"
-    };
+    const QStringList inCallLetters = {"", "ABC", "DEF", "GHI", "JKL", "MNO", "PQRS", "TUV", "WXYZ", "", "+", ""};
     for (int i = 0; i < inCallKeys.size(); ++i) {
         auto *btn = new QPushButton(QString(), keyboardWrap);
         btn->setProperty("digit", inCallKeys.at(i));
-        btn->setFixedSize(198, 120);
-        btn->setStyleSheet(QString("QPushButton{color:transparent;font-size:64px;font-weight:bold;border:none;background:url(%1) no-repeat center center;}"
-                                    "QPushButton:hover{background-image:url(%2);}").arg(inCallUp.at(i), inCallDown.at(i)));
+        const QString label = inCallKeys.at(i);
+        const QString letters = inCallLetters.at(i);
+        btn->setFixedSize(198, 94);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setFocusPolicy(Qt::NoFocus);
+        btn->setStyleSheet(
+            "QPushButton{border:1px solid #0068FF;color:#fff;background:transparent;font-weight:bold;}"
+            "QPushButton:hover{border:1px solid #00FAFF;color:#00FAFF;background:transparent;}"
+            "QPushButton:pressed{background:transparent;}"
+            "QPushButton:focus{outline:none;}");
+
+        auto *btnLayout = new QVBoxLayout(btn);
+        btnLayout->setContentsMargins(0, 0, 0, 0);
+        btnLayout->setSpacing(0);
+
+        auto *contentWrap = new QWidget(btn);
+        contentWrap->setFixedSize(198, 94);
+        contentWrap->setStyleSheet("background:transparent;");
+        contentWrap->setAttribute(Qt::WA_TranslucentBackground);
+        auto *contentLayout = new QVBoxLayout(contentWrap);
+        contentLayout->setContentsMargins(0, 0, 0, 0);
+        contentLayout->setSpacing(!letters.isEmpty() ? 2 : 0);
+        contentLayout->addStretch();
+
+        auto *digitLabel = new QLabel(label, contentWrap);
+        const bool isLargeSymbol = (label == "*" || label == "#");
+        digitLabel->setStyleSheet(QString("color:#fff;font-size:%1px;font-weight:bold;background:transparent;")
+                                  .arg(isLargeSymbol ? 64 : 48));
+        digitLabel->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+        digitLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+        contentLayout->addWidget(digitLabel, 0, Qt::AlignHCenter | Qt::AlignTop);
+
+        if (!letters.isEmpty()) {
+            auto *lettersLabel = new QLabel(letters, contentWrap);
+            lettersLabel->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
+            lettersLabel->setStyleSheet("color:#fff;font-size:22px;font-weight:normal;background:transparent;");
+            lettersLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+            contentLayout->addWidget(lettersLabel, 0, Qt::AlignHCenter | Qt::AlignTop);
+            contentLayout->addStretch();
+        }
+
+        btnLayout->addStretch();
+        btnLayout->addWidget(contentWrap, 0, Qt::AlignHCenter);
+        btnLayout->addStretch();
+
         connect(btn, &QPushButton::clicked, this, [this, btn]() { appendDigit(btn->property("digit").toString()); });
         keyboardGrid->addWidget(btn, i / 3, i % 3);
     }
     auto *hideKeyboardBtn = new QPushButton(QStringLiteral("隐藏"), m_callKeyboardPanel);
-    hideKeyboardBtn->setGeometry(681, 87, 54, 240);
+    hideKeyboardBtn->setGeometry(618, 7, 198, 400);
+    hideKeyboardBtn->setCursor(Qt::PointingHandCursor);
+    hideKeyboardBtn->setFocusPolicy(Qt::NoFocus);
     hideKeyboardBtn->setStyleSheet("QPushButton{border:none;background:#0068FF;color:#fff;font-size:48px;font-weight:bold;}"
                                    "QPushButton:hover{background:#00FAFF;}");
     connect(hideKeyboardBtn, &QPushButton::clicked, this, [this, bottomActions]() {
