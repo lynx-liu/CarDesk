@@ -46,7 +46,10 @@ PhoneWindow::PhoneWindow(BluetoothManager *bluetoothManager, QWidget *parent)
     , m_callOverlay(nullptr)
     , m_callKeyboardPanel(nullptr)
     , m_bottomActions(nullptr)
-    , m_answerButton(nullptr) {
+    , m_answerButton(nullptr)
+    , m_phonebookSyncPending(false)
+    , m_callLogSyncPending(false)
+{
     setWindowTitle("蓝牙电话");
     setFixedSize(1280, 720);
     if (QApplication::primaryScreen()) {
@@ -134,6 +137,11 @@ void PhoneWindow::setupUI() {
         connect(m_bluetoothManager, &BluetoothManager::callLogEntryReceived, this, &PhoneWindow::onBluetoothCallLogEntryReceived);
         connect(m_bluetoothManager, &BluetoothManager::phonebookDownloadFinished, this, &PhoneWindow::onBluetoothPhonebookDownloadFinished);
         connect(m_bluetoothManager, &BluetoothManager::callLogDownloadFinished, this, &PhoneWindow::onBluetoothCallLogDownloadFinished);
+        connect(m_bluetoothManager, &BluetoothManager::deviceConnected, this, &PhoneWindow::onBluetoothDeviceConnected);
+
+        if (m_bluetoothManager->isConnected()) {
+            onBluetoothDeviceConnected(m_bluetoothManager->getConnectedDeviceName());
+        }
     }
 
     m_tabStack = new QStackedWidget(central);
@@ -247,7 +255,7 @@ void PhoneWindow::setupUI() {
     history->setContentsMargins(160, 20, 160, 20);
     m_historyList = new QListWidget(historyPage);
     m_historyList->setStyleSheet(
-        "QListWidget{background:transparent;border:none;outline:none;padding-right:60px;}"
+        "QListWidget{background:transparent;border:none;outline:none;padding-right:100px;}"
         "QListWidget::item{border:none;}"
         "QListWidget::item:selected{background:transparent;}"
         "QScrollBar:vertical{width:36px;background:transparent;border-radius:6px;margin:0;padding:0;}"
@@ -260,6 +268,8 @@ void PhoneWindow::setupUI() {
     m_historyList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_historyList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_historyList->setUniformItemSizes(true);
+    m_historyList->viewport()->setContentsMargins(0, 0, 100, 0);
+    m_historyList->setContentsMargins(0, 0, 100, 0);
     m_historyList->setSpacing(2);
     populateHistoryList();
     connect(m_historyList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
@@ -276,7 +286,7 @@ void PhoneWindow::setupUI() {
     contacts->setContentsMargins(160, 20, 160, 20);
     m_contactList = new QListWidget(contactsPage);
     m_contactList->setStyleSheet(
-        "QListWidget{background:transparent;border:none;outline:none;padding-right:60px;}"
+        "QListWidget{background:transparent;border:none;outline:none;padding-right:100px;}"
         "QListWidget::item{border:none;}"
         "QListWidget::item:selected{background:transparent;}"
         "QScrollBar:vertical{width:36px;background:transparent;border-radius:6px;margin:0;padding:0;}"
@@ -289,6 +299,8 @@ void PhoneWindow::setupUI() {
     m_contactList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_contactList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_contactList->setUniformItemSizes(true);
+    m_contactList->viewport()->setContentsMargins(0, 0, 100, 0);
+    m_contactList->setContentsMargins(0, 0, 100, 0);
     m_contactList->setSpacing(2);
     populateContactList();
     connect(m_contactList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
@@ -349,10 +361,13 @@ void PhoneWindow::setupUI() {
     );
     connect(detailCallBtn, &QPushButton::clicked, this, [this]() {
         if (m_detailNumberLabel) {
-            cacheDialNumber(m_detailNumberLabel->text());
+            const QString number = m_detailNumberLabel->text();
+            cacheDialNumber(number);
+            if (m_bluetoothManager) {
+                m_bluetoothManager->dialNumber(number);
+            }
         }
         hideContactDetail();
-        showCallOverlay(false);
     });
 
     detailHeadLayout->addWidget(detailUserWrap);
@@ -608,7 +623,6 @@ void PhoneWindow::onDial() {
             m_bluetoothManager->dialNumber(number);
         }
     }
-    showCallOverlay(false);
 }
 
 void PhoneWindow::onAnswer() {
@@ -705,12 +719,93 @@ void PhoneWindow::onBluetoothCallLogEntryReceived(int type, const QString &name,
 }
 
 void PhoneWindow::onBluetoothPhonebookDownloadFinished() {
-    Q_UNUSED(m_contactList);
+    if (m_bluetoothManager) {
+        const QString address = m_bluetoothManager->getConnectedDeviceAddress().trimmed().toUpper();
+        if (!address.isEmpty()) {
+            m_lastSyncedDeviceAddress = address;
+        }
+    }
+    m_phonebookSyncPending = false;
+    if (m_contactList) {
+        rebuildContactList();
+    }
+    if (m_callLogSyncPending) {
+        startCallLogSync();
+    }
 }
 
 void PhoneWindow::onBluetoothCallLogDownloadFinished() {
+    if (m_bluetoothManager) {
+        const QString address = m_bluetoothManager->getConnectedDeviceAddress().trimmed().toUpper();
+        if (!address.isEmpty()) {
+            m_lastSyncedCallLogDeviceAddress = address;
+        }
+    }
+    m_callLogSyncPending = false;
     if (m_historyList) {
         rebuildHistoryList();
+    }
+    if (m_phonebookSyncPending) {
+        startPhonebookSync();
+    }
+}
+
+void PhoneWindow::startPhonebookSync() {
+    if (!m_bluetoothManager) {
+        return;
+    }
+    m_phonebookSyncPending = true;
+    m_contactEntries.clear();
+    if (m_contactList) {
+        m_contactList->clear();
+    }
+    m_bluetoothManager->requestPhonebookDownload();
+}
+
+void PhoneWindow::startCallLogSync() {
+    if (!m_bluetoothManager) {
+        return;
+    }
+    m_callLogSyncPending = true;
+    m_callEntries.clear();
+    if (m_historyList) {
+        m_historyList->clear();
+    }
+    m_bluetoothManager->requestCallLogDownload();
+}
+
+void PhoneWindow::onBluetoothDeviceConnected(const QString &name) {
+    Q_UNUSED(name);
+    if (!m_bluetoothManager) {
+        return;
+    }
+
+    const QString connectedAddress = m_bluetoothManager->getConnectedDeviceAddress().trimmed().toUpper();
+    const bool samePhonebookDevice = !connectedAddress.isEmpty() && connectedAddress == m_lastSyncedDeviceAddress;
+    const bool sameCallLogDevice = !connectedAddress.isEmpty() && connectedAddress == m_lastSyncedCallLogDeviceAddress;
+
+    m_phonebookSyncPending = !samePhonebookDevice;
+    m_callLogSyncPending = !sameCallLogDevice;
+
+    const int currentTab = m_tabStack ? m_tabStack->currentIndex() : -1;
+    if (currentTab == 2) {
+        if (m_phonebookSyncPending) {
+            startPhonebookSync();
+        } else if (m_callLogSyncPending) {
+            startCallLogSync();
+        }
+    } else if (currentTab == 1) {
+        if (m_callLogSyncPending) {
+            startCallLogSync();
+        } else if (m_phonebookSyncPending) {
+            startPhonebookSync();
+        }
+    } else {
+        if (m_phonebookSyncPending) {
+            startPhonebookSync();
+        } else if (m_callLogSyncPending) {
+            startCallLogSync();
+        }
     }
 }
 
@@ -733,7 +828,7 @@ void PhoneWindow::rebuildHistoryList() {
                                 : QStringLiteral(":/images/pict_callinglist_state_1.png");
         auto *item = new QListWidgetItem(m_historyList);
         item->setData(Qt::UserRole, entry.number);
-        item->setSizeHint(QSize(872, 68));
+        item->setSizeHint(QSize(0, 68));
         m_historyList->addItem(item);
         m_historyList->setItemWidget(item, createHistoryRow(entry.name, entry.number, entry.timeText, stateIcon, true));
     }
@@ -748,7 +843,7 @@ void PhoneWindow::rebuildContactList() {
     for (const QPair<QString, QString> &contact : qAsConst(m_contactEntries)) {
         auto *item = new QListWidgetItem(m_contactList);
         item->setData(Qt::UserRole, contact.second);
-        item->setSizeHint(QSize(872, 68));
+        item->setSizeHint(QSize(0, 68));
         m_contactList->addItem(item);
         m_contactList->setItemWidget(item, createContactRow(contact.first, contact.second));
     }
@@ -798,7 +893,7 @@ void PhoneWindow::insertContactWidget(int index, const QString &name, const QStr
     }
     auto *item = new QListWidgetItem(m_contactList);
     item->setData(Qt::UserRole, number);
-    item->setSizeHint(QSize(872, 68));
+    item->setSizeHint(QSize(0, 68));
     if (index >= 0 && index < m_contactList->count()) {
         m_contactList->insertItem(index, item);
     } else {
@@ -874,7 +969,8 @@ void PhoneWindow::addCallLogEntry(int type, const QString &name, const QString &
 
 QWidget *PhoneWindow::createHistoryRow(const QString &name, const QString &number, const QString &timeText, const QString &stateIcon, bool detailButton) {
     auto *row = new QWidget();
-    row->setFixedSize(872, 68);
+    row->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    row->setFixedHeight(68);
     row->setStyleSheet("QWidget{background:rgba(255,255,255,0.1);border-radius:34px;}");
 
     auto *layout = new QHBoxLayout(row);
@@ -926,7 +1022,8 @@ QWidget *PhoneWindow::createHistoryRow(const QString &name, const QString &numbe
 
 QWidget *PhoneWindow::createContactRow(const QString &name, const QString &number) {
     auto *row = new QWidget();
-    row->setFixedSize(872, 68);
+    row->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    row->setFixedHeight(68);
     row->setStyleSheet("QWidget{background:rgba(255,255,255,0.1);border-radius:34px;}");
 
     auto *layout = new QHBoxLayout(row);
@@ -965,7 +1062,9 @@ QWidget *PhoneWindow::createContactRow(const QString &name, const QString &numbe
                            "QPushButton:hover{background:url(:/images/butt_calllinglist_answer_down.png) no-repeat right center;}");
     connect(callBtn, &QPushButton::clicked, this, [this, number]() {
         cacheDialNumber(number);
-        showCallOverlay(false);
+        if (m_bluetoothManager) {
+            m_bluetoothManager->dialNumber(number);
+        }
     });
 
     layout->addWidget(userWrap);

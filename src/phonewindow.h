@@ -41,6 +41,7 @@ private slots:
     void onBluetoothCallLogEntryReceived(int type, const QString &name, const QString &number);
     void onBluetoothPhonebookDownloadFinished();
     void onBluetoothCallLogDownloadFinished();
+    void onBluetoothDeviceConnected(const QString &name);
 
 private:
     void setupUI();
@@ -55,6 +56,8 @@ private:
     void addCallLogEntry(int type, const QString &name, const QString &number);
     void addContactEntry(const QString &name, const QString &number);
     int findContactEntryIndex(const QString &number) const;
+    void startPhonebookSync();
+    void startCallLogSync();
     void insertContactWidget(int index, const QString &name, const QString &number);
     void updateContactWidget(int index, const QString &name, const QString &number);
     QWidget *createHistoryRow(const QString &name, const QString &number, const QString &timeText, const QString &stateIcon, bool detailButton);
@@ -85,6 +88,10 @@ private:
 
     QList<QPair<QString, QString>> m_contactEntries;
     QList<CallLogEntry> m_callEntries;
+    QString m_lastSyncedDeviceAddress;
+    QString m_lastSyncedCallLogDeviceAddress;
+    bool m_phonebookSyncPending;
+    bool m_callLogSyncPending;
 
     QVBoxLayout *m_detailListLayout;
     QString m_detailCurrentNumber;

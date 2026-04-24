@@ -205,7 +205,7 @@ void BluetoothManager::requestPhonebookDownload() {
 
 void BluetoothManager::requestCallLogDownload() {
     if (!ensureInitialized()) return;
-    sendAtCommand(QStringLiteral("PD[status:1]"));
+    sendAtCommand(QStringLiteral("PK"));
 }
 
 bool BluetoothManager::playPauseMusic() {
@@ -451,12 +451,39 @@ void BluetoothManager::parseLine(const QByteArray &line) {
         return;
     }
 
-    if (text.startsWith("PD")) {
-        static const QRegularExpression re(QStringLiteral(R"(^PD\[type:(\d+)\]\[FF\]\[(.*?)\]\[FF\]\[(.*?)\]\[FF\]?$)"));
-        QRegularExpressionMatch match = re.match(line);
-        if (match.hasMatch()) {
-            emit callLogEntryReceived(match.captured(1).toInt(), match.captured(2).trimmed(), match.captured(3).trimmed());
+    if (line.startsWith(QByteArrayLiteral("PD")) || line.startsWith(QByteArrayLiteral("PK"))) {
+        const QByteArray payload = line.mid(2);
+        if (payload.isEmpty()) {
+            qDebug() << "BluetoothManager: PD/PK parse failed, empty payload";
             return;
+        }
+
+        int type = -1;
+        int idx = 0;
+        while (idx < payload.size() && payload[idx] >= '0' && payload[idx] <= '9') {
+            if (type < 0) type = 0;
+            type = type * 10 + (payload[idx] - '0');
+            idx++;
+        }
+        if (type < 0) {
+            qDebug() << "BluetoothManager: PD/PK parse failed, missing type, payload=" << payload.toHex();
+            return;
+        }
+
+        const QByteArray rest = payload.mid(idx);
+        const char separator = static_cast<char>(0xFF);
+        const QList<QByteArray> rawFields = rest.split(separator);
+        QList<QString> fields;
+        for (const QByteArray &field : rawFields) {
+            fields << QString::fromUtf8(field).trimmed();
+        }
+        if (!fields.isEmpty() && fields.first().isEmpty() && fields.size() >= 3) {
+            fields.removeFirst();
+        }
+        if (fields.size() >= 2) {
+            emit callLogEntryReceived(type, fields[0], fields[1]);
+        } else {
+            qDebug() << "BluetoothManager: PD/PK parse failed, type=" << type << "fields=" << fields << "payload=" << payload.toHex();
         }
         return;
     }
