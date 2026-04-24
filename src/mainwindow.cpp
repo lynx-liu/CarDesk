@@ -298,7 +298,6 @@ void MainWindow::onPhoneClicked() {
 
     if (!m_phoneWindow) {
         m_phoneWindow = new PhoneWindow(m_bluetoothManager);
-        m_phoneWindow->setAttribute(Qt::WA_DeleteOnClose);
         connect(m_phoneWindow, &PhoneWindow::requestReturnToMain, this, [this]() {
             this->show();
             this->raise();

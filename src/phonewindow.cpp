@@ -23,6 +23,7 @@
 #include <QVBoxLayout>
 
 QString PhoneWindow::s_cachedDialNumber;
+QList<QPair<QString, QString>> PhoneWindow::s_cachedContactEntries;
 
 PhoneWindow::PhoneWindow(BluetoothManager *bluetoothManager, QWidget *parent)
     : QMainWindow(parent)
@@ -51,13 +52,17 @@ PhoneWindow::PhoneWindow(BluetoothManager *bluetoothManager, QWidget *parent)
     if (QApplication::primaryScreen()) {
         move(QApplication::primaryScreen()->geometry().center() - rect().center());
     }
+    if (!s_cachedContactEntries.isEmpty()) {
+        m_contactEntries = s_cachedContactEntries;
+    }
     setupUI();
     activateTab(0);
 }
 
 void PhoneWindow::closeEvent(QCloseEvent *event) {
     emit requestReturnToMain();
-    QMainWindow::closeEvent(event);
+    hide();
+    event->ignore();
 }
 
 void PhoneWindow::setupUI() {
@@ -241,9 +246,20 @@ void PhoneWindow::setupUI() {
     QVBoxLayout *history = new QVBoxLayout(historyPage);
     history->setContentsMargins(160, 20, 160, 20);
     m_historyList = new QListWidget(historyPage);
-    m_historyList->setStyleSheet("QListWidget{background:transparent;border:none;outline:none;} QListWidget::item{border:none;} QListWidget::item:selected{background:transparent;}");
+    m_historyList->setStyleSheet(
+        "QListWidget{background:transparent;border:none;outline:none;padding-right:60px;}"
+        "QListWidget::item{border:none;}"
+        "QListWidget::item:selected{background:transparent;}"
+        "QScrollBar:vertical{width:36px;background:transparent;border-radius:6px;margin:0;padding:0;}"
+        "QScrollBar::groove:vertical{background:rgba(0,104,255,0.10);border-radius:3px;margin:0px 3px;padding:0;}"
+        "QScrollBar::handle:vertical{background:#0068FF;border-radius:3px;min-height:60px;margin:3px 3px;}"
+        "QScrollBar::handle:vertical:hover{background:#00faff;}"
+        "QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical{height:0px;background:transparent;border:none;}"
+        "QScrollBar::sub-page:vertical, QScrollBar::add-page:vertical{background:transparent;}"
+    );
     m_historyList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_historyList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_historyList->setUniformItemSizes(true);
     m_historyList->setSpacing(2);
     populateHistoryList();
     connect(m_historyList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
@@ -259,9 +275,20 @@ void PhoneWindow::setupUI() {
     QVBoxLayout *contacts = new QVBoxLayout(contactsPage);
     contacts->setContentsMargins(160, 20, 160, 20);
     m_contactList = new QListWidget(contactsPage);
-    m_contactList->setStyleSheet("QListWidget{background:transparent;border:none;outline:none;} QListWidget::item{border:none;} QListWidget::item:selected{background:transparent;}");
+    m_contactList->setStyleSheet(
+        "QListWidget{background:transparent;border:none;outline:none;padding-right:60px;}"
+        "QListWidget::item{border:none;}"
+        "QListWidget::item:selected{background:transparent;}"
+        "QScrollBar:vertical{width:36px;background:transparent;border-radius:6px;margin:0;padding:0;}"
+        "QScrollBar::groove:vertical{background:rgba(0,104,255,0.10);border-radius:3px;margin:0px 3px;padding:0;}"
+        "QScrollBar::handle:vertical{background:#0068FF;border-radius:3px;min-height:60px;margin:3px 3px;}"
+        "QScrollBar::handle:vertical:hover{background:#00faff;}"
+        "QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical{height:0px;background:transparent;border:none;}"
+        "QScrollBar::sub-page:vertical, QScrollBar::add-page:vertical{background:transparent;}"
+    );
     m_contactList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     m_contactList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_contactList->setUniformItemSizes(true);
     m_contactList->setSpacing(2);
     populateContactList();
     connect(m_contactList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
@@ -678,9 +705,7 @@ void PhoneWindow::onBluetoothCallLogEntryReceived(int type, const QString &name,
 }
 
 void PhoneWindow::onBluetoothPhonebookDownloadFinished() {
-    if (m_contactList) {
-        rebuildContactList();
-    }
+    Q_UNUSED(m_contactList);
 }
 
 void PhoneWindow::onBluetoothCallLogDownloadFinished() {
@@ -708,7 +733,7 @@ void PhoneWindow::rebuildHistoryList() {
                                 : QStringLiteral(":/images/pict_callinglist_state_1.png");
         auto *item = new QListWidgetItem(m_historyList);
         item->setData(Qt::UserRole, entry.number);
-        item->setSizeHint(QSize(944, 68));
+        item->setSizeHint(QSize(872, 68));
         m_historyList->addItem(item);
         m_historyList->setItemWidget(item, createHistoryRow(entry.name, entry.number, entry.timeText, stateIcon, true));
     }
@@ -718,14 +743,16 @@ void PhoneWindow::rebuildContactList() {
     if (!m_contactList) {
         return;
     }
+    m_contactList->setUpdatesEnabled(false);
     m_contactList->clear();
     for (const QPair<QString, QString> &contact : qAsConst(m_contactEntries)) {
         auto *item = new QListWidgetItem(m_contactList);
         item->setData(Qt::UserRole, contact.second);
-        item->setSizeHint(QSize(944, 68));
+        item->setSizeHint(QSize(872, 68));
         m_contactList->addItem(item);
         m_contactList->setItemWidget(item, createContactRow(contact.first, contact.second));
     }
+    m_contactList->setUpdatesEnabled(true);
 }
 
 void PhoneWindow::rebuildDetailList(const QString &number) {
@@ -771,7 +798,7 @@ void PhoneWindow::insertContactWidget(int index, const QString &name, const QStr
     }
     auto *item = new QListWidgetItem(m_contactList);
     item->setData(Qt::UserRole, number);
-    item->setSizeHint(QSize(944, 68));
+    item->setSizeHint(QSize(872, 68));
     if (index >= 0 && index < m_contactList->count()) {
         m_contactList->insertItem(index, item);
     } else {
@@ -826,6 +853,7 @@ void PhoneWindow::addContactEntry(const QString &name, const QString &number) {
     });
     const int index = std::distance(m_contactEntries.begin(), insertPos);
     m_contactEntries.insert(insertPos, {finalName, trimmed});
+    s_cachedContactEntries = m_contactEntries;
     if (m_contactList) {
         insertContactWidget(index, finalName, trimmed);
     }
@@ -846,7 +874,7 @@ void PhoneWindow::addCallLogEntry(int type, const QString &name, const QString &
 
 QWidget *PhoneWindow::createHistoryRow(const QString &name, const QString &number, const QString &timeText, const QString &stateIcon, bool detailButton) {
     auto *row = new QWidget();
-    row->setFixedSize(944, 68);
+    row->setFixedSize(872, 68);
     row->setStyleSheet("QWidget{background:rgba(255,255,255,0.1);border-radius:34px;}");
 
     auto *layout = new QHBoxLayout(row);
@@ -854,10 +882,12 @@ QWidget *PhoneWindow::createHistoryRow(const QString &name, const QString &numbe
     layout->setSpacing(12);
 
     auto *userWrap = new QWidget(row);
+    userWrap->setStyleSheet("background:transparent;");
     auto *userLayout = new QHBoxLayout(userWrap);
     userLayout->setContentsMargins(0, 0, 0, 0);
     userLayout->setSpacing(24);
     auto *userIcon = new QLabel(userWrap);
+    userIcon->setStyleSheet("background:transparent;");
     userIcon->setPixmap(QPixmap(":/images/pict_callinglist_user.png").scaled(52, 52, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     auto *userLabel = new QLabel(name, userWrap);
     userLabel->setStyleSheet("QLabel{color:#fff;font-size:32px;background:transparent;}");
@@ -865,10 +895,12 @@ QWidget *PhoneWindow::createHistoryRow(const QString &name, const QString &numbe
     userLayout->addWidget(userLabel);
 
     auto *numWrap = new QWidget(row);
+    numWrap->setStyleSheet("background:transparent;");
     auto *numLayout = new QHBoxLayout(numWrap);
     numLayout->setContentsMargins(0, 0, 0, 0);
     numLayout->setSpacing(16);
     auto *state = new QLabel(numWrap);
+    state->setStyleSheet("background:transparent;");
     state->setPixmap(QPixmap(stateIcon).scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     auto *numLabel = new QLabel(number, numWrap);
     numLabel->setStyleSheet("QLabel{color:#fff;font-size:24px;background:transparent;}");
@@ -894,7 +926,7 @@ QWidget *PhoneWindow::createHistoryRow(const QString &name, const QString &numbe
 
 QWidget *PhoneWindow::createContactRow(const QString &name, const QString &number) {
     auto *row = new QWidget();
-    row->setFixedSize(944, 68);
+    row->setFixedSize(872, 68);
     row->setStyleSheet("QWidget{background:rgba(255,255,255,0.1);border-radius:34px;}");
 
     auto *layout = new QHBoxLayout(row);
@@ -902,10 +934,12 @@ QWidget *PhoneWindow::createContactRow(const QString &name, const QString &numbe
     layout->setSpacing(12);
 
     auto *userWrap = new QWidget(row);
+    userWrap->setStyleSheet("background:transparent;");
     auto *userLayout = new QHBoxLayout(userWrap);
     userLayout->setContentsMargins(0, 0, 0, 0);
     userLayout->setSpacing(24);
     auto *userIcon = new QLabel(userWrap);
+    userIcon->setStyleSheet("background:transparent;");
     userIcon->setPixmap(QPixmap(":/images/pict_callinglist_user.png").scaled(52, 52, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     auto *nameLabel = new QLabel(name, userWrap);
     nameLabel->setStyleSheet("QLabel{color:#fff;font-size:32px;background:transparent;}");
@@ -987,7 +1021,7 @@ void PhoneWindow::updateCallPanel(bool incoming) {
 
 QWidget *PhoneWindow::createDetailLogRow(const QString &timeText, const QString &durationText, const QString &stateIcon) {
     auto *row = new QWidget();
-    row->setFixedSize(944, 68);
+    row->setFixedSize(872, 68);
     row->setStyleSheet("QWidget{background:rgba(255,255,255,0.1);}");
 
     auto *layout = new QHBoxLayout(row);

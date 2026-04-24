@@ -81,6 +81,7 @@ private:
     QPushButton *m_tabHistory;
     QPushButton *m_tabContacts;
     static QString s_cachedDialNumber;
+    static QList<QPair<QString, QString>> s_cachedContactEntries;
 
     QList<QPair<QString, QString>> m_contactEntries;
     QList<CallLogEntry> m_callEntries;
