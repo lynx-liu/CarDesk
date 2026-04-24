@@ -48,14 +48,6 @@ private:
     void appendDigit(const QString &text);
     void cacheDialNumber(const QString &number);
     void activateTab(int index);
-    void populateHistoryList();
-    void populateContactList();
-    void rebuildHistoryList();
-    void rebuildContactList();
-    void rebuildDetailList(const QString &number);
-    void addCallLogEntry(int type, const QString &name, const QString &number);
-    void addContactEntry(const QString &name, const QString &number);
-    int findContactEntryIndex(const QString &number) const;
     void startPhonebookSync();
     void startCallLogSync();
     void insertContactWidget(int index, const QString &name, const QString &number);
@@ -75,6 +67,16 @@ private:
         QString timeText;
     };
 
+    void populateHistoryList();
+    void populateContactList();
+    void rebuildHistoryList();
+    void rebuildContactList();
+    void rebuildDetailList(const QString &number);
+    void insertHistoryWidget(int index, const CallLogEntry &entry);
+    void addCallLogEntry(int type, const QString &name, const QString &number);
+    void addContactEntry(const QString &name, const QString &number);
+    int findContactEntryIndex(const QString &number) const;
+
     BluetoothManager *m_bluetoothManager;
     QWidget *m_topBar;
     QWidget *m_tabWrap;
@@ -90,8 +92,6 @@ private:
     QList<CallLogEntry> m_callEntries;
     QString m_lastSyncedDeviceAddress;
     QString m_lastSyncedCallLogDeviceAddress;
-    bool m_phonebookSyncPending;
-    bool m_callLogSyncPending;
 
     QVBoxLayout *m_detailListLayout;
     QString m_detailCurrentNumber;
