@@ -499,10 +499,20 @@ void BluetoothManager::parseLine(const QByteArray &line) {
     }
 
     if (text.startsWith("MG")) {
-        static const QRegularExpression re(QStringLiteral(R"(^MG\[index:(\d+)\]$)"));
-        const QRegularExpressionMatch match = re.match(line);
+        int status = -1;
+        static const QRegularExpression reBracket(QStringLiteral(R"(^MG\[(?:index:)?(\d+)\]$)"));
+        QRegularExpressionMatch match = reBracket.match(line);
         if (match.hasMatch()) {
-            const int status = match.captured(1).toInt();
+            status = match.captured(1).toInt();
+        } else {
+            const QByteArray payload = line.mid(2).trimmed();
+            bool ok = false;
+            const int numeric = payload.toInt(&ok);
+            if (ok) {
+                status = numeric;
+            }
+        }
+        if (status >= 1 && status <= 6) {
             emit callStatusChanged(status);
         }
         return;

@@ -677,24 +677,31 @@ void PhoneWindow::onBluetoothCallStatusChanged(int status) {
         return;
     }
     switch (status) {
+    case 1:
+        if (m_tabWrap) {
+            m_tabWrap->show();
+        }
+        if (m_tabStack) {
+            m_tabStack->show();
+        }
+        activateTab(0);
+        break;
+    case 2:
+        m_callStateLabel->setText(QStringLiteral("连接中..."));
+        break;
+    case 3:
+        m_callStateLabel->setText(QStringLiteral("已连接"));
+        break;
     case 4:
-        m_callStateLabel->setText(QStringLiteral("呼出中..."));
-        showCallOverlay(false);
+        showCallOverlay(4);
         break;
     case 5:
-        m_callStateLabel->setText(QStringLiteral("来电..."));
-        showCallOverlay(true);
+        showCallOverlay(5);
         break;
     case 6:
-        m_callStateLabel->setText(QStringLiteral("通话中..."));
-        showCallOverlay(false);
+        showCallOverlay(6);
         break;
     default:
-        if (status == 1 || status == 3) {
-            if (m_tabStack) {
-                m_tabStack->setCurrentIndex(0);
-            }
-        }
         break;
     }
 }
@@ -1107,14 +1114,17 @@ QWidget *PhoneWindow::createContactRow(const QString &name, const QString &numbe
     return row;
 }
 
-void PhoneWindow::showCallOverlay(bool incoming) {
+void PhoneWindow::showCallOverlay(int status) {
     if (m_tabStack && m_callOverlay && m_tabStack->currentWidget() != m_callOverlay) {
         m_previousTabIndex = m_tabStack->currentIndex();
     }
     if (m_numberEdit && m_callNumber) {
-        m_callNumber->setText(m_numberEdit->text());
+        const QString currentDial = m_numberEdit->text().trimmed();
+        if (!currentDial.isEmpty()) {
+            m_callNumber->setText(currentDial);
+        }
     }
-    updateCallPanel(incoming);
+    updateCallPanel(status);
     if (m_callKeyboardPanel) {
         m_callKeyboardPanel->hide();
     }
@@ -1132,20 +1142,35 @@ void PhoneWindow::showCallOverlay(bool incoming) {
     }
 }
 
-void PhoneWindow::updateCallPanel(bool incoming) {
+void PhoneWindow::updateCallPanel(int status) {
     if (!m_callStateLabel || !m_callTimer || !m_answerButton) {
         return;
     }
 
-    if (incoming) {
-        m_callStateLabel->setText(QStringLiteral("正在呼入..."));
+    switch (status) {
+    case 4:
+        m_callStateLabel->setText(QStringLiteral("呼出中..."));
+        m_callTimer->setText(QStringLiteral("00:00"));
+        m_callTimer->show();
+        m_answerButton->hide();
+        break;
+    case 5:
+        m_callStateLabel->setText(QStringLiteral("来电..."));
         m_callTimer->hide();
         m_answerButton->show();
-    } else {
+        break;
+    case 6:
         m_callStateLabel->setText(QStringLiteral("通话中..."));
         m_callTimer->setText(QStringLiteral("00:00"));
         m_callTimer->show();
         m_answerButton->hide();
+        break;
+    default:
+        m_callStateLabel->setText(QStringLiteral("通话中..."));
+        m_callTimer->setText(QStringLiteral("00:00"));
+        m_callTimer->show();
+        m_answerButton->hide();
+        break;
     }
 }
 

@@ -55,8 +55,8 @@ private:
     QWidget *createHistoryRow(const QString &name, const QString &number, const QString &timeText, const QString &stateIcon, bool detailButton);
     QWidget *createContactRow(const QString &name, const QString &number);
     QWidget *createDetailLogRow(const QString &timeText, const QString &durationText, const QString &stateIcon);
-    void showCallOverlay(bool incoming);
-    void updateCallPanel(bool incoming);
+    void showCallOverlay(int status);
+    void updateCallPanel(int status);
     void showContactDetail(const QString &name, const QString &number);
     void hideContactDetail();
 
