@@ -54,6 +54,9 @@ private:
     void rebuildDetailList(const QString &number);
     void addCallLogEntry(int type, const QString &name, const QString &number);
     void addContactEntry(const QString &name, const QString &number);
+    int findContactEntryIndex(const QString &number) const;
+    void insertContactWidget(int index, const QString &name, const QString &number);
+    void updateContactWidget(int index, const QString &name, const QString &number);
     QWidget *createHistoryRow(const QString &name, const QString &number, const QString &timeText, const QString &stateIcon, bool detailButton);
     QWidget *createContactRow(const QString &name, const QString &number);
     QWidget *createDetailLogRow(const QString &timeText, const QString &durationText, const QString &stateIcon);

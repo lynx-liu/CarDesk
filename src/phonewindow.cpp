@@ -3,6 +3,7 @@
 #include "topbarwidget.h"
 #include "appsignals.h"
 
+#include <algorithm>
 #include <QApplication>
 #include <QKeyEvent>
 #include <QProcess>
@@ -754,22 +755,80 @@ void PhoneWindow::rebuildDetailList(const QString &number) {
     m_detailListLayout->addStretch();
 }
 
+int PhoneWindow::findContactEntryIndex(const QString &number) const {
+    const QString trimmed = number.trimmed();
+    for (int i = 0; i < m_contactEntries.size(); ++i) {
+        if (m_contactEntries[i].second == trimmed) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void PhoneWindow::insertContactWidget(int index, const QString &name, const QString &number) {
+    if (!m_contactList) {
+        return;
+    }
+    auto *item = new QListWidgetItem(m_contactList);
+    item->setData(Qt::UserRole, number);
+    item->setSizeHint(QSize(944, 68));
+    if (index >= 0 && index < m_contactList->count()) {
+        m_contactList->insertItem(index, item);
+    } else {
+        m_contactList->addItem(item);
+    }
+    m_contactList->setItemWidget(item, createContactRow(name, number));
+}
+
+void PhoneWindow::updateContactWidget(int index, const QString &name, const QString &number) {
+    if (!m_contactList || index < 0 || index >= m_contactList->count()) {
+        return;
+    }
+    QListWidgetItem *item = m_contactList->item(index);
+    if (!item) {
+        return;
+    }
+    if (QWidget *oldWidget = m_contactList->itemWidget(item)) {
+        oldWidget->deleteLater();
+    }
+    m_contactList->setItemWidget(item, createContactRow(name, number));
+}
+
 void PhoneWindow::addContactEntry(const QString &name, const QString &number) {
     const QString trimmed = number.trimmed();
     if (trimmed.isEmpty()) {
         return;
     }
-    for (int i = 0; i < m_contactEntries.size(); ++i) {
-        if (m_contactEntries[i].second == trimmed) {
-            if (m_contactEntries[i].first != name && !name.trimmed().isEmpty()) {
-                m_contactEntries[i].first = name;
-                rebuildContactList();
-            }
+    QString finalName = name.trimmed();
+    if (finalName.isEmpty()) {
+        finalName = trimmed;
+    }
+
+    const int existingIndex = findContactEntryIndex(trimmed);
+    if (existingIndex != -1) {
+        if (m_contactEntries[existingIndex].first == finalName) {
             return;
         }
+        m_contactEntries.removeAt(existingIndex);
+        if (m_contactList) {
+            QListWidgetItem *oldItem = m_contactList->takeItem(existingIndex);
+            if (oldItem) {
+                if (QWidget *oldWidget = m_contactList->itemWidget(oldItem)) {
+                    oldWidget->deleteLater();
+                }
+                delete oldItem;
+            }
+        }
     }
-    m_contactEntries.prepend({name, trimmed});
-    rebuildContactList();
+
+    const auto insertPos = std::lower_bound(m_contactEntries.begin(), m_contactEntries.end(), qMakePair(finalName, trimmed), [](const QPair<QString, QString> &a, const QPair<QString, QString> &b) {
+        return a.first.toLower() < b.first.toLower();
+    });
+    const int index = std::distance(m_contactEntries.begin(), insertPos);
+    m_contactEntries.insert(insertPos, {finalName, trimmed});
+    if (m_contactList) {
+        insertContactWidget(index, finalName, trimmed);
+    }
 }
 
 void PhoneWindow::addCallLogEntry(int type, const QString &name, const QString &number) {
@@ -856,6 +915,15 @@ QWidget *PhoneWindow::createContactRow(const QString &name, const QString &numbe
     auto *numLabel = new QLabel(number, row);
     numLabel->setStyleSheet("QLabel{color:#fff;font-size:24px;background:transparent;}");
 
+    auto *detailBtn = new QPushButton(row);
+    detailBtn->setFixedSize(60, 60);
+    detailBtn->setCursor(Qt::PointingHandCursor);
+    detailBtn->setStyleSheet("QPushButton{border:none;background:url(:/images/butt_callinglist_detail_up.png) no-repeat right center;}"
+                             "QPushButton:hover{background:url(:/images/butt_callinglist_detail_down.png) no-repeat right center;}");
+    connect(detailBtn, &QPushButton::clicked, this, [this, name, number]() {
+        showContactDetail(name, number);
+    });
+
     auto *callBtn = new QPushButton(row);
     callBtn->setFixedSize(60, 60);
     callBtn->setCursor(Qt::PointingHandCursor);
@@ -870,6 +938,7 @@ QWidget *PhoneWindow::createContactRow(const QString &name, const QString &numbe
     layout->addStretch();
     layout->addWidget(numLabel);
     layout->addStretch();
+    layout->addWidget(detailBtn);
     layout->addWidget(callBtn);
     return row;
 }
@@ -946,12 +1015,16 @@ QWidget *PhoneWindow::createDetailLogRow(const QString &timeText, const QString 
 }
 
 void PhoneWindow::showContactDetail(const QString &name, const QString &number) {
+    if (m_tabStack) {
+        m_previousTabIndex = m_tabStack->currentIndex();
+    }
     if (m_detailNameLabel) {
         m_detailNameLabel->setText(name);
     }
     if (m_detailNumberLabel) {
         m_detailNumberLabel->setText(number);
     }
+    rebuildDetailList(number);
     if (m_tabWrap) {
         m_tabWrap->hide();
     }
@@ -981,7 +1054,7 @@ void PhoneWindow::hideContactDetail() {
         m_tabWrap->show();
     }
     if (m_tabStack) {
-        activateTab(1);
+        activateTab(m_previousTabIndex >= 0 && m_previousTabIndex <= 2 ? m_previousTabIndex : 1);
         m_tabStack->show();
     }
     if (m_numberEdit && m_tabStack && m_tabStack->currentIndex() == 0) {

@@ -200,12 +200,12 @@ void BluetoothManager::hangupCall() {
 
 void BluetoothManager::requestPhonebookDownload() {
     if (!ensureInitialized()) return;
-    sendAtCommand(QStringLiteral("PA[status:1]"));
+    sendAtCommand(QStringLiteral("PB"));
 }
 
 void BluetoothManager::requestCallLogDownload() {
     if (!ensureInitialized()) return;
-    sendAtCommand(QStringLiteral("PA[status:1]"));
+    sendAtCommand(QStringLiteral("PD[status:1]"));
 }
 
 bool BluetoothManager::playPauseMusic() {
@@ -414,12 +414,39 @@ void BluetoothManager::parseLine(const QByteArray &line) {
         return;
     }
 
-    if (text.startsWith("PB")) {
-        static const QRegularExpression re(QStringLiteral(R"(^PB\[(.*?)\]\[FF\]\[(.*?)\]$)"));
-        QRegularExpressionMatch match = re.match(line);
-        if (match.hasMatch()) {
-            emit phonebookEntryReceived(match.captured(1).trimmed(), match.captured(2).trimmed());
-            return;
+    if (line.startsWith(QByteArrayLiteral("PB"))) {
+        const QByteArray payload = line.mid(2);
+        QList<QString> fields;
+        const char separator = static_cast<char>(0xFF);
+        if (payload.contains(separator)) {
+            const QList<QByteArray> rawFields = payload.split(separator);
+            for (const QByteArray &field : rawFields) {
+                const QString value = QString::fromUtf8(field).trimmed();
+                if (!value.isEmpty())
+                    fields << value;
+            }
+        } else {
+            const QString payloadText = QString::fromUtf8(payload).trimmed();
+            static const QRegularExpression reBracket(QStringLiteral(R"(^PB\[(.*?)\]\[FF\]\[(.*?)\]$)"));
+            QRegularExpressionMatch match = reBracket.match(payloadText);
+            if (match.hasMatch()) {
+                fields << match.captured(1).trimmed();
+                fields << match.captured(2).trimmed();
+            } else {
+                const QRegularExpression reSplit(QStringLiteral(R"((.*?)\s*[\|,;\t]+\s*(.*))"));
+                QRegularExpressionMatch splitMatch = reSplit.match(payloadText);
+                if (splitMatch.hasMatch()) {
+                    fields << splitMatch.captured(1).trimmed();
+                    fields << splitMatch.captured(2).trimmed();
+                } else {
+                    fields << payloadText;
+                }
+            }
+        }
+        if (fields.size() >= 2) {
+            emit phonebookEntryReceived(fields[0], fields[1]);
+        } else {
+            qDebug() << "BluetoothManager: PB parse failed, payload=" << payload.toHex() << "text=" << QString::fromUtf8(payload);
         }
         return;
     }
