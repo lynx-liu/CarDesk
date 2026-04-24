@@ -213,21 +213,19 @@ void MusicPlayerWindow::tryConnectLastA2dpDevice()
         return;
 
     if (m_bluetoothManager->isConnected()) {
-        if (m_nowPlayingLabel) {
-            m_nowPlayingLabel->setText(QStringLiteral("已连接：%1").arg(m_bluetoothManager->getConnectedDeviceName()));
+        if (m_nowPlayingLabel && m_nowPlayingLabel->text().isEmpty()) {
+            m_nowPlayingLabel->setText(QStringLiteral("蓝牙音乐"));
         }
         m_bluetoothManager->queryA2dpTrackInfo();
         return;
     }
 
     if (m_nowPlayingLabel) {
-        m_nowPlayingLabel->setText(QStringLiteral("蓝牙连接中..."));
+        m_nowPlayingLabel->setText(QStringLiteral("蓝牙音乐"));
     }
 
     if (!m_bluetoothManager->connectLastA2dpDevice()) {
-        if (m_nowPlayingLabel) {
-            m_nowPlayingLabel->setText(QStringLiteral("蓝牙A2DP连接失败"));
-        }
+        // keep showing music title area only, do not display connection error text
     }
 }
 
@@ -980,7 +978,7 @@ void MusicPlayerWindow::onBluetoothDeviceDisconnected()
 {
     if (m_isUsbMode) return;
     if (m_nowPlayingLabel) {
-        m_nowPlayingLabel->setText(QStringLiteral("蓝牙未连接"));
+        m_nowPlayingLabel->setText(QStringLiteral("蓝牙音乐"));
     }
     if (m_singerLabel) m_singerLabel->setText("--");
     if (m_albumLabel) m_albumLabel->setText("--");
@@ -990,9 +988,8 @@ void MusicPlayerWindow::onBluetoothDeviceDisconnected()
 
 void MusicPlayerWindow::onBluetoothError(const QString &errorMsg)
 {
-    if (!m_isUsbMode && m_nowPlayingLabel) {
-        m_nowPlayingLabel->setText(errorMsg);
-    }
+    Q_UNUSED(errorMsg)
+    // Do not show Bluetooth error status on the music title label.
 }
 
 void MusicPlayerWindow::onBluetoothA2dpTrackInfoChanged(const QString &title,

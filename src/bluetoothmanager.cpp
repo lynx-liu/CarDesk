@@ -508,13 +508,29 @@ void BluetoothManager::parseLine(const QByteArray &line) {
         return;
     }
 
-    if (text.startsWith("IR") || text.startsWith("IH") || text.startsWith("IN")) {
+    if (text.startsWith("IC") || text.startsWith("ID") || text.startsWith("IG") || text.startsWith("IR") || text.startsWith("IH") || text.startsWith("IN")) {
         const QString source = text.left(2);
         QString number = text.mid(2).trimmed();
         if (number.startsWith(QLatin1Char('[')) && number.endsWith(QLatin1Char(']')) && number.size() >= 2) {
             number = number.mid(1, number.size() - 2);
         }
-        emit callNumberUpdated(number, source);
+        if (!number.isEmpty()) {
+            emit callNumberUpdated(number, source);
+        }
+        if (source == QLatin1String("IC")) {
+            emit callStatusChanged(4);
+        } else if (source == QLatin1String("ID")) {
+            emit callStatusChanged(5);
+        } else if (source == QLatin1String("IG")) {
+            emit callStatusChanged(6);
+        } else if (source == QLatin1String("IR") || source == QLatin1String("IH") || source == QLatin1String("IN")) {
+            // only update current number
+        }
+        return;
+    }
+
+    if (text == QLatin1String("IF")) {
+        emit callStatusChanged(1);
         return;
     }
 
