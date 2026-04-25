@@ -118,7 +118,8 @@ protected:
             p.drawRoundedRect(barX, barTop + barTotalH - fillH, barW, fillH, 4, 4);
         }
 
-        // 百分比文字
+        // 等级文字（0-10 级）
+        const int level = qBound(0, qRound(m_percent / 10.0), 10);
         p.setPen(Qt::white);
         QFont f = p.font();
         f.setPixelSize(14);
@@ -126,7 +127,7 @@ protected:
         p.setFont(f);
         p.drawText(QRect(0, barBot + 4, r.width(), textH),
                    Qt::AlignHCenter | Qt::AlignVCenter,
-                   QString::number(m_percent));
+                   QString::number(level));
     }
 
 private:
