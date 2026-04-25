@@ -82,6 +82,7 @@
         <file alias="butt_radio_search_enter_down.png">ui/images/butt_radio_search_enter_down.png</file>
         <file alias="pict_radio_search_input.png">ui/images/pict_radio_search_input.png</file>
         <file alias="pict_radio_fmbar.png">ui/images/pict_radio_fmbar.png</file>
+        <file alias="pict_radio_ambar.png">ui/images/pict_radio_ambar.png</file>
         <file alias="pict_radio_mark.png">ui/images/pict_radio_mark.png</file>
         <file alias="butt_diagnosis_fault_up.png">ui/images/butt_diagnosis_fault_up.png</file>
         <file alias="butt_diagnosis_fault_down.png">ui/images/butt_diagnosis_fault_down.png</file>
