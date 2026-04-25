@@ -706,27 +706,26 @@ void BluetoothManager::parseLine(const QByteArray &line) {
     if (line.startsWith(QByteArrayLiteral("MP")) || text.startsWith("MP")) {
         const QByteArray payload = line.mid(2);
         bool handled = false;
-        if (payload.size() >= 4) {
+        if (payload.size() >= 6) {
             bool ok1 = false;
-            const QString posHex = QString::fromLatin1(payload.mid(0, 4));
-            const qint64 posSec = posHex.toInt(&ok1, 16);
+            const QString posHex = QString::fromLatin1(payload.mid(0, 6));
+            const qint64 posMs = posHex.toLongLong(&ok1, 16);
             if (ok1) {
-                const qint64 posMs = posSec * 1000;
                 qint64 totalMs = m_a2dpDurationMs;
-                if (totalMs <= 0 && payload.size() >= 8) {
+                if (totalMs <= 0 && payload.size() >= 12) {
                     bool ok2 = false;
-                    const QString lenHex = QString::fromLatin1(payload.mid(4, 4));
-                    const qint64 lenSec = lenHex.toInt(&ok2, 16);
+                    const QString lenHex = QString::fromLatin1(payload.mid(6, 6));
+                    const qint64 lenMs = lenHex.toLongLong(&ok2, 16);
                     if (ok2) {
-                        totalMs = lenSec * 1000;
+                        totalMs = lenMs;
                     }
                 }
                 if (totalMs > 0) {
-                    qDebug() << "BluetoothManager: parsed MP progress:" << posSec << "totalSec=" << (totalMs / 1000);
+                    qDebug() << "BluetoothManager: parsed MP progress:" << posMs << "totalMs=" << totalMs;
                     emit a2dpProgressChanged(posMs, totalMs);
                     handled = true;
                 } else {
-                    qDebug() << "BluetoothManager: parsed MP pos only, no total yet:" << posSec;
+                    qDebug() << "BluetoothManager: parsed MP pos only, no total yet:" << posMs;
                     emit a2dpProgressChanged(posMs, 0);
                     handled = true;
                 }
