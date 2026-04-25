@@ -27,6 +27,7 @@
 #include <QVBoxLayout>
 #include <QDebug>
 #include <QSettings>
+#include <QtMath>
 
 // ── V4L2 ─────────────────────────────────────────────────────────────────────
 #include <fcntl.h>
@@ -41,6 +42,45 @@ static inline quint32 mhzToV4l2(double mhz) { return static_cast<quint32>(mhz * 
 static inline quint32 khzToV4l2(double khz) { return static_cast<quint32>(khz * 16.0); }
 static inline double  v4l2ToMhz(quint32 v)  { return v / 16000.0; }
 static inline double  v4l2ToKhz(quint32 v)  { return v / 16.0; }
+
+static void findBarScaleBounds(const QPixmap &pixmap, int &scaleStart, int &scaleEnd)
+{
+    const QImage img = pixmap.toImage().convertToFormat(QImage::Format_Grayscale8);
+    const int width = img.width();
+    const int height = img.height();
+    QVector<double> colEdge(width - 1);
+    for (int x = 0; x < width - 1; ++x) {
+        long long sum = 0;
+        for (int y = 0; y < height; ++y) {
+            const int cur = qGray(img.pixel(x, y));
+            const int nxt = qGray(img.pixel(x + 1, y));
+            sum += qAbs(cur - nxt);
+        }
+        colEdge[x] = double(sum) / height;
+    }
+    double mean = 0.0, sq = 0.0;
+    for (double v : colEdge) {
+        mean += v;
+        sq += v * v;
+    }
+    mean /= colEdge.size();
+    const double stddev = qSqrt(qMax(0.0, sq / colEdge.size() - mean * mean));
+    const double threshold = mean + stddev * 1.2;
+    scaleStart = 0;
+    for (int x = 10; x < qMin(width / 4, width - 1); ++x) {
+        if (colEdge[x] > threshold) {
+            scaleStart = x;
+            break;
+        }
+    }
+    scaleEnd = width - 1;
+    for (int x = width - 2; x > qMax(width * 3 / 4, 0); --x) {
+        if (colEdge[x] > threshold) {
+            scaleEnd = x;
+            break;
+        }
+    }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── 电台列表 Delegate ──────────────────────────────────────────────────────────
@@ -286,16 +326,21 @@ bool RadioWindow::eventFilter(QObject *obj, QEvent *event)
                 QScrollBar *sb = m_barScrollArea->horizontalScrollBar();
                 sb->setValue(qBound(0, m_barDragStartScroll + delta, sb->maximum()));
                 // 实时更新频率显示（不向驱动写入，避免过多 ioctl）
-                const int barWidth   = m_isFM ? 2160 : 2480;
+                const QPixmap *pix = m_barLabel->pixmap();
+                const int barWidth = pix ? pix->width() : (m_isFM ? 2160 : 2480);
+                int scaleStart = 0, scaleEnd = barWidth - 1;
+                if (pix)
+                    findBarScaleBounds(*pix, scaleStart, scaleEnd);
+                const int scaleWidth = qMax(1, scaleEnd - scaleStart);
+                const int maxScroll = scaleWidth;
                 const double minFreq = m_isFM ? 87.0  : 522.0;
-                const double maxFreq = m_isFM ? 108.0 : 1710.0;
-                const double pix     = sb->value() + 347.0;
-                double freq = minFreq + pix / barWidth * (maxFreq - minFreq);
-                freq = qBound(minFreq, freq, maxFreq);
+                const double maxFreq = m_isFM ? 108.0 : 1602.0;
+                const double freq = minFreq + sb->value() / double(maxScroll) * (maxFreq - minFreq);
+                const double clamped = qBound(minFreq, freq, maxFreq);
                 if (m_freqLabel)
-                    m_freqLabel->setText(m_isFM ? QString::number(freq, 'f', 1)
-                                                : QString::number(freq, 'f', 0));
-                m_frequency = freq;
+                    m_freqLabel->setText(m_isFM ? QString::number(clamped, 'f', 1)
+                                                : QString::number(clamped, 'f', 0));
+                m_frequency = clamped;
                 return true;
             }
             break;
@@ -629,9 +674,11 @@ void RadioWindow::setupUI() {
         "QScrollBar:horizontal{height:0px;background:transparent;}"
         "QScrollBar:vertical{width:0px;background:transparent;}");
     m_barScrollArea->viewport()->setStyleSheet("background:transparent;");
-    m_barLabel = new QLabel();
+    m_barContent = new QWidget();
+    m_barContent->setStyleSheet("background:transparent;");
+    m_barLabel = new QLabel(m_barContent);
     m_barLabel->setStyleSheet("background:transparent;");
-    m_barScrollArea->setWidget(m_barLabel);
+    m_barScrollArea->setWidget(m_barContent);
     m_barScrollArea->setWidgetResizable(false);
     // 安装鼠标拖拽事件过滤器，使频率条可手动拖动（模拟 HTML overflow-x:auto 效果）
     m_barScrollArea->viewport()->installEventFilter(this);
@@ -783,15 +830,23 @@ void RadioWindow::updateFrequencyView() {
             // markerX = 915.4 - 568 = 347; mark widget center = scrollArea_left + markerX = 280+347=627
             const int markerX = 347;
             const int barWidth = barPixmap.width();
+            int scaleStart = 0, scaleEnd = barWidth - 1;
+            findBarScaleBounds(barPixmap, scaleStart, scaleEnd);
+            const int scaleWidth = qMax(1, scaleEnd - scaleStart);
+            const int leftPadding = markerX - scaleStart;
+            const int rightPadding = viewportWidth - markerX - (barWidth - 1 - scaleEnd);
+            const int totalWidth = leftPadding + barWidth + rightPadding;
+            const int maxScroll = scaleWidth;
             const double minFreq = m_isFM ? 87.0 : 522.0;
-            const double maxFreq = m_isFM ? 108.0 : 1710.0;
+            const double maxFreq = m_isFM ? 108.0 : 1602.0;
             const double clamped = qBound(minFreq, m_frequency, maxFreq);
             const double ratio = (clamped - minFreq) / (maxFreq - minFreq);
-            // scrollValue = 在条图中的偏移，使标记釅对准当前频率刻度
-            const int scrollPos = static_cast<int>(ratio * barWidth) - markerX;
-            const int maxScroll = barWidth - viewportWidth;
+            const int scrollPos = qRound(ratio * maxScroll);
             m_barLabel->setPixmap(barPixmap);
             m_barLabel->setFixedSize(barWidth, 106);
+            m_barLabel->move(leftPadding, 0);
+            if (m_barContent)
+                m_barContent->setFixedSize(totalWidth, 106);
             m_barScrollArea->horizontalScrollBar()->setRange(0, maxScroll);
             m_barScrollArea->horizontalScrollBar()->setValue(qBound(0, scrollPos, maxScroll));
         }
@@ -850,7 +905,7 @@ void RadioWindow::onPrev() {
     // 无硬件：手动步进（FM 0.1MHz / AM 9kHz）
     const double step = m_isFM ? 0.1 : 9.0;
     const double minFreq = m_isFM ? 87.0 : 522.0;
-    const double maxFreq = m_isFM ? 108.0 : 1710.0;
+    const double maxFreq = m_isFM ? 108.0 : 1602.0;
     m_frequency = qBound(minFreq, m_frequency - step, maxFreq);
     updateFrequencyView();
 }
@@ -863,7 +918,7 @@ void RadioWindow::onNext() {
     // 无硬件：手动步进（FM 0.1MHz / AM 9kHz）
     const double step = m_isFM ? 0.1 : 9.0;
     const double minFreq = m_isFM ? 87.0 : 522.0;
-    const double maxFreq = m_isFM ? 108.0 : 1710.0;
+    const double maxFreq = m_isFM ? 108.0 : 1602.0;
     m_frequency = qBound(minFreq, m_frequency + step, maxFreq);
     updateFrequencyView();
 }
@@ -900,9 +955,9 @@ void RadioWindow::onToggleScan() {
 void RadioWindow::onScanTick() {
     const double step    = m_isFM ? 0.1   : 9.0;
     const double minFreq = m_isFM ? 87.0  : 522.0;
-    const double maxFreq = m_isFM ? 108.0 : 1710.0;
-    // FM: 21MHz/0.1=210步；AM: 1188kHz/9≈132步，各加2余量
-    const int    maxSteps = m_isFM ? 212 : 134;
+    const double maxFreq = m_isFM ? 108.0 : 1602.0;
+    // FM: 21MHz/0.1=210步；AM: 1080kHz/9=120步，各加2余量
+    const int    maxSteps = m_isFM ? 212 : 122;
 
     // ① 先检测本次频率点的信号强度（设置后已沉待约200ms）
     if (m_seekStepCount > 0 && m_fd >= 0) {
@@ -1119,7 +1174,7 @@ void RadioWindow::onSearch() {
         bool ok = false;
         const double v = input->text().toDouble(&ok);
         if (!ok) return;
-        m_frequency = m_isFM ? qBound(87.0, v, 108.0) : qBound(522.0, v, 1710.0);
+        m_frequency = m_isFM ? qBound(87.0, v, 108.0) : qBound(522.0, v, 1602.0);
         quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
         setFrequencyHz(fhz);
         updateFrequencyView();
@@ -1340,7 +1395,7 @@ void RadioWindow::switchBand(bool fm) {
     if (v > 0) {
         double freq = m_isFM ? v4l2ToMhz(v) : v4l2ToKhz(v);
         const double minFreq = m_isFM ? 87.0 : 522.0;
-        const double maxFreq = m_isFM ? 108.0 : 1710.0;
+        const double maxFreq = m_isFM ? 108.0 : 1602.0;
         if (freq >= minFreq && freq <= maxFreq)
             m_frequency = freq;
     }

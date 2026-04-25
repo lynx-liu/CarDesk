@@ -63,6 +63,7 @@ private:
     // ── UI 控件 ──────────────────────────────────────────────────────────
     QLabel      *m_freqLabel;
     QLabel      *m_unitLabel;
+    QWidget     *m_barContent;
     QLabel      *m_barLabel;
     QScrollArea *m_barScrollArea;
     QLabel      *m_scaleLabel;
