@@ -379,6 +379,7 @@ int main(int argc, char *argv[]) {
     app.setProperty("appClock24h", false);  // 默认 12 小时制（与原始行为一致）
     app.setProperty("appSoundMode", QStringLiteral("立体声"));  // 默认声场模式
     T507SdkBridge::setSoundMode(QStringLiteral("立体声"));  // 应用默认声场到 TM2313
+    app.setQuitOnLastWindowClosed(false);
     configureApplicationFont(app);
 
     // 全局硬件键监听（音量键 + 诊断日志）
@@ -401,6 +402,7 @@ int main(int argc, char *argv[]) {
                     int qtKey = 0;
                     switch (ev.code) {
                     case KEY_HOMEPAGE: qtKey = Qt::Key_HomePage; break;
+                    case KEY_HOME:     qtKey = Qt::Key_HomePage; break;
                     case KEY_BACK:     qtKey = Qt::Key_Back;     break;
                     case KEY_SLEEP:
                         qDebug() << "[InputNotifier] ev.code=142 KEY_SLEEP => shutdown";

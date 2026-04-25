@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <QApplication>
+#include <QDebug>
 #include <QKeyEvent>
 #include <QProcess>
 #include <QCloseEvent>
@@ -91,7 +92,7 @@ void PhoneWindow::setupUI() {
     homeBtn->setFixedSize(48, 48);
     homeBtn->setStyleSheet("QPushButton{border:none;background-image:url(:/images/pict_home_up.png);} QPushButton:hover{background-image:url(:/images/pict_home_down.png);}");
     homeBtn->setFocusPolicy(Qt::NoFocus);
-    connect(homeBtn, &QPushButton::clicked, this, [this](){ emit requestReturnToMain(); close(); });
+    connect(homeBtn, &QPushButton::clicked, this, [this](){ qDebug() << "PhoneWindow home button clicked"; emit requestReturnToMain(); if (isVisible()) hide(); });
     top->addWidget(homeBtn, 0, 0, Qt::AlignLeft | Qt::AlignVCenter);
 
     QLabel *title = new QLabel("蓝牙电话", m_topBar);
@@ -1299,8 +1300,12 @@ void PhoneWindow::keyPressEvent(QKeyEvent *event)
         AppSignals::runAmixer({"sset", "LINEOUT volume", "5%-"}, this);
         break;
     case Qt::Key_HomePage:
+    case Qt::Key_Home:
+        qDebug() << "PhoneWindow keyPressEvent Home/HomePage";
         emit requestReturnToMain();
-        close();
+        if (isVisible()) {
+            hide();
+        }
         break;
     case Qt::Key_Back:
     case Qt::Key_Escape:
@@ -1308,7 +1313,9 @@ void PhoneWindow::keyPressEvent(QKeyEvent *event)
             hideContactDetail();
         } else {
             emit requestReturnToMain();
-            close();
+            if (isVisible()) {
+                hide();
+            }
         }
         break;
     default:

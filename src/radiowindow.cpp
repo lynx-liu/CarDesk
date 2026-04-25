@@ -247,6 +247,21 @@ void RadioWindow::closeEvent(QCloseEvent *event) {
     QMainWindow::closeEvent(event);
 }
 
+void RadioWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+    // 进入收音机界面时切回收音机声道
+    T507SdkBridge::setAudioSource(true);
+    setMute(false);
+}
+
+void RadioWindow::hideEvent(QHideEvent *event)
+{
+    QMainWindow::hideEvent(event);
+    // 隐藏收音机时切回媒体声道，防止电话呼出时仍然保留收音机音频
+    T507SdkBridge::setAudioSource(false);
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // 鼠标拖拽事件过滤器：使频率条 QScrollArea 可手动拖动
 // ──────────────────────────────────────────────────────────────────────────────

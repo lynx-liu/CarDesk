@@ -38,6 +38,7 @@ private slots:
     void onSystemSettingsClicked();
     void onDrivingImageClicked();
     void onImageViewingClicked();
+    void onBluetoothCallStatusChanged(int status);
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -57,7 +58,10 @@ private:
     void ensureTransitionOverlay();
     void showTransitionOverlay();
     void hideTransitionOverlay();
-    
+    void ensurePhoneWindow();
+    QWidget *findCurrentVisibleNonPhoneWindow() const;
+    void restorePreviousWindow();
+
     // UI 组件
     QWidget *m_topBar;
     QWidget *m_navBar;
@@ -75,6 +79,7 @@ private:
     DrivingImageWindow *m_drivingImageWindow;
     ImageViewingWindow *m_imageViewingWindow;
     USBManager *m_usbManager;
+    QWidget *m_restoreWindowOnPhoneHangup;
 
     // 样式表
     QString m_styleSheet;

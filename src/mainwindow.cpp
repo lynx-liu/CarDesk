@@ -234,6 +234,9 @@ void MainWindow::setupConnections() {
                     AppSignals::instance()->bluetoothConnectedChanged(false);
                 });
 
+        connect(m_bluetoothManager, &BluetoothManager::callStatusChanged,
+                this, &MainWindow::onBluetoothCallStatusChanged);
+
         // 启动时预先查询蓝牙连接状态，避免只有进入设置页面时才刷新菜单栏状态
         m_bluetoothManager->queryConnectedDevice();
     }
@@ -293,24 +296,57 @@ void MainWindow::onMusicUSBClicked() {
     }
 }
 
-void MainWindow::onPhoneClicked() {
-    qDebug() << "Phone button clicked";
-
+void MainWindow::ensurePhoneWindow() {
     if (!m_phoneWindow) {
         m_phoneWindow = new PhoneWindow(m_bluetoothManager);
         connect(m_phoneWindow, &PhoneWindow::requestReturnToMain, this, [this]() {
-            this->show();
-            this->raise();
-            this->activateWindow();
+            qDebug() << "MainWindow received PhoneWindow requestReturnToMain";
+            restorePreviousWindow();
+            if (m_phoneWindow) {
+                m_phoneWindow->hide();
+            }
         }, Qt::UniqueConnection);
         connect(m_phoneWindow, &QObject::destroyed, this, [this]() {
             m_phoneWindow = nullptr;
-            this->show();
-            this->raise();
-            this->activateWindow();
+            restorePreviousWindow();
         }, Qt::UniqueConnection);
     }
+}
 
+void MainWindow::onPhoneClicked() {
+    qDebug() << "Phone button clicked";
+    m_restoreWindowOnPhoneHangup = nullptr;
+    ensurePhoneWindow();
+    m_phoneWindow->show();
+    m_phoneWindow->raise();
+    m_phoneWindow->activateWindow();
+}
+
+void MainWindow::onBluetoothCallStatusChanged(int status) {
+    if (status == 1) {
+        if (m_phoneWindow && m_phoneWindow->isVisible()) {
+            m_phoneWindow->hide();
+        }
+        restorePreviousWindow();
+        return;
+    }
+
+    if (status != 4 && status != 5 && status != 6) {
+        return;
+    }
+
+    QWidget *current = findCurrentVisibleNonPhoneWindow();
+    if (current && current == m_drivingImageWindow) {
+        return;
+    }
+    if (current && current != m_phoneWindow) {
+        m_restoreWindowOnPhoneHangup = current;
+        current->hide();
+    } else if (!current && this->isVisible()) {
+        m_restoreWindowOnPhoneHangup = this;
+        this->hide();
+    }
+    ensurePhoneWindow();
     this->hide();
     m_phoneWindow->show();
     m_phoneWindow->raise();
@@ -417,6 +453,56 @@ void MainWindow::onDrivingImageClicked() {
     m_drivingImageWindow->raise();
     m_drivingImageWindow->activateWindow();
     this->hide();
+}
+
+QWidget *MainWindow::findCurrentVisibleNonPhoneWindow() const {
+    if (m_mediaManager && m_mediaManager->videoListWindow() && m_mediaManager->videoListWindow()->isVisible()) {
+        return m_mediaManager->videoListWindow();
+    }
+    if (m_mediaManager && m_mediaManager->musicWindow() && m_mediaManager->musicWindow()->isVisible()) {
+        return m_mediaManager->musicWindow();
+    }
+    if (m_radioWindow && m_radioWindow->isVisible()) {
+        return m_radioWindow;
+    }
+    if (m_diagnosticWindow && m_diagnosticWindow->isVisible()) {
+        return m_diagnosticWindow;
+    }
+    if (m_systemSettingWindow && m_systemSettingWindow->isVisible()) {
+        return m_systemSettingWindow;
+    }
+    if (m_drivingImageWindow && m_drivingImageWindow->isVisible()) {
+        return m_drivingImageWindow;
+    }
+    if (m_imageViewingWindow && m_imageViewingWindow->isVisible()) {
+        return m_imageViewingWindow;
+    }
+    if (this->isVisible()) {
+        return const_cast<MainWindow *>(this);
+    }
+    return nullptr;
+}
+
+void MainWindow::restorePreviousWindow() {
+    qDebug() << "restorePreviousWindow: m_restoreWindowOnPhoneHangup=" << m_restoreWindowOnPhoneHangup;
+    if (m_restoreWindowOnPhoneHangup) {
+        QWidget *restore = m_restoreWindowOnPhoneHangup;
+        m_restoreWindowOnPhoneHangup = nullptr;
+        if (restore && !restore->isVisible()) {
+            qDebug() << "restorePreviousWindow: showing restore target" << restore->metaObject()->className();
+            restore->show();
+        }
+        if (restore) {
+            qDebug() << "restorePreviousWindow: raising restore target" << restore->metaObject()->className();
+            restore->raise();
+            restore->activateWindow();
+            return;
+        }
+    }
+    qDebug() << "restorePreviousWindow: fallback to MainWindow";
+    this->show();
+    this->raise();
+    this->activateWindow();
 }
 
 void MainWindow::forceMainInterfaceRedraw()
