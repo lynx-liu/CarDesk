@@ -180,7 +180,31 @@ void BluetoothManager::dialNumber(const QString &number) {
         return;
     }
     const QString digits = number.trimmed().remove(QRegularExpression("[^0-9+*#]"));
+    if (digits.isEmpty()) {
+        emit error(QStringLiteral("拨号号码不能为空"));
+        return;
+    }
     sendAtCommand(QStringLiteral("CW[%1]").arg(digits));
+}
+
+bool BluetoothManager::sendDtmfDigit(const QString &digit) {
+    if (!ensureInitialized()) {
+        emit error(QStringLiteral("无法初始化蓝牙串口"));
+        return false;
+    }
+    const QString tone = digit.trimmed().remove(QRegularExpression("[^0-9+*#]"));
+    if (tone.isEmpty()) {
+        return false;
+    }
+    return sendAtCommand(QStringLiteral("CX[DTMF:%1]").arg(tone));
+}
+
+bool BluetoothManager::setCallMute(bool mute) {
+    if (!ensureInitialized()) {
+        emit error(QStringLiteral("无法初始化蓝牙串口"));
+        return false;
+    }
+    return sendAtCommand(QStringLiteral("CM[%1]").arg(mute ? 1 : 0));
 }
 
 void BluetoothManager::answerCall() {
@@ -546,12 +570,23 @@ void BluetoothManager::parseLine(const QByteArray &line) {
 
     if (text.startsWith("CL")) {
         static const QRegularExpression re(QStringLiteral(R"(^CL\[index;?(\d+)\]\[status:(\d+)\]\[(.*?)\]$)"));
-        const QRegularExpressionMatch match = re.match(line);
+        QRegularExpressionMatch match = re.match(line);
         if (match.hasMatch()) {
-            const int status = match.captured(2).toInt();
             const QString number = match.captured(3).trimmed();
-            emit callStatusChanged(status);
-            emit callNumberUpdated(number, QStringLiteral("CL"));
+            if (!number.isEmpty()) {
+                emit callNumberUpdated(number, QStringLiteral("CL"));
+            }
+            return;
+        }
+
+        static const QRegularExpression rePlain(QStringLiteral(R"(^CL(\d+)(\d)(.*)$)"));
+        match = rePlain.match(text);
+        if (match.hasMatch()) {
+            const QString number = match.captured(3).trimmed();
+            if (!number.isEmpty()) {
+                emit callNumberUpdated(number, QStringLiteral("CL"));
+            }
+            return;
         }
         return;
     }

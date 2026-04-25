@@ -33,6 +33,8 @@ public:
     void queryConnectedDevice();
 
     void dialNumber(const QString &number);
+    bool sendDtmfDigit(const QString &digit);
+    bool setCallMute(bool mute);
     void answerCall();
     void rejectCall();
     void hangupCall();

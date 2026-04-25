@@ -32,6 +32,7 @@ private slots:
     void onDial();
     void onAnswer();
     void onHangup();
+    void onToggleMute();
     void onDialTab();
     void onHistoryTab();
     void onContactsTab();
@@ -109,6 +110,9 @@ private:
     QWidget *m_callKeyboardPanel;
     QWidget *m_bottomActions;
     QPushButton *m_answerButton;
+    QPushButton *m_muteButton;
+    bool m_callMuted;
+    int m_currentCallStatus;
 };
 
 #endif // PHONEWINDOW_H

@@ -47,6 +47,9 @@ PhoneWindow::PhoneWindow(BluetoothManager *bluetoothManager, QWidget *parent)
     , m_callKeyboardPanel(nullptr)
     , m_bottomActions(nullptr)
     , m_answerButton(nullptr)
+    , m_muteButton(nullptr)
+    , m_callMuted(false)
+    , m_currentCallStatus(1)
 {
     setWindowTitle("蓝牙电话");
     setFixedSize(1280, 720);
@@ -459,6 +462,8 @@ void PhoneWindow::setupUI() {
     auto *muteBtn = makeActionBtn(QStringLiteral("静音"), QStringLiteral(":/images/butt_calling_mute_up.png"), QStringLiteral(":/images/butt_calling_mute_down.png"));
     auto *keyboardBtn = makeActionBtn(QStringLiteral("键盘"), QStringLiteral(":/images/butt_calling_keyboard_up.png"), QStringLiteral(":/images/butt_calling_keyboard_down.png"));
     auto *recordBtn = makeActionBtn(QStringLiteral("录音"), QStringLiteral(":/images/butt_calling_recording_up.png"), QStringLiteral(":/images/butt_calling_recording_down.png"));
+    m_muteButton = muteBtn;
+    connect(muteBtn, &QPushButton::clicked, this, &PhoneWindow::onToggleMute);
     connect(keyboardBtn, &QPushButton::clicked, this, [this, bottomActions]() {
         if (!m_callKeyboardPanel) {
             return;
@@ -574,12 +579,27 @@ void PhoneWindow::setupUI() {
 }
 
 void PhoneWindow::appendDigit(const QString &text) {
+    if (m_callKeyboardPanel && m_callKeyboardPanel->isVisible()) {
+        if (m_bluetoothManager) {
+            m_bluetoothManager->sendDtmfDigit(text);
+        }
+        return;
+    }
     if (!m_numberEdit) {
         return;
     }
     const QString newText = m_numberEdit->text() + text;
     m_numberEdit->setText(newText);
     s_cachedDialNumber = newText;
+}
+
+void PhoneWindow::onToggleMute() {
+    if (!m_muteButton || !m_bluetoothManager) {
+        return;
+    }
+
+    m_callMuted = !m_callMuted;
+    m_bluetoothManager->setCallMute(m_callMuted);
 }
 
 void PhoneWindow::cacheDialNumber(const QString &number) {
@@ -618,6 +638,9 @@ void PhoneWindow::onDial() {
     if (m_bluetoothManager && m_numberEdit) {
         const QString number = m_numberEdit->text().trimmed();
         if (!number.isEmpty()) {
+            if (m_callNumber) {
+                m_callNumber->setText(number);
+            }
             m_bluetoothManager->dialNumber(number);
         }
     }
@@ -649,7 +672,9 @@ void PhoneWindow::onHangup() {
     }
     if (m_callNumber) {
         addCallLogEntry(3, QStringLiteral("拨出"), m_callNumber->text());
+        m_callNumber->clear();
     }
+    s_cachedDialNumber.clear();
 }
 
 void PhoneWindow::onDialTab() {
@@ -673,6 +698,7 @@ void PhoneWindow::onContactsTab() {
 }
 
 void PhoneWindow::onBluetoothCallStatusChanged(int status) {
+    m_currentCallStatus = status;
     if (!m_callStateLabel) {
         return;
     }
@@ -684,6 +710,10 @@ void PhoneWindow::onBluetoothCallStatusChanged(int status) {
         if (m_tabStack) {
             m_tabStack->show();
         }
+        if (m_callNumber) {
+            m_callNumber->clear();
+        }
+        s_cachedDialNumber.clear();
         activateTab(0);
         break;
     case 2:
@@ -710,9 +740,17 @@ void PhoneWindow::onBluetoothCallNumberUpdated(const QString &number, const QStr
     if (!m_callNumber) {
         return;
     }
-    if (!number.trimmed().isEmpty()) {
-        m_callNumber->setText(number.trimmed());
+    const QString trimmed = number.trimmed();
+    if (trimmed.isEmpty()) {
+        return;
     }
+
+    if ((source == QLatin1String("IE") || source == QLatin1String("IN") || source == QLatin1String("CL"))
+            && (m_currentCallStatus == 4 || m_currentCallStatus == 6)) {
+        return;
+    }
+
+    m_callNumber->setText(trimmed);
 }
 
 void PhoneWindow::onBluetoothPhonebookEntryReceived(const QString &name, const QString &number) {
@@ -1120,7 +1158,7 @@ void PhoneWindow::showCallOverlay(int status) {
     }
     if (m_numberEdit && m_callNumber) {
         const QString currentDial = m_numberEdit->text().trimmed();
-        if (!currentDial.isEmpty()) {
+        if (!currentDial.isEmpty() && m_callNumber->text().trimmed().isEmpty()) {
             m_callNumber->setText(currentDial);
         }
     }
