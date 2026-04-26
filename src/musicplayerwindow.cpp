@@ -92,6 +92,15 @@ static quint32 readBigEndianUInt(const QByteArray &data)
     return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
 }
 
+static quint32 readBigEndian24(const QByteArray &data)
+{
+    if (data.size() < 3) return 0;
+    const auto b0 = static_cast<quint8>(data[0]);
+    const auto b1 = static_cast<quint8>(data[1]);
+    const auto b2 = static_cast<quint8>(data[2]);
+    return (b0 << 16) | (b1 << 8) | b2;
+}
+
 static quint32 readSyncSafeUInt(const QByteArray &data)
 {
     if (data.size() < 4) return 0;
@@ -101,6 +110,90 @@ static quint32 readSyncSafeUInt(const QByteArray &data)
     const auto b3 = static_cast<quint8>(data[3]);
     return (b0 << 21) | (b1 << 14) | (b2 << 7) | b3;
 }
+
+static quint32 readLittleEndianUInt(const QByteArray &data)
+{
+    if (data.size() < 4) return 0;
+    const auto b0 = static_cast<quint8>(data[0]);
+    const auto b1 = static_cast<quint8>(data[1]);
+    const auto b2 = static_cast<quint8>(data[2]);
+    const auto b3 = static_cast<quint8>(data[3]);
+    return (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
+}
+
+static QString sanitizeMetadataString(QString text);
+static bool payloadHasHighBytes(const QByteArray &payload);
+static QString tryDecodeAsGbK(const QByteArray &payload);
+
+static QByteArray findImageData(const QByteArray &data)
+{
+    static const QList<QByteArray> signatures = {
+        QByteArray("\xFF\xD8\xFF", 3),
+        QByteArray("\x89PNG\r\n\x1A\n", 8),
+        QByteArray("GIF87a"),
+        QByteArray("GIF89a"),
+        QByteArray("RIFF")
+    };
+
+    int bestIndex = -1;
+    for (const QByteArray &sig : signatures) {
+        int idx = data.indexOf(sig);
+        if (idx >= 0 && (bestIndex < 0 || idx < bestIndex)) {
+            bestIndex = idx;
+        }
+    }
+    if (bestIndex >= 0) {
+        return data.mid(bestIndex);
+    }
+    return data;
+}
+
+static QPixmap loadPixmapFromData(const QByteArray &data)
+{
+    QByteArray payload = findImageData(data);
+    QImage image;
+    if (image.loadFromData(payload)) {
+        return QPixmap::fromImage(image);
+    }
+    return QPixmap();
+}
+
+static QString decodeApeTextValue(const QByteArray &value)
+{
+    QByteArray trimmed = value;
+    int nullPos = trimmed.indexOf('\0');
+    if (nullPos >= 0) trimmed.truncate(nullPos);
+
+    QString text = QString::fromUtf8(trimmed).trimmed();
+    if (!text.isEmpty()) return sanitizeMetadataString(text);
+
+    if (payloadHasHighBytes(trimmed)) {
+        QString gbk = tryDecodeAsGbK(trimmed);
+        if (!gbk.isEmpty()) return sanitizeMetadataString(gbk);
+    }
+
+    return sanitizeMetadataString(QString::fromLatin1(trimmed));
+}
+
+static QPixmap decodeApePictureValue(const QByteArray &value)
+{
+    if (value.isEmpty()) return QPixmap();
+
+    QPixmap pixmap = loadPixmapFromData(value);
+    if (!pixmap.isNull()) return pixmap;
+
+    if (value.size() > 8) {
+        pixmap = loadPixmapFromData(value.mid(8));
+        if (!pixmap.isNull()) return pixmap;
+    }
+    if (value.size() > 4) {
+        pixmap = loadPixmapFromData(value.mid(4));
+        if (!pixmap.isNull()) return pixmap;
+    }
+
+    return QPixmap();
+}
+
 
 static QByteArray desynchronize(const QByteArray &data)
 {
@@ -262,9 +355,24 @@ static QString decodeId3TextFrame(const QByteArray &body)
     }
 }
 
-static QPixmap decodeId3PictureFrame(const QByteArray &body)
+static QPixmap decodeId3PictureFrame(const QByteArray &body, int majorVersion)
 {
     if (body.size() < 4) return QPixmap();
+    if (majorVersion == 2) {
+        if (body.size() < 5) return QPixmap();
+        int pos = 3; // 3-byte image format
+        if (pos >= body.size()) return QPixmap();
+        pos += 1; // picture type
+        int descEnd = body.indexOf('\0', pos);
+        if (descEnd < 0) {
+            descEnd = pos;
+        }
+        QByteArray imageData = body.mid(descEnd + 1);
+        QPixmap pixmap = loadPixmapFromData(imageData);
+        if (!pixmap.isNull()) return pixmap;
+        return QPixmap();
+    }
+
     int pos = 1;
     int mimeEnd = body.indexOf('\0', pos);
     if (mimeEnd < 0) return QPixmap();
@@ -274,11 +382,63 @@ static QPixmap decodeId3PictureFrame(const QByteArray &body)
     int descEnd = body.indexOf('\0', pos);
     if (descEnd < 0) return QPixmap();
     QByteArray imageData = body.mid(descEnd + 1);
-    QImage image;
-    if (image.loadFromData(imageData)) {
-        return QPixmap::fromImage(image);
-    }
+    QPixmap pixmap = loadPixmapFromData(imageData);
+    if (!pixmap.isNull()) return pixmap;
     return QPixmap();
+}
+
+static void extractApeMetadata(const QString &path, QString &title, QString &artist, QString &album, QPixmap &cover)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) return;
+    if (file.size() < 32) return;
+
+    qint64 footerPos = file.size() - 32;
+    file.seek(footerPos);
+    QByteArray footer = file.read(32);
+    if (footer.size() != 32 || footer.left(8) != "APETAGEX") return;
+
+    quint32 tagSize = readLittleEndianUInt(footer.mid(12, 4));
+    quint32 itemCount = readLittleEndianUInt(footer.mid(16, 4));
+    if (tagSize < 32 || tagSize > static_cast<quint32>(file.size())) return;
+
+    qint64 bodyPos = file.size() - tagSize;
+    if (!file.seek(bodyPos)) return;
+    QByteArray body = file.read(tagSize - 32);
+    if (body.size() < 8) return;
+
+    if (body.left(8) == "APETAGEX" && body.size() >= 32) {
+        quint32 headerSize = readLittleEndianUInt(body.mid(12, 4));
+        if (headerSize >= 32 && headerSize <= static_cast<quint32>(body.size())) {
+            body = body.mid(headerSize);
+        }
+    }
+
+    int offset = 0;
+    for (quint32 i = 0; i < itemCount && offset + 8 <= body.size(); ++i) {
+        quint32 itemSize = readLittleEndianUInt(body.mid(offset, 4));
+        Q_UNUSED(readLittleEndianUInt(body.mid(offset + 4, 4)));
+        offset += 8;
+        int nameEnd = body.indexOf('\0', offset);
+        if (nameEnd < 0 || nameEnd <= offset) break;
+
+        QString name = QString::fromLatin1(body.mid(offset, nameEnd - offset));
+        offset = nameEnd + 1;
+        if (offset + static_cast<int>(itemSize) > body.size()) break;
+
+        QByteArray value = body.mid(offset, itemSize);
+        offset += itemSize;
+
+        if (name.compare("Title", Qt::CaseInsensitive) == 0 && title.isEmpty()) {
+            title = decodeApeTextValue(value);
+        } else if (name.compare("Artist", Qt::CaseInsensitive) == 0 && artist.isEmpty()) {
+            artist = decodeApeTextValue(value);
+        } else if (name.compare("Album", Qt::CaseInsensitive) == 0 && album.isEmpty()) {
+            album = decodeApeTextValue(value);
+        } else if (cover.isNull() && (name.startsWith("Cover Art", Qt::CaseInsensitive) || name.compare("Cover Art", Qt::CaseInsensitive) == 0)) {
+            cover = decodeApePictureValue(value);
+        }
+    }
 }
 
 static void extractId3Metadata(const QString &path, QString &title, QString &artist, QString &album, QPixmap &cover)
@@ -304,25 +464,39 @@ static void extractId3Metadata(const QString &path, QString &title, QString &art
             frames = desynchronize(frames);
         }
         int pos = 0;
-        while (pos + 10 <= frames.size()) {
-            QByteArray frameId = frames.mid(pos, 4);
+        while (true) {
+            int headerSize = (major == 2 ? 6 : 10);
+            if (pos + headerSize > frames.size()) break;
+            QByteArray frameId = frames.mid(pos, major == 2 ? 3 : 4);
             if (frameId.trimmed().isEmpty()) break;
-            quint32 frameSize = (major >= 4)
-                    ? readSyncSafeUInt(frames.mid(pos + 4, 4))
-                    : readBigEndianUInt(frames.mid(pos + 4, 4));
-            if (frameSize <= 0 || pos + 10 + static_cast<int>(frameSize) > frames.size()) break;
-            QByteArray frameBody = frames.mid(pos + 10, frameSize);
-            if (frameId == "TIT2" && title.isEmpty()) {
-                title = decodeId3TextFrame(frameBody);
-            } else if (frameId == "TPE1" && artist.isEmpty()) {
-                artist = decodeId3TextFrame(frameBody);
-            } else if (frameId == "TALB" && album.isEmpty()) {
-                album = decodeId3TextFrame(frameBody);
-            } else if (frameId == "APIC" && cover.isNull()) {
-                cover = decodeId3PictureFrame(frameBody);
+
+            quint32 frameSize = 0;
+            if (major == 2) {
+                frameSize = readBigEndian24(frames.mid(pos + 3, 3));
+            } else if (major >= 4) {
+                frameSize = readSyncSafeUInt(frames.mid(pos + 4, 4));
+            } else {
+                frameSize = readBigEndianUInt(frames.mid(pos + 4, 4));
             }
-            pos += 10 + frameSize;
+
+            if (frameSize <= 0 || pos + headerSize + static_cast<int>(frameSize) > frames.size()) break;
+            QByteArray frameBody = frames.mid(pos + headerSize, frameSize);
+            QString frameIdStr = QString::fromLatin1(frameId);
+            if (frameIdStr == "TIT2" && title.isEmpty()) {
+                title = decodeId3TextFrame(frameBody);
+            } else if (frameIdStr == "TPE1" && artist.isEmpty()) {
+                artist = decodeId3TextFrame(frameBody);
+            } else if (frameIdStr == "TALB" && album.isEmpty()) {
+                album = decodeId3TextFrame(frameBody);
+            } else if ((frameIdStr == "APIC" || frameIdStr == "PIC") && cover.isNull()) {
+                cover = decodeId3PictureFrame(frameBody, major);
+            }
+            pos += headerSize + frameSize;
         }
+    }
+
+    if (cover.isNull()) {
+        extractApeMetadata(path, title, artist, album, cover);
     }
 
     if ((title.isEmpty() || artist.isEmpty() || album.isEmpty()) && file.size() >= 128) {
