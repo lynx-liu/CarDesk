@@ -72,8 +72,8 @@ public:
         QRect r(option.rect.x(), option.rect.y(), 160, 160);
 
         bool isDir = index.data(Qt::UserRole + 1).toBool();
-        static QPixmap fileUp  (":/images/music_musiclist_up.png");
-        static QPixmap fileDown(":/images/music_musiclist_down.png");
+        static QPixmap fileUp  (":/images/butt_music_musiclist_up.png");
+        static QPixmap fileDown(":/images/butt_music_musiclist_down.png");
         static QPixmap folderUp  (":/images/music_musiclist_file_up.png");
         static QPixmap folderDown(":/images/music_musiclist_file_down.png");
 
