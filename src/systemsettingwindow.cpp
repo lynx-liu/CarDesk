@@ -825,7 +825,59 @@ QWidget *SystemSettingWindow::createDisplayPage()
 
     layout->addWidget(row1);
     layout->addWidget(makeDivider());
-    layout->addWidget(makeSwitchRow(QStringLiteral("关屏时钟"), QStringLiteral("数字"), QStringLiteral("模拟")));
+    {
+        QSettings settings;
+        const QString initMode = settings.value("display/screenClockMode", "digital").toString();
+        const bool initAnalog = (initMode == QLatin1String("analog"));
+
+        auto *row = new QWidget(page);
+        row->setFixedHeight(98);
+        auto *h = new QHBoxLayout(row);
+        h->setContentsMargins(0, 27, 0, 27);
+        h->setSpacing(16);
+        auto *title = new QLabel(QStringLiteral("关屏时钟"), row);
+        title->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;}");
+        title->setFixedWidth(170);
+        h->addWidget(title);
+        h->addStretch();
+
+        auto *container = new QWidget(row);
+        container->setFixedSize(240, 44);
+        container->setStyleSheet(initAnalog
+            ? "QWidget{background:url(:/images/butt_setting_choose_right.png) no-repeat;}"
+            : "QWidget{background:url(:/images/butt_setting_choose_left.png) no-repeat;}");
+
+        auto *leftBtn  = new QPushButton(QStringLiteral("数字"),  container);
+        auto *rightBtn = new QPushButton(QStringLiteral("模拟"),  container);
+        leftBtn->setGeometry(0,   0, 120, 44);
+        rightBtn->setGeometry(120, 0, 120, 44);
+        const QString btnStyle =
+            "QPushButton{border:none;background:transparent;color:#fff;font-size:24px;}"
+            "QPushButton:hover{color:#00faff;}"
+            "QPushButton:focus, QPushButton:checked:focus, QPushButton:focus-visible {outline:none;border:none;}";
+        leftBtn->setStyleSheet(btnStyle);
+        rightBtn->setStyleSheet(btnStyle);
+        leftBtn->setCursor(Qt::PointingHandCursor);
+        rightBtn->setCursor(Qt::PointingHandCursor);
+
+        QObject::connect(leftBtn, &QPushButton::clicked, container, [container]() {
+            container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_left.png) no-repeat;}");
+            QSettings s;
+            s.setValue("display/screenClockMode", "digital");
+            s.sync();
+            qApp->setProperty("appScreenClockMode", QStringLiteral("digital"));
+        });
+        QObject::connect(rightBtn, &QPushButton::clicked, container, [container]() {
+            container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_right.png) no-repeat;}");
+            QSettings s;
+            s.setValue("display/screenClockMode", "analog");
+            s.sync();
+            qApp->setProperty("appScreenClockMode", QStringLiteral("analog"));
+        });
+
+        h->addWidget(container);
+        layout->addWidget(row);
+    }
     layout->addWidget(makeDivider());
 
     // 时钟制式行（单独实现以便连接 AppSignals::clockFormatChanged）

@@ -14,6 +14,8 @@
 #include <QTextCodec>
 #include <QTimer>
 #include <QDialog>
+#include <QSettings>
+#include <QTime>
 #include <fcntl.h>
 #include <unistd.h>
 #include <QSocketNotifier>
@@ -54,6 +56,147 @@ public:
 private:
     bool m_blanked = false;
     int  m_savedBrightness = 128;
+};
+
+class ScreenClockOverlay : public QWidget {
+public:
+    static ScreenClockOverlay *instance() {
+        static ScreenClockOverlay s;
+        return &s;
+    }
+
+    void toggle() {
+        if (isVisible()) {
+            hideClock();
+        } else {
+            showClock();
+        }
+    }
+
+    void showClock() {
+        if (ScreenBlanker::instance()->isBlanked()) {
+            ScreenBlanker::instance()->unblank();
+        }
+        updateMode();
+        if (!isVisible()) {
+            if (QScreen *sc = QGuiApplication::primaryScreen()) {
+                setGeometry(sc->geometry());
+            }
+            show();
+            raise();
+            activateWindow();
+            setFocus(Qt::ActiveWindowFocusReason);
+            m_updateTimer.start();
+            update();
+        }
+    }
+
+    void hideClock() {
+        if (isVisible()) {
+            hide();
+            m_updateTimer.stop();
+        }
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.fillRect(rect(), Qt::black);
+
+        const QTime current = QTime::currentTime();
+        if (m_digitalMode) {
+            QString text = qApp->property("appClock24h").toBool()
+                ? current.toString("HH:mm")
+                : current.toString("hh:mm");
+            QFont font = p.font();
+            font.setPixelSize(qMax(160, qMin(width(), height()) / 3));
+            font.setWeight(QFont::ExtraBold);
+            p.setFont(font);
+            p.setPen(QColor(0x60, 0x7E, 0x9D));
+            p.drawText(rect(), Qt::AlignCenter, text);
+            return;
+        }
+
+        const int squareSize = qMin(width(), height());
+        const QRect squareRect((width() - squareSize) / 2,
+                               (height() - squareSize) / 2,
+                               squareSize,
+                               squareSize);
+        const QRect dialRect = squareRect.adjusted(40, 40, -40, -40);
+        const QPixmap dialPixmap(":/images/pict_clock.png");
+        if (!dialPixmap.isNull()) {
+            p.drawPixmap(dialRect, dialPixmap.scaled(dialRect.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        }
+
+        const QPoint center = dialRect.center();
+        const int radius = qMin(dialRect.width(), dialRect.height()) / 2;
+        p.translate(center);
+
+        const qreal hourAngle = (current.hour() % 12 + current.minute() / 60.0) * 30.0;
+        const qreal minuteAngle = (current.minute() + current.second() / 60.0) * 6.0;
+        const qreal secondAngle = current.second() * 6.0;
+
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0x60, 0x7E, 0x9D));
+        p.save();
+        p.rotate(hourAngle);
+        p.drawRoundedRect(-8, -radius * 0.25, 16, radius * 0.25, 8, 8);
+        p.restore();
+
+        p.setBrush(QColor(0x80, 0xB0, 0xD8));
+        p.save();
+        p.rotate(minuteAngle);
+        p.drawRoundedRect(-6, -radius * 0.4, 12, radius * 0.4, 6, 6);
+        p.restore();
+
+        p.setBrush(QColor(0xD0, 0xE4, 0xFF));
+        p.save();
+        p.rotate(secondAngle);
+        p.drawRoundedRect(-2, -radius * 0.45, 4, radius * 0.45, 2, 2);
+        p.restore();
+
+        p.setBrush(QColor(0x60, 0x7E, 0x9D));
+        p.drawEllipse(QPoint(0, 0), 10, 10);
+    }
+
+    void keyPressEvent(QKeyEvent *event) override {
+        Q_UNUSED(event);
+        hideClock();
+    }
+
+    void mousePressEvent(QMouseEvent *event) override {
+        Q_UNUSED(event);
+        hideClock();
+    }
+
+    bool event(QEvent *event) override {
+        if (event->type() == QEvent::TouchBegin) {
+            hideClock();
+            return true;
+        }
+        return QWidget::event(event);
+    }
+
+private:
+    ScreenClockOverlay()
+        : QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
+        , m_updateTimer(this)
+        , m_digitalMode(true)
+    {
+        setFocusPolicy(Qt::StrongFocus);
+        setAttribute(Qt::WA_ShowWithoutActivating);
+        m_updateTimer.setInterval(1000);
+        connect(&m_updateTimer, &QTimer::timeout, this, [this]() { update(); });
+    }
+
+    void updateMode() {
+        const QString mode = qApp->property("appScreenClockMode").toString();
+        m_digitalMode = (mode != QLatin1String("analog"));
+    }
+
+    QTimer m_updateTimer;
+    bool m_digitalMode;
 };
 
 // ── 音量浮动指示条 ────────────────────────────────────────────────────────────
@@ -378,6 +521,14 @@ int main(int argc, char *argv[]) {
         app.setOverrideCursor(Qt::BlankCursor);  // 触控设备隐藏鼠标指针
     }
     app.setProperty("appClock24h", false);  // 默认 12 小时制（与原始行为一致）
+    {
+        QSettings settings;
+        QString screenClockMode = settings.value("display/screenClockMode", "digital").toString();
+        if (screenClockMode != QLatin1String("analog")) {
+            screenClockMode = QLatin1String("digital");
+        }
+        app.setProperty("appScreenClockMode", screenClockMode);
+    }
     app.setProperty("appSoundMode", QStringLiteral("立体声"));  // 默认声场模式
     T507SdkBridge::setSoundMode(QStringLiteral("立体声"));  // 应用默认声场到 TM2313
     app.setQuitOnLastWindowClosed(false);
@@ -406,12 +557,18 @@ int main(int argc, char *argv[]) {
                     case KEY_HOME:     qtKey = Qt::Key_HomePage; break;
                     case KEY_BACK:     qtKey = Qt::Key_Back;     break;
                     case KEY_SLEEP:
-                        qDebug() << "[InputNotifier] ev.code=142 KEY_SLEEP => shutdown";
-                        QProcess::startDetached(QStringLiteral("poweroff"), {});
+                        qDebug() << "[InputNotifier] ev.code=142 KEY_SLEEP => blank screen";
+                        ScreenClockOverlay::instance()->hideClock();
+                        ScreenBlanker::instance()->blank();
                         break;
                     case KEY_POWER:
-                        qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => toggle blank";
-                        ScreenBlanker::instance()->toggle();
+                        if (ScreenBlanker::instance()->isBlanked()) {
+                            qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => unblank screen";
+                            ScreenBlanker::instance()->unblank();
+                        } else {
+                            qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => toggle clock overlay";
+                            ScreenClockOverlay::instance()->toggle();
+                        }
                         break;
                     default: break;
                     }
