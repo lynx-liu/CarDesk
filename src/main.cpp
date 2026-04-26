@@ -138,26 +138,40 @@ protected:
         const qreal secondAngle = current.second() * 6.0;
 
         p.setPen(Qt::NoPen);
-        p.setBrush(QColor(0x60, 0x7E, 0x9D));
+        p.setBrush(Qt::white);
         p.save();
         p.rotate(hourAngle);
-        p.drawRoundedRect(-8, -radius * 0.25, 16, radius * 0.25, 8, 8);
+        p.drawRoundedRect(-8, -radius * 0.28, 16, radius * 0.28, 8, 8);
         p.restore();
 
-        p.setBrush(QColor(0x80, 0xB0, 0xD8));
+        const qreal minuteWidth = 6.0;
+        const qreal minuteLength = radius * 0.40;
         p.save();
         p.rotate(minuteAngle);
-        p.drawRoundedRect(-6, -radius * 0.4, 12, radius * 0.4, 6, 6);
+        {
+            QPainterPath path;
+            path.moveTo(-minuteWidth, 0);
+            path.lineTo(-minuteWidth, -minuteLength * 0.32);
+            path.lineTo(-minuteWidth * 0.35, -minuteLength * 0.76);
+            path.lineTo(0, -minuteLength);
+            path.lineTo(minuteWidth * 0.35, -minuteLength * 0.76);
+            path.lineTo(minuteWidth, -minuteLength * 0.32);
+            path.lineTo(minuteWidth, 0);
+            path.closeSubpath();
+            p.drawPath(path);
+        }
         p.restore();
 
-        p.setBrush(QColor(0xD0, 0xE4, 0xFF));
+        p.setPen(QPen(QColor(0xFF, 0x00, 0x00), 4, Qt::SolidLine, Qt::RoundCap));
+        p.setBrush(Qt::NoBrush);
         p.save();
         p.rotate(secondAngle);
-        p.drawRoundedRect(-2, -radius * 0.45, 4, radius * 0.45, 2, 2);
+        p.drawLine(QPointF(0, radius * 0.18), QPointF(0, -radius * 0.64));
         p.restore();
 
-        p.setBrush(QColor(0x60, 0x7E, 0x9D));
-        p.drawEllipse(QPoint(0, 0), 10, 10);
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0xFF, 0x00, 0x00));
+        p.drawEllipse(QPoint(0, 0), 5, 5);
     }
 
     void keyPressEvent(QKeyEvent *event) override {
