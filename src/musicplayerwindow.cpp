@@ -879,7 +879,6 @@ void MusicPlayerWindow::playMusic(int index)
         m_sdkPlaying = true;
         setPlayButtonState(true);
         if (m_sdkTimer && !m_sdkTimer->isActive()) m_sdkTimer->start();
-        loadMetadataForPath(musicPath);
         updateMetadata();
         return;
     }
@@ -1079,6 +1078,7 @@ void MusicPlayerWindow::onBtTabClicked()
 
 void MusicPlayerWindow::onBluetoothDeviceConnected(const QString &name)
 {
+    Q_UNUSED(name)
     if (m_isUsbMode) return;
     if (m_nowPlayingLabel) {
         m_nowPlayingLabel->setText(QStringLiteral("蓝牙音乐"));
@@ -1298,13 +1298,6 @@ void MusicPlayerWindow::updateMetadata()
             m_albumImage->setPixmap(QPixmap(":/images/music_show.png").scaled(210, 210, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         }
     }
-}
-
-void MusicPlayerWindow::loadMetadataForPath(const QString &path)
-{
-    if (!m_mediaPlayer || path.isEmpty()) return;
-    m_mediaPlayer->setMedia(QMediaContent(QUrl::fromLocalFile(path)));
-    QTimer::singleShot(250, this, [this]() { updateMetadata(); });
 }
 
 void MusicPlayerWindow::onMediaMetaDataChanged()

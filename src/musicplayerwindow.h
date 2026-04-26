@@ -157,7 +157,6 @@ private:
     void releaseAudioPlayer();
     void updateNowPlaying();
     void updateMetadata();
-    void loadMetadataForPath(const QString &path);
     void updatePlayModeUI();
     void updateLoopButtonIcon();
     void updateProgressBar(qint64 posMs, qint64 durMs);
@@ -178,6 +177,8 @@ private:
     QLabel      *m_albumImage      = nullptr;
     QLabel      *m_singerLabel     = nullptr;
     QLabel      *m_albumLabel      = nullptr;
+    QString     m_currentBrowsePath;
+    QMediaPlayer *m_mediaPlayer   = nullptr;
     QPushButton *m_homeButton     = nullptr;
     QPushButton *m_usbTab         = nullptr;
     QPushButton *m_btTab          = nullptr;
@@ -222,13 +223,9 @@ private:
     QStringList m_favoriteFiles;                // 由播放页添加到收藏的音频文件
     bool        m_isUsbMode          = true;
     PlayMode    m_playMode           = PlayMode::RepeatAll;
-    QString     m_currentBrowsePath;             // 列表页当前浏览路径
     const QStringList m_audioExtensions = {
         "mp3","flac","wav","aac","ogg","wma","opus","m4a","ape","ac3"
     };
-
-    // ── PC 端 ──
-    QMediaPlayer *m_mediaPlayer = nullptr;
 
 #ifdef CAR_DESK_USE_T507_SDK
     XPlayer   *m_sdkPlayer     = nullptr;
