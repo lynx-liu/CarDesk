@@ -315,8 +315,9 @@ void MainWindow::ensurePhoneWindow() {
 
 void MainWindow::onPhoneClicked() {
     qDebug() << "Phone button clicked";
-    m_restoreWindowOnPhoneHangup = nullptr;
+    m_restoreStack.clear();
     ensurePhoneWindow();
+    this->hide();
     m_phoneWindow->show();
     m_phoneWindow->raise();
     m_phoneWindow->activateWindow();
@@ -324,14 +325,15 @@ void MainWindow::onPhoneClicked() {
 
 void MainWindow::onBluetoothCallStatusChanged(int status) {
     if (status == 1) {
-        if (m_phoneWindow && m_phoneWindow->isVisible()) {
-            // 挂断后如果蓝牙界面仍在前台，保留当前界面。
-            return;
+        // 通话结束
+        if (!m_restoreStack.isEmpty()) {
+            // 如果我们之前为通话推入了恢复目标，隐藏 PhoneWindow 并恢复栈顶
+            if (m_phoneWindow && m_phoneWindow->isVisible()) {
+                m_phoneWindow->hide();
+            }
+            restorePreviousWindow();
         }
-        if (m_phoneWindow && m_phoneWindow->isVisible()) {
-            m_phoneWindow->hide();
-        }
-        restorePreviousWindow();
+        // 如果栈为空，则表示 PhoneWindow 本来就在前台，保留 PhoneWindow，PhoneWindow 自身会恢复到之前的 tab
         return;
     }
 
@@ -343,11 +345,12 @@ void MainWindow::onBluetoothCallStatusChanged(int status) {
     if (current && current == m_drivingImageWindow) {
         return;
     }
+    // 记录当前界面到恢复栈（仅当当前不是 PhoneWindow 时）
     if (current && current != m_phoneWindow) {
-        m_restoreWindowOnPhoneHangup = current;
+        m_restoreStack.append({QPointer<QWidget>(current)});
         current->hide();
     } else if (!current && this->isVisible()) {
-        m_restoreWindowOnPhoneHangup = this;
+        m_restoreStack.append({QPointer<QWidget>(this)});
         this->hide();
     }
     ensurePhoneWindow();
@@ -488,10 +491,10 @@ QWidget *MainWindow::findCurrentVisibleNonPhoneWindow() const {
 }
 
 void MainWindow::restorePreviousWindow() {
-    qDebug() << "restorePreviousWindow: m_restoreWindowOnPhoneHangup=" << m_restoreWindowOnPhoneHangup;
-    if (m_restoreWindowOnPhoneHangup) {
-        QWidget *restore = m_restoreWindowOnPhoneHangup;
-        m_restoreWindowOnPhoneHangup = nullptr;
+    qDebug() << "restorePreviousWindow: stack size=" << m_restoreStack.size();
+    if (!m_restoreStack.isEmpty()) {
+        RestoreState st = m_restoreStack.takeLast();
+        QWidget *restore = st.widget;
         if (restore && !restore->isVisible()) {
             qDebug() << "restorePreviousWindow: showing restore target" << restore->metaObject()->className();
             restore->show();

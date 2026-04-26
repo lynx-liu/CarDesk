@@ -9,6 +9,8 @@
 #include <QCloseEvent>
 #include <QContextMenuEvent>
 #include <QResizeEvent>
+#include <QPointer>
+#include <QVector>
 
 class BluetoothManager;
 class MediaManager;
@@ -79,7 +81,11 @@ private:
     DrivingImageWindow *m_drivingImageWindow;
     ImageViewingWindow *m_imageViewingWindow;
     USBManager *m_usbManager;
-    QWidget *m_restoreWindowOnPhoneHangup;
+    struct RestoreState {
+        QPointer<QWidget> widget;
+    };
+
+    QVector<RestoreState> m_restoreStack;
 
     // 样式表
     QString m_styleSheet;
