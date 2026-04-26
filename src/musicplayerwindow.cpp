@@ -22,6 +22,10 @@
 #include <QTime>
 #include <QRandomGenerator>
 #include <QMediaMetaData>
+#include <QTimer>
+#include <QUrl>
+#include <QFile>
+#include <QImage>
 #include <QShowEvent>
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -76,6 +80,110 @@ static bool ensureSdkMusicResourcesCreated()
 }
 
 #endif // CAR_DESK_USE_T507_SDK
+
+static quint32 readBigEndianUInt(const QByteArray &data)
+{
+    if (data.size() < 4) return 0;
+    const auto b0 = static_cast<quint8>(data[0]);
+    const auto b1 = static_cast<quint8>(data[1]);
+    const auto b2 = static_cast<quint8>(data[2]);
+    const auto b3 = static_cast<quint8>(data[3]);
+    return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+}
+
+static quint32 readSyncSafeUInt(const QByteArray &data)
+{
+    if (data.size() < 4) return 0;
+    const auto b0 = static_cast<quint8>(data[0]);
+    const auto b1 = static_cast<quint8>(data[1]);
+    const auto b2 = static_cast<quint8>(data[2]);
+    const auto b3 = static_cast<quint8>(data[3]);
+    return (b0 << 21) | (b1 << 14) | (b2 << 7) | b3;
+}
+
+static QString decodeId3TextFrame(const QByteArray &body)
+{
+    if (body.isEmpty()) return QString();
+    const quint8 encoding = static_cast<quint8>(body.at(0));
+    const QByteArray payload = body.mid(1);
+    switch (encoding) {
+    case 0:
+        return QString::fromLatin1(payload).trimmed();
+    case 1:
+    case 2:
+        if (payload.size() >= 2) {
+            const ushort *data = reinterpret_cast<const ushort *>(payload.constData());
+            return QString::fromUtf16(data, payload.size() / 2).trimmed();
+        }
+        return QString::fromUtf8(payload).trimmed();
+    case 3:
+        return QString::fromUtf8(payload).trimmed();
+    default:
+        return QString::fromUtf8(payload).trimmed();
+    }
+}
+
+static QPixmap decodeId3PictureFrame(const QByteArray &body)
+{
+    if (body.size() < 4) return QPixmap();
+    int pos = 1;
+    int mimeEnd = body.indexOf('\0', pos);
+    if (mimeEnd < 0) return QPixmap();
+    pos = mimeEnd + 1;
+    if (pos >= body.size()) return QPixmap();
+    pos += 1; // picture type
+    int descEnd = body.indexOf('\0', pos);
+    if (descEnd < 0) return QPixmap();
+    QByteArray imageData = body.mid(descEnd + 1);
+    QImage image;
+    if (image.loadFromData(imageData)) {
+        return QPixmap::fromImage(image);
+    }
+    return QPixmap();
+}
+
+static void extractId3Metadata(const QString &path, QString &title, QString &artist, QString &album, QPixmap &cover)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) return;
+
+    QByteArray header = file.read(10);
+    if (header.size() >= 10 && header.left(3) == "ID3") {
+        int major = static_cast<quint8>(header.at(3));
+        int size = readSyncSafeUInt(header.mid(6, 4));
+        QByteArray frames = file.read(size);
+        int pos = 0;
+        while (pos + 10 <= frames.size()) {
+            QByteArray frameId = frames.mid(pos, 4);
+            if (frameId.trimmed().isEmpty()) break;
+            quint32 frameSize = (major >= 4)
+                    ? readSyncSafeUInt(frames.mid(pos + 4, 4))
+                    : readBigEndianUInt(frames.mid(pos + 4, 4));
+            if (frameSize <= 0 || pos + 10 + static_cast<int>(frameSize) > frames.size()) break;
+            QByteArray frameBody = frames.mid(pos + 10, frameSize);
+            if (frameId == "TIT2" && title.isEmpty()) {
+                title = decodeId3TextFrame(frameBody);
+            } else if (frameId == "TPE1" && artist.isEmpty()) {
+                artist = decodeId3TextFrame(frameBody);
+            } else if (frameId == "TALB" && album.isEmpty()) {
+                album = decodeId3TextFrame(frameBody);
+            } else if (frameId == "APIC" && cover.isNull()) {
+                cover = decodeId3PictureFrame(frameBody);
+            }
+            pos += 10 + frameSize;
+        }
+    }
+
+    if ((title.isEmpty() || artist.isEmpty() || album.isEmpty()) && file.size() >= 128) {
+        file.seek(file.size() - 128);
+        QByteArray tag = file.read(128);
+        if (tag.left(3) == "TAG") {
+            if (title.isEmpty()) title = QString::fromLatin1(tag.mid(3, 30)).trimmed();
+            if (artist.isEmpty()) artist = QString::fromLatin1(tag.mid(33, 30)).trimmed();
+            if (album.isEmpty()) album = QString::fromLatin1(tag.mid(63, 30)).trimmed();
+        }
+    }
+}
 
 class MusicPlayerWindow;
 
@@ -771,6 +879,8 @@ void MusicPlayerWindow::playMusic(int index)
         m_sdkPlaying = true;
         setPlayButtonState(true);
         if (m_sdkTimer && !m_sdkTimer->isActive()) m_sdkTimer->start();
+        loadMetadataForPath(musicPath);
+        updateMetadata();
         return;
     }
 #endif
@@ -1110,10 +1220,51 @@ void MusicPlayerWindow::updateMetadata()
     if (!m_mediaPlayer) return;
 
     QString title = m_mediaPlayer->metaData(QMediaMetaData::Title).toString().trimmed();
+    if (title.isEmpty()) {
+        title = m_mediaPlayer->metaData(QMediaMetaData::SubTitle).toString().trimmed();
+    }
+
     QString artist = m_mediaPlayer->metaData(QMediaMetaData::AlbumArtist).toString().trimmed();
-    if (artist.isEmpty())
+    if (artist.isEmpty()) {
+        QVariant contributing = m_mediaPlayer->metaData(QMediaMetaData::ContributingArtist);
+        if (contributing.canConvert<QStringList>()) {
+            artist = contributing.value<QStringList>().join(" / ").trimmed();
+        }
+        if (artist.isEmpty()) {
+            artist = contributing.toString().trimmed();
+        }
+    }
+    if (artist.isEmpty()) {
         artist = m_mediaPlayer->metaData(QMediaMetaData::Author).toString().trimmed();
+    }
+    if (artist.isEmpty()) {
+        artist = m_mediaPlayer->metaData(QMediaMetaData::Composer).toString().trimmed();
+    }
+    if (artist.isEmpty()) {
+        artist = m_mediaPlayer->metaData(QMediaMetaData::Conductor).toString().trimmed();
+    }
+
     QString album = m_mediaPlayer->metaData(QMediaMetaData::AlbumTitle).toString().trimmed();
+    if (album.isEmpty()) {
+        album = m_mediaPlayer->metaData(QMediaMetaData::Comment).toString().trimmed();
+    }
+    if (album.isEmpty()) {
+        album = m_mediaPlayer->metaData(QMediaMetaData::Publisher).toString().trimmed();
+    }
+    if (album.isEmpty()) {
+        album = m_mediaPlayer->metaData(QMediaMetaData::Genre).toString().trimmed();
+    }
+
+    QString id3Title;
+    QString id3Artist;
+    QString id3Album;
+    QPixmap id3Cover;
+    if ((title.isEmpty() || artist.isEmpty() || album.isEmpty()) && m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count()) {
+        extractId3Metadata(m_musicFiles[m_currentIndex], id3Title, id3Artist, id3Album, id3Cover);
+        if (title.isEmpty()) title = id3Title;
+        if (artist.isEmpty()) artist = id3Artist;
+        if (album.isEmpty()) album = id3Album;
+    }
 
     if (title.isEmpty() && m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count()) {
         title = QFileInfo(m_musicFiles[m_currentIndex]).baseName();
@@ -1125,6 +1276,35 @@ void MusicPlayerWindow::updateMetadata()
     if (m_nowPlayingLabel) m_nowPlayingLabel->setText(title);
     if (m_singerLabel) m_singerLabel->setText(artist);
     if (m_albumLabel) m_albumLabel->setText(album);
+
+    if (m_albumImage) {
+        QPixmap coverPixmap;
+        QVariant coverVar = m_mediaPlayer->metaData(QMediaMetaData::CoverArtImage);
+        if (coverVar.canConvert<QImage>()) {
+            coverPixmap = QPixmap::fromImage(coverVar.value<QImage>());
+        } else if (coverVar.canConvert<QPixmap>()) {
+            coverPixmap = coverVar.value<QPixmap>();
+        }
+
+        if (!coverPixmap.isNull()) {
+            m_albumImage->setPixmap(coverPixmap.scaled(210, 210, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        } else if (!id3Cover.isNull()) {
+            m_albumImage->setPixmap(id3Cover.scaled(210, 210, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        } else if (!m_isUsbMode) {
+            QPixmap btPixmap(":/images/music_bluetooth_show.png");
+            if (btPixmap.isNull()) btPixmap.load(":/images/music_show.png");
+            m_albumImage->setPixmap(btPixmap.scaled(210, 210, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        } else {
+            m_albumImage->setPixmap(QPixmap(":/images/music_show.png").scaled(210, 210, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        }
+    }
+}
+
+void MusicPlayerWindow::loadMetadataForPath(const QString &path)
+{
+    if (!m_mediaPlayer || path.isEmpty()) return;
+    m_mediaPlayer->setMedia(QMediaContent(QUrl::fromLocalFile(path)));
+    QTimer::singleShot(250, this, [this]() { updateMetadata(); });
 }
 
 void MusicPlayerWindow::onMediaMetaDataChanged()

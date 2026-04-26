@@ -157,6 +157,7 @@ private:
     void releaseAudioPlayer();
     void updateNowPlaying();
     void updateMetadata();
+    void loadMetadataForPath(const QString &path);
     void updatePlayModeUI();
     void updateLoopButtonIcon();
     void updateProgressBar(qint64 posMs, qint64 durMs);
