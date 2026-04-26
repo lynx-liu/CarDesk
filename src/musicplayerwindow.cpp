@@ -1483,6 +1483,8 @@ void MusicPlayerWindow::onBluetoothA2dpTrackInfoChanged(const QString &title,
                                                         int index,
                                                         int total)
 {
+    // 如果当前处于 USB 模式，不要用蓝牙元数据覆盖 USB 播放界面信息
+    if (m_isUsbMode) return;
     if (m_nowPlayingLabel) {
         m_nowPlayingLabel->setText(title.isEmpty() ? QStringLiteral("蓝牙音乐") : title);
     }
@@ -1495,11 +1497,13 @@ void MusicPlayerWindow::onBluetoothA2dpTrackInfoChanged(const QString &title,
 
 void MusicPlayerWindow::onBluetoothA2dpProgressChanged(qint64 posMs, qint64 durMs)
 {
+    if (m_isUsbMode) return;
     updateProgressBar(posMs, durMs);
 }
 
 void MusicPlayerWindow::onBluetoothA2dpPlaybackStateChanged(bool playing)
 {
+    if (m_isUsbMode) return;
     m_btPlaying = playing;
     setPlayButtonState(playing);
 }
