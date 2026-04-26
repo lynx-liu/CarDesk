@@ -104,6 +104,7 @@ butt_music_circle_up.png  butt_music_circle_down.png  982 466 60 60
 
 butt_music_random_up.png  butt_music_circle_down.png  982 466 60 60
 
+butt_music_single_circle_up.png  butt_music_single_circle_down.png  982 466 60 60
 
 播放页音乐列表：120 562 1040 120
 
@@ -128,7 +129,7 @@ butt_tab_right_on.png  butt_tab_right_down.png   640 100  160 66
 
 我的收藏：168 190  944 356
 
-music_play_musiclist_show.png music_musiclist_file_up.png  music_musiclist_file_down.png  music_musiclist_up.png   music_musiclist_down.png    
+music_play_musiclist_show.png music_musiclist_file_up.png  music_musiclist_file_down.png  butt_music_musiclist_up.png   butt_music_musiclist_down.png    
 
 x:168 364  560 756 952  y:190 386   宽:160    高:160
 
@@ -960,6 +961,45 @@ butt_setting_choose_left.png butt_setting_choose_right.png  960 426 240 44
 pict_setting_line.png  360 496  840 2
 
 
+时间设置:
+
+文字：x:360 y:522  字号:32 行高:48
+
+butt_setting_time_up.png  butt_setting_time_down.png 1080 524 120 44
+
+文字： x:1110  y:534 字号:24  行高:24
+
+pict_setting_line.png  360 594  840 2
+
+
+
+时间设置页面:inside_background.png
+
+pict_setting_time_bg.png 180 122 920 410
+
+小时文字:x:332 y:150  字号:36 行高:54
+
+分钟文字:x:876 y:150  字号:36 行高:54
+
+butt_setting_time_data_up.png butt_setting_time_data_down.png  x:236 380 780 924   y:228
+
+时间数值: y:240  字号:64 行高:96
+
+:文字:x:630 y:240  字号:64 行高:96
+
+butt_setting_time_data_plus_up.png butt_setting_time_data_plus_down.png butt_setting_time_data_plus_disabled.png 491 404  100 100 
+
+butt_setting_time_data_minus_up.png butt_setting_time_data_minus_down.png butt_setting_time_data_minus_disabled.png 689 404  100 100 
+
+butt_popalert_sure_up.png  butt_popalert_sure_down.png  444 572  168 64
+
+按钮文字：x:492  y:777  字号:36  行高:54 选中颜色：#00FAFF
+
+butt_popalert_reset_up.png  butt_popalert_reset_down.png  668 572  168 64
+
+按钮文字：x:716  y:577  字号:36  行高:54 选中颜色：#00FAFF
+
+
 声音设置:
 
 音量：
@@ -1229,7 +1269,7 @@ butt_popalert_sure_up.png  butt_popalert_sure_down.png  584 404  168 64
 
 按钮文字：x:632  y:409  字号:36  行高:54 选中颜色：#00FAFF
 
-butt_popalert_reset_up.png  butt_popalert_sure_down.png  808 404  168 64
+butt_popalert_reset_up.png  butt_popalert_reset_down.png  808 404  168 64
 
 按钮文字：x:856  y:409  字号:36  行高:54 选中颜色：#00FAFF
 
@@ -1432,3 +1472,31 @@ butt_pdf_serch_result_tips.png 16 8
 开机页面*：power_on_bg.png
 
 
+
+=================================================================================
+
+关屏时钟界面
+
+模拟:
+
+pict_clock_bg.png  325 45 630 630
+
+表盘中心点坐标: 640 360
+
+
+12点时分秒:
+
+
+pict_clock_h.png 626 236 28 138
+
+
+pict_clock_m.png 626 189 28 185
+
+
+pict_clock_s.png 623 139 32 282
+
+
+
+数字:
+
+时间:x:152  y:98  字号:350  行高:72  颜色:#607E9D 加粗
