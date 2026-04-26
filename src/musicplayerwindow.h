@@ -34,14 +34,11 @@ public:
         p->save();
         QRect r(option.rect.x() + 12, option.rect.y(), 120, 120);
 
-        static QPixmap bg(":/images/music_play_musiclist_show.png");
-        if (!bg.isNull()) p->drawPixmap(r, bg);
-
-        bool selected = option.state & QStyle::State_Selected;
-        QPen pen(selected ? QColor("#00FAFF") : QColor("#0068FF"), selected ? 2 : 1);
-        p->setPen(pen);
-        p->setBrush(Qt::NoBrush);
-        p->drawRect(r.adjusted(0, 0, -1, -1));
+        static QPixmap fileUp(":/images/music_play_musiclist_style_up.png");
+        static QPixmap fileDown(":/images/music_play_musiclist_style_down.png");
+        bool hovered = option.state & (QStyle::State_MouseOver | QStyle::State_Selected);
+        const QPixmap &px = hovered ? fileDown : fileUp;
+        if (!px.isNull()) p->drawPixmap(r, px);
 
         // 底部半透明文字区（margin-top:88px, h:30px）
         QString text = index.data(Qt::DisplayRole).toString();
