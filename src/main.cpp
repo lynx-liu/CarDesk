@@ -341,20 +341,22 @@ protected:
             // 这里只消耗事件、不亮屏，避免两条路径叠加导致闪屏后又关屏。
             // 双重判断：scanCode（raw evdev code）和 Qt key value（evdevkeyboard 可能
             // 将 KEY_POWER→Key_PowerOff，其 nativeScanCode 不保证等于 116）。
+            QKeyEvent *ke = static_cast<QKeyEvent *>(event);
+            const unsigned int sc = ke->nativeScanCode();
+            const int k = ke->key();
+            const bool isPowerKey = (sc == 116u || sc == 142u
+                || k == Qt::Key_PowerOff || k == Qt::Key_Sleep
+                || k == Qt::Key_WakeUp   || k == Qt::Key_PowerDown);
             if (ScreenBlanker::instance()->isBlanked()) {
-                QKeyEvent *ke = static_cast<QKeyEvent *>(event);
-                const unsigned int sc = ke->nativeScanCode();
-                const int k = ke->key();
-                const bool isPowerKey = (sc == 116u || sc == 142u
-                    || k == Qt::Key_PowerOff || k == Qt::Key_Sleep
-                    || k == Qt::Key_WakeUp   || k == Qt::Key_PowerDown);
                 if (isPowerKey) {
                     return true;  // 消耗事件，亮屏由 InputNotifier::toggle() 完成
                 }
                 ScreenBlanker::instance()->unblank();
                 return true;
             }
-            QKeyEvent *ke = static_cast<QKeyEvent *>(event);
+            if (isPowerKey) {
+                return true;  // 消耗电源键 Qt 事件，避免 overlay/当前窗口收到重复按键
+            }
             qDebug() << "[GlobalKey] type=KeyPress"
                      << "key=" << ke->key()
                      << "nativeScanCode=" << ke->nativeScanCode()
