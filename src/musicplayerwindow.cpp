@@ -26,6 +26,7 @@
 #include <QUrl>
 #include <QFile>
 #include <QImage>
+#include <QTextCodec>
 #include <QShowEvent>
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -101,25 +102,163 @@ static quint32 readSyncSafeUInt(const QByteArray &data)
     return (b0 << 21) | (b1 << 14) | (b2 << 7) | b3;
 }
 
+static QByteArray desynchronize(const QByteArray &data)
+{
+    QByteArray result;
+    result.reserve(data.size());
+    for (int i = 0; i < data.size(); ++i) {
+        result.append(data.at(i));
+        if (static_cast<quint8>(data.at(i)) == 0xFF && i + 1 < data.size() && static_cast<quint8>(data.at(i + 1)) == 0x00) {
+            ++i;
+        }
+    }
+    return result;
+}
+
+static bool containsChinese(const QString &text)
+{
+    for (QChar c : text) {
+        ushort u = c.unicode();
+        if ((u >= 0x4E00 && u <= 0x9FFF) ||
+            (u >= 0x3400 && u <= 0x4DBF) ||
+            (u >= 0xF900 && u <= 0xFAFF)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool payloadHasHighBytes(const QByteArray &payload)
+{
+    for (auto b : payload) {
+        if (static_cast<quint8>(b) >= 0x80) return true;
+    }
+    return false;
+}
+
+static QString sanitizeMetadataString(QString text)
+{
+    QString result;
+    result.reserve(text.size());
+    for (QChar c : text) {
+        ushort u = c.unicode();
+        if (u == 0) continue;
+        if (u == QChar::ReplacementCharacter) continue;
+        if (u < 0x20 && c != '\n' && c != '\r' && c != '\t') continue;
+        result.append(c);
+    }
+    return result.trimmed();
+}
+
+static QString tryDecodeAsGbK(const QByteArray &payload)
+{
+    static const QList<QByteArray> codecs = {
+        "GB18030", "GBK", "CP936", "GB2312"
+    };
+    for (const QByteArray &name : codecs) {
+        if (auto codec = QTextCodec::codecForName(name)) {
+            QString text = codec->toUnicode(payload).trimmed();
+            if (!text.isEmpty()) {
+                return text;
+            }
+        }
+    }
+    return QString();
+}
+
+static bool looksLikeGarbledText(const QString &text)
+{
+    if (text.isEmpty()) return true;
+    if (text.contains(QChar::ReplacementCharacter)) return true;
+    int badCount = 0;
+    int len = 0;
+    for (QChar c : text) {
+        ushort u = c.unicode();
+        if (u == '\n' || u == '\r' || u == '\t') continue;
+        if (u < 0x20) {
+            badCount++;
+        } else if (u >= 0x7F && u <= 0x9F) {
+            badCount++;
+        } else if (u >= 0xF8F0) {
+            badCount++;
+        }
+        len++;
+    }
+    return len > 0 && badCount * 3 > len;
+}
+
+static QString decodeId3Utf16(const QByteArray &payload, bool bigEndian)
+{
+    QVector<ushort> u16;
+    u16.reserve(payload.size() / 2);
+    for (int i = 0; i + 1 < payload.size(); i += 2) {
+        quint8 b0 = static_cast<quint8>(payload.at(i));
+        quint8 b1 = static_cast<quint8>(payload.at(i + 1));
+        ushort code = bigEndian ? static_cast<ushort>((b0 << 8) | b1)
+                                : static_cast<ushort>((b1 << 8) | b0);
+        u16.append(code);
+    }
+    return QString::fromUtf16(u16.constData(), u16.size()).trimmed();
+}
+
 static QString decodeId3TextFrame(const QByteArray &body)
 {
     if (body.isEmpty()) return QString();
     const quint8 encoding = static_cast<quint8>(body.at(0));
-    const QByteArray payload = body.mid(1);
-    switch (encoding) {
-    case 0:
-        return QString::fromLatin1(payload).trimmed();
-    case 1:
-    case 2:
-        if (payload.size() >= 2) {
-            const ushort *data = reinterpret_cast<const ushort *>(payload.constData());
-            return QString::fromUtf16(data, payload.size() / 2).trimmed();
+    QByteArray payload = body.mid(1);
+
+    if (!payload.isEmpty()) {
+        if (encoding == 0 || encoding == 3) {
+            int end = payload.indexOf('\0');
+            if (end >= 0) payload.truncate(end);
+        } else {
+            int end = -1;
+            for (int i = 0; i + 1 < payload.size(); i += 2) {
+                if (payload.at(i) == '\0' && payload.at(i + 1) == '\0') {
+                    end = i;
+                    break;
+                }
+            }
+            if (end >= 0) payload.truncate(end);
         }
-        return QString::fromUtf8(payload).trimmed();
-    case 3:
-        return QString::fromUtf8(payload).trimmed();
+    }
+
+    switch (encoding) {
+    case 0: {
+        if (payloadHasHighBytes(payload)) {
+            QString gbk = tryDecodeAsGbK(payload);
+            if (!gbk.isEmpty()) return sanitizeMetadataString(gbk);
+        }
+        QString text = sanitizeMetadataString(QString::fromLatin1(payload));
+        if (text.isEmpty() || (payloadHasHighBytes(payload) && !containsChinese(text))) {
+            QString gbk = tryDecodeAsGbK(payload);
+            if (!gbk.isEmpty()) return sanitizeMetadataString(gbk);
+        }
+        return text;
+    }
+    case 1: {
+        if (payload.startsWith("\xFF\xFE")) {
+            return decodeId3Utf16(payload.mid(2), false);
+        }
+        if (payload.startsWith("\xFE\xFF")) {
+            return decodeId3Utf16(payload.mid(2), true);
+        }
+        QString text = decodeId3Utf16(payload, false);
+        if (!text.isEmpty()) return text;
+        return decodeId3Utf16(payload, true);
+    }
+    case 2:
+        return sanitizeMetadataString(decodeId3Utf16(payload, true));
+    case 3: {
+        QString text = sanitizeMetadataString(QString::fromUtf8(payload));
+        if (payloadHasHighBytes(payload) && !containsChinese(text)) {
+            QString gbk = tryDecodeAsGbK(payload);
+            if (!gbk.isEmpty()) return sanitizeMetadataString(gbk);
+        }
+        return text;
+    }
     default:
-        return QString::fromUtf8(payload).trimmed();
+        return sanitizeMetadataString(QString::fromUtf8(payload));
     }
 }
 
@@ -150,8 +289,20 @@ static void extractId3Metadata(const QString &path, QString &title, QString &art
     QByteArray header = file.read(10);
     if (header.size() >= 10 && header.left(3) == "ID3") {
         int major = static_cast<quint8>(header.at(3));
+        quint8 flags = static_cast<quint8>(header.at(5));
         int size = readSyncSafeUInt(header.mid(6, 4));
         QByteArray frames = file.read(size);
+        if (flags & 0x40) {
+            int extSize = (major >= 4)
+                    ? readSyncSafeUInt(frames.left(4))
+                    : readBigEndianUInt(frames.left(4));
+            if (extSize > 0 && frames.size() >= extSize + 4) {
+                frames = frames.mid(extSize + 4);
+            }
+        }
+        if (flags & 0x80) {
+            frames = desynchronize(frames);
+        }
         int pos = 0;
         while (pos + 10 <= frames.size()) {
             QByteArray frameId = frames.mid(pos, 4);
@@ -178,9 +329,30 @@ static void extractId3Metadata(const QString &path, QString &title, QString &art
         file.seek(file.size() - 128);
         QByteArray tag = file.read(128);
         if (tag.left(3) == "TAG") {
-            if (title.isEmpty()) title = QString::fromLatin1(tag.mid(3, 30)).trimmed();
-            if (artist.isEmpty()) artist = QString::fromLatin1(tag.mid(33, 30)).trimmed();
-            if (album.isEmpty()) album = QString::fromLatin1(tag.mid(63, 30)).trimmed();
+            QByteArray tit = tag.mid(3, 30);
+            QByteArray art = tag.mid(33, 30);
+            QByteArray alb = tag.mid(63, 30);
+            if (title.isEmpty()) {
+                title = sanitizeMetadataString(QString::fromLatin1(tit));
+                if (title.isEmpty() || (!containsChinese(title) && payloadHasHighBytes(tit))) {
+                    QString gbk = tryDecodeAsGbK(tit);
+                    if (!gbk.isEmpty()) title = sanitizeMetadataString(gbk);
+                }
+            }
+            if (artist.isEmpty()) {
+                artist = sanitizeMetadataString(QString::fromLatin1(art));
+                if (artist.isEmpty() || (!containsChinese(artist) && payloadHasHighBytes(art))) {
+                    QString gbk = tryDecodeAsGbK(art);
+                    if (!gbk.isEmpty()) artist = sanitizeMetadataString(gbk);
+                }
+            }
+            if (album.isEmpty()) {
+                album = sanitizeMetadataString(QString::fromLatin1(alb));
+                if (album.isEmpty() || (!containsChinese(album) && payloadHasHighBytes(alb))) {
+                    QString gbk = tryDecodeAsGbK(alb);
+                    if (!gbk.isEmpty()) album = sanitizeMetadataString(gbk);
+                }
+            }
         }
     }
 }
@@ -1259,12 +1431,16 @@ void MusicPlayerWindow::updateMetadata()
     QString id3Artist;
     QString id3Album;
     QPixmap id3Cover;
-    if ((title.isEmpty() || artist.isEmpty() || album.isEmpty()) && m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count()) {
+    if (m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count()) {
         extractId3Metadata(m_musicFiles[m_currentIndex], id3Title, id3Artist, id3Album, id3Cover);
-        if (title.isEmpty()) title = id3Title;
-        if (artist.isEmpty()) artist = id3Artist;
-        if (album.isEmpty()) album = id3Album;
+        if (title.isEmpty() || looksLikeGarbledText(title)) title = id3Title;
+        if (artist.isEmpty() || looksLikeGarbledText(artist)) artist = id3Artist;
+        if (album.isEmpty() || looksLikeGarbledText(album)) album = id3Album;
     }
+
+    title = sanitizeMetadataString(title);
+    artist = sanitizeMetadataString(artist);
+    album = sanitizeMetadataString(album);
 
     if (title.isEmpty() && m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count()) {
         title = QFileInfo(m_musicFiles[m_currentIndex]).baseName();
