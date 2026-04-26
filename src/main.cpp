@@ -124,7 +124,7 @@ protected:
                                squareSize,
                                squareSize);
         const QRect dialRect = squareRect.adjusted(40, 40, -40, -40);
-        const QPixmap dialPixmap(":/images/pict_clock.png");
+        const QPixmap dialPixmap(":/images/pict_clock_bg.png");
         if (!dialPixmap.isNull()) {
             p.drawPixmap(dialRect, dialPixmap.scaled(dialRect.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
         }

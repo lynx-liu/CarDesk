@@ -32,7 +32,7 @@
         <file alias="inside_background.png">ui/images/inside_background.png</file>
         <file alias="music_show.png">ui/images/music_show.png</file>
         <file alias="music_bluetooth_show.png">ui/images/music_buetooth_show.png</file>
-        <file alias="pict_clock.png">ui/images/pict_clock.png</file>
+        <file alias="pict_clock_bg.png">ui/images/pict_clock_bg.png</file>
         <file alias="prog_video.png">ui/images/prog_video.png</file>
         <file alias="prog_video_back.png">ui/images/prog_video_back.png</file>
         <file alias="prog_video_fore.png">ui/images/prog_video_fore.png</file>
