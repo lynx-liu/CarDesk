@@ -573,7 +573,8 @@ void PhoneWindow::onDial() {
         const QString number = m_numberEdit->text().trimmed();
         if (!number.isEmpty()) {
             if (m_callNumber) {
-                m_callNumber->setText(number);
+                const QString name = findContactNameForNumber(number);
+                m_callNumber->setText(!name.isEmpty() ? name : number);
             }
             m_bluetoothManager->dialNumber(number);
         }
@@ -689,7 +690,8 @@ void PhoneWindow::onBluetoothCallNumberUpdated(const QString &number, const QStr
         return;
     }
 
-    m_callNumber->setText(trimmed);
+    const QString name = findContactNameForNumber(trimmed);
+    m_callNumber->setText(!name.isEmpty() ? name : trimmed);
 }
 
 void PhoneWindow::onBluetoothPhonebookEntryReceived(const QString &name, const QString &number) {
@@ -830,6 +832,29 @@ int PhoneWindow::findContactEntryIndex(const QString &number) const {
         }
     }
     return -1;
+}
+
+QString PhoneWindow::findContactNameForNumber(const QString &number) const {
+    const QString raw = number.trimmed();
+    if (raw.isEmpty()) return QString();
+    auto normalize = [](const QString &n) {
+        QString out;
+        for (QChar c : n) {
+            if (c.isDigit()) out.append(c);
+        }
+        return out;
+    };
+    const QString norm = normalize(raw);
+    for (const auto &p : m_contactEntries) {
+        const QString contactNum = p.second.trimmed();
+        if (contactNum.isEmpty()) continue;
+        if (contactNum == raw) return p.first;
+        const QString cNorm = normalize(contactNum);
+        if (cNorm == norm) return p.first;
+        if (!cNorm.isEmpty() && !norm.isEmpty() && cNorm.endsWith(norm)) return p.first;
+        if (!cNorm.isEmpty() && !norm.isEmpty() && norm.endsWith(cNorm)) return p.first;
+    }
+    return QString();
 }
 
 void PhoneWindow::insertContactWidget(int index, const QString &name, const QString &number) {
@@ -1075,7 +1100,8 @@ void PhoneWindow::showCallOverlay(int status) {
     if (m_numberEdit && m_callNumber) {
         const QString currentDial = m_numberEdit->text().trimmed();
         if (!currentDial.isEmpty() && m_callNumber->text().trimmed().isEmpty()) {
-            m_callNumber->setText(currentDial);
+            const QString name = findContactNameForNumber(currentDial);
+            m_callNumber->setText(!name.isEmpty() ? name : currentDial);
         }
     }
     updateCallPanel(status);

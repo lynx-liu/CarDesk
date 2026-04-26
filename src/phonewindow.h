@@ -73,6 +73,7 @@ private:
     void addCallLogEntry(int type, const QString &name, const QString &number, const QString &timeText = QString());
     void addContactEntry(const QString &name, const QString &number);
     int findContactEntryIndex(const QString &number) const;
+    QString findContactNameForNumber(const QString &number) const;
 
     BluetoothManager *m_bluetoothManager;
     QWidget *m_topBar;
