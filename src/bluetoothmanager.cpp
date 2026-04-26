@@ -196,7 +196,7 @@ bool BluetoothManager::sendDtmfDigit(const QString &digit) {
     if (tone.isEmpty()) {
         return false;
     }
-    return sendAtCommand(QStringLiteral("CX[DTMF:%1]").arg(tone));
+    return sendAtCommand(QStringLiteral("CX%1").arg(tone));
 }
 
 bool BluetoothManager::setCallMute(bool mute) {
