@@ -39,7 +39,7 @@ private slots:
     void onBluetoothCallStatusChanged(int status);
     void onBluetoothCallNumberUpdated(const QString &number, const QString &source);
     void onBluetoothPhonebookEntryReceived(const QString &name, const QString &number);
-    void onBluetoothCallLogEntryReceived(int type, const QString &name, const QString &number);
+    void onBluetoothCallLogEntryReceived(int type, const QString &name, const QString &number, const QString &timeText);
     void onBluetoothPhonebookDownloadFinished();
     void onBluetoothCallLogDownloadFinished();
     void onBluetoothDeviceConnected(const QString &name);
@@ -70,7 +70,7 @@ private:
     void rebuildHistoryList();
     void rebuildContactList();
     void insertHistoryWidget(int index, const CallLogEntry &entry);
-    void addCallLogEntry(int type, const QString &name, const QString &number);
+    void addCallLogEntry(int type, const QString &name, const QString &number, const QString &timeText = QString());
     void addContactEntry(const QString &name, const QString &number);
     int findContactEntryIndex(const QString &number) const;
 

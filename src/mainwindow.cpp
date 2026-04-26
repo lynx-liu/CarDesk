@@ -325,6 +325,10 @@ void MainWindow::onPhoneClicked() {
 void MainWindow::onBluetoothCallStatusChanged(int status) {
     if (status == 1) {
         if (m_phoneWindow && m_phoneWindow->isVisible()) {
+            // 挂断后如果蓝牙界面仍在前台，保留当前界面。
+            return;
+        }
+        if (m_phoneWindow && m_phoneWindow->isVisible()) {
             m_phoneWindow->hide();
         }
         restorePreviousWindow();

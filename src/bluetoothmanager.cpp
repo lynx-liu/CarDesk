@@ -505,7 +505,8 @@ void BluetoothManager::parseLine(const QByteArray &line) {
             fields.removeFirst();
         }
         if (fields.size() >= 2) {
-            emit callLogEntryReceived(type, fields[0], fields[1]);
+            const QString timeText = fields.size() >= 3 ? fields[2] : QString();
+            emit callLogEntryReceived(type, fields[0], fields[1], timeText);
         } else {
             qDebug() << "BluetoothManager: PD/PK parse failed, type=" << type << "fields=" << fields << "payload=" << payload.toHex();
         }

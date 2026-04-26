@@ -57,7 +57,7 @@ signals:
     void callStatusChanged(int status);
     void callNumberUpdated(const QString &number, const QString &source);
     void phonebookEntryReceived(const QString &name, const QString &number);
-    void callLogEntryReceived(int type, const QString &name, const QString &number);
+    void callLogEntryReceived(int type, const QString &name, const QString &number, const QString &timeText = QString());
     void phonebookDownloadFinished();
     void callLogDownloadFinished();
     void scanStarted();

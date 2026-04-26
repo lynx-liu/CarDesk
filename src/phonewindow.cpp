@@ -396,7 +396,6 @@ void PhoneWindow::setupUI() {
 
     auto *muteBtn = makeActionBtn(QStringLiteral("静音"), QStringLiteral(":/images/butt_calling_mute_up.png"), QStringLiteral(":/images/butt_calling_mute_down.png"));
     auto *keyboardBtn = makeActionBtn(QStringLiteral("键盘"), QStringLiteral(":/images/butt_calling_keyboard_up.png"), QStringLiteral(":/images/butt_calling_keyboard_down.png"));
-    auto *recordBtn = makeActionBtn(QStringLiteral("录音"), QStringLiteral(":/images/butt_calling_recording_up.png"), QStringLiteral(":/images/butt_calling_recording_down.png"));
     m_muteButton = muteBtn;
     connect(muteBtn, &QPushButton::clicked, this, &PhoneWindow::onToggleMute);
     connect(keyboardBtn, &QPushButton::clicked, this, [this, bottomActions]() {
@@ -410,8 +409,8 @@ void PhoneWindow::setupUI() {
         }
     });
     bottomLayout->addWidget(muteBtn);
+    bottomLayout->addStretch();
     bottomLayout->addWidget(keyboardBtn);
-    bottomLayout->addWidget(recordBtn);
 
     callPageLayout->addWidget(callTop);
     callPageLayout->addSpacing(82);
@@ -606,7 +605,8 @@ void PhoneWindow::onHangup() {
         m_numberEdit->show();
     }
     if (m_callNumber) {
-        addCallLogEntry(3, QStringLiteral("拨出"), m_callNumber->text());
+        const QString currentTime = QDateTime::currentDateTime().toString(QStringLiteral("yyyy.MM.dd  ") + AppSignals::timeFormat());
+        addCallLogEntry(3, QStringLiteral("拨出"), m_callNumber->text(), currentTime);
         m_callNumber->clear();
     }
     s_cachedDialNumber.clear();
@@ -649,7 +649,11 @@ void PhoneWindow::onBluetoothCallStatusChanged(int status) {
             m_callNumber->clear();
         }
         s_cachedDialNumber.clear();
-        activateTab(0);
+        if (m_previousTabIndex >= 0 && m_previousTabIndex <= 2) {
+            activateTab(m_previousTabIndex);
+        } else {
+            activateTab(0);
+        }
         break;
     case 2:
         m_callStateLabel->setText(QStringLiteral("连接中..."));
@@ -692,8 +696,8 @@ void PhoneWindow::onBluetoothPhonebookEntryReceived(const QString &name, const Q
     addContactEntry(name, number);
 }
 
-void PhoneWindow::onBluetoothCallLogEntryReceived(int type, const QString &name, const QString &number) {
-    addCallLogEntry(type, name, number);
+void PhoneWindow::onBluetoothCallLogEntryReceived(int type, const QString &name, const QString &number, const QString &timeText) {
+    addCallLogEntry(type, name, number, timeText);
 }
 
 void PhoneWindow::onBluetoothPhonebookDownloadFinished() {
@@ -915,13 +919,13 @@ void PhoneWindow::insertHistoryWidget(int index, const CallLogEntry &entry) {
     m_historyList->setItemWidget(item, createHistoryRow(entry.name, entry.number, entry.timeText, stateIcon));
 }
 
-void PhoneWindow::addCallLogEntry(int type, const QString &name, const QString &number) {
+void PhoneWindow::addCallLogEntry(int type, const QString &name, const QString &number, const QString &timeText) {
     const QString trimmed = number.trimmed();
     if (trimmed.isEmpty()) {
         return;
     }
-    QString now = QDateTime::currentDateTime().toString(QStringLiteral("yyyy.MM.dd  ") + AppSignals::timeFormat());
-    m_callEntries.prepend({type, name.isEmpty() ? trimmed : name, trimmed, now});
+    const QString recordTime = timeText;
+    m_callEntries.prepend({type, name.isEmpty() ? trimmed : name, trimmed, recordTime});
 
     const bool trimmedOld = m_callEntries.size() > 50;
     if (trimmedOld) {
@@ -977,12 +981,22 @@ QWidget *PhoneWindow::createHistoryRow(const QString &name, const QString &numbe
     auto *numLabel = new QLabel(number, row);
     numLabel->setStyleSheet("QLabel{color:#fff;font-size:24px;background:transparent;}");
     numLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    numLabel->setFixedWidth(228);
+    numLabel->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Preferred);
+
+    auto *numberWrap = new QWidget(row);
+    numberWrap->setStyleSheet("background:transparent;");
+    auto *numberLayout = new QHBoxLayout(numberWrap);
+    numberLayout->setContentsMargins(0, 0, 0, 0);
+    numberLayout->setSpacing(6);
+    numberLayout->addWidget(stateIconLabel);
+    numberLayout->addWidget(numLabel);
 
     auto *timeLabel = new QLabel(timeText, row);
     timeLabel->setStyleSheet("QLabel{color:#fff;font-size:24px;background:transparent;}");
     timeLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    timeLabel->setFixedWidth(260);
+    if (!timeText.isEmpty()) {
+        timeLabel->setFixedWidth(260);
+    }
 
     auto *callBtn = new QPushButton(row);
     callBtn->setFixedSize(60, 60);
@@ -999,7 +1013,9 @@ QWidget *PhoneWindow::createHistoryRow(const QString &name, const QString &numbe
     layout->addWidget(userWrap);
     layout->addWidget(stateIconLabel);
     layout->addWidget(numLabel);
-    layout->addWidget(timeLabel);
+    if (!timeText.isEmpty()) {
+        layout->addWidget(timeLabel);
+    }
     layout->addWidget(callBtn);
     return row;
 }
