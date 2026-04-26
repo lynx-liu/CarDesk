@@ -20,6 +20,7 @@
 #include <QTextCodec>
 #include <QScroller>
 #include <QTime>
+#include <QRandomGenerator>
 #include <QMediaMetaData>
 #include <QShowEvent>
 
@@ -473,13 +474,13 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
             this, &MusicPlayerWindow::onPlaylistItemClicked);
 
     connect(m_loopButton, &QPushButton::clicked, this, [this]() {
-        static bool isRandom = false;
-        isRandom = !isRandom;
-        m_loopButton->setStyleSheet(isRandom
-            ? "QPushButton { border: none; background-image: url(:/images/butt_music_random_up.png); background-repeat: no-repeat; }"
-              "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_random_down.png); }"
-            : "QPushButton { border: none; background-image: url(:/images/butt_music_circle_up.png); background-repeat: no-repeat; }"
-              "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/butt_music_circle_down.png); }");
+        if (m_playMode == PlayMode::RepeatAll)
+            m_playMode = PlayMode::Random;
+        else if (m_playMode == PlayMode::Random)
+            m_playMode = PlayMode::RepeatOne;
+        else
+            m_playMode = PlayMode::RepeatAll;
+        updateLoopButtonIcon();
     });
 
     updatePlayModeUI();
@@ -1169,6 +1170,34 @@ void MusicPlayerWindow::updatePlayModeUI()
             m_albumImage->setPixmap(btPixmap.scaled(210, 210, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         }
     }
+    if (m_loopButton) updateLoopButtonIcon();
+}
+
+void MusicPlayerWindow::updateLoopButtonIcon()
+{
+    if (!m_loopButton) return;
+
+    QString upImage;
+    QString downImage;
+    switch (m_playMode) {
+    case PlayMode::RepeatAll:
+        upImage = ":/images/butt_music_circle_up.png";
+        downImage = ":/images/butt_music_circle_down.png";
+        break;
+    case PlayMode::Random:
+        upImage = ":/images/butt_music_random_up.png";
+        downImage = ":/images/butt_music_random_down.png";
+        break;
+    case PlayMode::RepeatOne:
+        upImage = ":/images/butt_music_single_circle_up.png";
+        downImage = ":/images/butt_music_single_circle_down.png";
+        break;
+    }
+
+    m_loopButton->setStyleSheet(
+        QString("QPushButton { border: none; background-image: url(%1); background-repeat: no-repeat; }"
+                "QPushButton:hover, QPushButton:pressed { background-image: url(%2); }")
+            .arg(upImage, downImage));
 }
 
 void MusicPlayerWindow::updateProgressBar(qint64 posMs, qint64 durMs)
@@ -1316,7 +1345,22 @@ void MusicPlayerWindow::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
             setPlayButtonState(false);
             return;
         }
-        int next = (m_currentIndex + 1 >= m_musicFiles.count()) ? 0 : m_currentIndex + 1;
+        int next = m_currentIndex;
+        switch (m_playMode) {
+        case PlayMode::RepeatAll:
+            next = (m_currentIndex + 1 >= m_musicFiles.count()) ? 0 : m_currentIndex + 1;
+            break;
+        case PlayMode::Random:
+            if (m_musicFiles.count() > 1) {
+                do {
+                    next = QRandomGenerator::global()->bounded(m_musicFiles.count());
+                } while (next == m_currentIndex);
+            }
+            break;
+        case PlayMode::RepeatOne:
+            next = m_currentIndex;
+            break;
+        }
         playMusic(next);
     }
 }
@@ -1349,7 +1393,22 @@ void MusicPlayerWindow::onSdkPlaybackComplete()
 
     if (m_musicFiles.isEmpty()) return;
 
-    int next = (m_currentIndex < m_musicFiles.count() - 1) ? (m_currentIndex + 1) : 0;
+    int next = m_currentIndex;
+    switch (m_playMode) {
+    case PlayMode::RepeatAll:
+        next = (m_currentIndex < m_musicFiles.count() - 1) ? (m_currentIndex + 1) : 0;
+        break;
+    case PlayMode::Random:
+        if (m_musicFiles.count() > 1) {
+            do {
+                next = QRandomGenerator::global()->bounded(m_musicFiles.count());
+            } while (next == m_currentIndex);
+        }
+        break;
+    case PlayMode::RepeatOne:
+        next = m_currentIndex;
+        break;
+    }
     m_sdkSwitching = true;
     QTimer::singleShot(300, this, [this, next]() {
         m_sdkSwitching = false;

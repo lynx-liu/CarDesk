@@ -161,6 +161,7 @@ private:
     void updateNowPlaying();
     void updateMetadata();
     void updatePlayModeUI();
+    void updateLoopButtonIcon();
     void updateProgressBar(qint64 posMs, qint64 durMs);
     void setPlayButtonState(bool playing);
     void refreshPlaylistWidget();
@@ -210,6 +211,11 @@ private:
 
     // ── 状态 ──
     QPushButton *m_collectButton      = nullptr;
+    enum class PlayMode {
+        RepeatAll,
+        Random,
+        RepeatOne
+    };
     bool        m_listFavMode         = false;
     int         m_currentIndex       = -1;
     QStringList m_musicFiles;                    // 当前播放列表（平铺）
@@ -217,6 +223,7 @@ private:
     bool        m_btPlaying           = false;
     QStringList m_favoriteFiles;                // 由播放页添加到收藏的音频文件
     bool        m_isUsbMode          = true;
+    PlayMode    m_playMode           = PlayMode::RepeatAll;
     QString     m_currentBrowsePath;             // 列表页当前浏览路径
     const QStringList m_audioExtensions = {
         "mp3","flac","wav","aac","ogg","wma","opus","m4a","ape","ac3"

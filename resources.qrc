@@ -56,6 +56,8 @@
         <file alias="butt_music_circle_down.png">ui/images/butt_music_circle_down.png</file>
         <file alias="butt_music_random_up.png">ui/images/butt_music_random_up.png</file>
         <file alias="butt_music_random_down.png">ui/images/butt_music_random_down.png</file>
+        <file alias="butt_music_single_circle_up.png">ui/images/butt_music_single_circle_up.png</file>
+        <file alias="butt_music_single_circle_down.png">ui/images/butt_music_single_circle_down.png</file>
         <file alias="butt_music_collection_up.png">ui/images/butt_music_collection_up.png</file>
         <file alias="butt_music_collection_down.png">ui/images/butt_music_collection_down.png</file>
         <file alias="butt_music_scan_up.png">ui/images/butt_music_scan_up.png</file>
