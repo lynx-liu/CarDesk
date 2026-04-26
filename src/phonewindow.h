@@ -53,13 +53,10 @@ private:
     void startCallLogSync();
     void insertContactWidget(int index, const QString &name, const QString &number);
     void updateContactWidget(int index, const QString &name, const QString &number);
-    QWidget *createHistoryRow(const QString &name, const QString &number, const QString &timeText, const QString &stateIcon, bool detailButton);
+    QWidget *createHistoryRow(const QString &name, const QString &number, const QString &timeText, const QString &stateIcon);
     QWidget *createContactRow(const QString &name, const QString &number);
-    QWidget *createDetailLogRow(const QString &timeText, const QString &durationText, const QString &stateIcon);
     void showCallOverlay(int status);
     void updateCallPanel(int status);
-    void showContactDetail(const QString &name, const QString &number);
-    void hideContactDetail();
 
     struct CallLogEntry {
         int type;
@@ -72,7 +69,6 @@ private:
     void populateContactList();
     void rebuildHistoryList();
     void rebuildContactList();
-    void rebuildDetailList(const QString &number);
     void insertHistoryWidget(int index, const CallLogEntry &entry);
     void addCallLogEntry(int type, const QString &name, const QString &number);
     void addContactEntry(const QString &name, const QString &number);
@@ -94,18 +90,12 @@ private:
     QString m_lastSyncedDeviceAddress;
     QString m_lastSyncedCallLogDeviceAddress;
 
-    QVBoxLayout *m_detailListLayout;
-    QString m_detailCurrentNumber;
-
     QLineEdit *m_numberEdit;
     QLabel *m_callNumber;
     QLabel *m_callTimer;
     QLabel *m_callStateLabel;
     QListWidget *m_historyList;
     QListWidget *m_contactList;
-    QWidget *m_detailOverlay;
-    QLabel *m_detailNameLabel;
-    QLabel *m_detailNumberLabel;
     QWidget *m_callOverlay;
     QWidget *m_callKeyboardPanel;
     QWidget *m_bottomActions;

@@ -136,8 +136,6 @@
         <file alias="butt_calling_keyboard_down.png">ui/images/butt_calling_keyboard_down.png</file>
         <file alias="butt_calling_recording_up.png">ui/images/butt_calling_recording_up.png</file>
         <file alias="butt_calling_recording_down.png">ui/images/butt_calling_recording_down.png</file>
-        <file alias="butt_callinglist_detail_up.png">ui/images/butt_callinglist_detail_up.png</file>
-        <file alias="butt_callinglist_detail_down.png">ui/images/butt_callinglist_detail_down.png</file>
         <file alias="butt_calllinglist_answer_up.png">ui/images/butt_calllinglist_answer_up.png</file>
         <file alias="butt_calllinglist_answer_down.png">ui/images/butt_calllinglist_answer_down.png</file>
         <file alias="pic_calling_user.png">ui/images/pic_calling_user.png</file>

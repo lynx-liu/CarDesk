@@ -41,9 +41,6 @@ PhoneWindow::PhoneWindow(BluetoothManager *bluetoothManager, QWidget *parent)
     , m_callStateLabel(nullptr)
     , m_historyList(nullptr)
     , m_contactList(nullptr)
-    , m_detailOverlay(nullptr)
-    , m_detailNameLabel(nullptr)
-    , m_detailNumberLabel(nullptr)
     , m_callOverlay(nullptr)
     , m_callKeyboardPanel(nullptr)
     , m_bottomActions(nullptr)
@@ -319,69 +316,6 @@ void PhoneWindow::setupUI() {
     m_tabStack->addWidget(contactsPage);
 
     main->addWidget(m_tabStack, 1);
-
-    m_detailOverlay = new QWidget(this);
-    m_detailOverlay->setGeometry(0, 82, 1280, 638);
-    m_detailOverlay->setStyleSheet("QWidget{background:url(:/images/inside_background.png) no-repeat center center;}");
-    m_detailOverlay->hide();
-
-    auto *detailBackBtn = new QPushButton(m_detailOverlay);
-    detailBackBtn->setGeometry(60, 21, 60, 60);
-    detailBackBtn->setCursor(Qt::PointingHandCursor);
-    detailBackBtn->setStyleSheet(
-        "QPushButton{border:none;background:url(:/images/butt_back_up.png) no-repeat;}"
-        "QPushButton:hover{background:url(:/images/butt_back_down.png) no-repeat;}"
-    );
-    connect(detailBackBtn, &QPushButton::clicked, this, &PhoneWindow::hideContactDetail);
-
-    auto *detailHead = new QWidget(m_detailOverlay);
-    detailHead->setGeometry(168, 30, 944, 60);
-    auto *detailHeadLayout = new QHBoxLayout(detailHead);
-    detailHeadLayout->setContentsMargins(0, 0, 0, 0);
-    detailHeadLayout->setSpacing(0);
-
-    auto *detailUserWrap = new QWidget(detailHead);
-    auto *detailUserLayout = new QHBoxLayout(detailUserWrap);
-    detailUserLayout->setContentsMargins(0, 0, 0, 0);
-    detailUserLayout->setSpacing(12);
-    auto *detailUserIcon = new QLabel(detailUserWrap);
-    detailUserIcon->setPixmap(QPixmap(":/images/pict_callinglist_user.png").scaled(60, 60, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    m_detailNameLabel = new QLabel(QStringLiteral("张三"), detailUserWrap);
-    m_detailNameLabel->setStyleSheet("QLabel{color:#fff;font-size:32px;background:transparent;}");
-    m_detailNumberLabel = new QLabel(QStringLiteral("18800001234"), detailUserWrap);
-    m_detailNumberLabel->setStyleSheet("QLabel{color:#fff;font-size:24px;background:transparent;}");
-    detailUserLayout->addWidget(detailUserIcon);
-    detailUserLayout->addWidget(m_detailNameLabel);
-    detailUserLayout->addWidget(m_detailNumberLabel);
-
-    auto *detailCallBtn = new QPushButton(detailHead);
-    detailCallBtn->setFixedSize(60, 60);
-    detailCallBtn->setCursor(Qt::PointingHandCursor);
-    detailCallBtn->setStyleSheet(
-        "QPushButton{border:none;background:url(:/images/butt_calllinglist_answer_up.png) no-repeat center center;}"
-        "QPushButton:hover{background-image:url(:/images/butt_calllinglist_answer_down.png);}"
-    );
-    connect(detailCallBtn, &QPushButton::clicked, this, [this]() {
-        if (m_detailNumberLabel) {
-            const QString number = m_detailNumberLabel->text();
-            cacheDialNumber(number);
-            if (m_bluetoothManager) {
-                m_bluetoothManager->dialNumber(number);
-            }
-        }
-        hideContactDetail();
-    });
-
-    detailHeadLayout->addWidget(detailUserWrap);
-    detailHeadLayout->addStretch();
-    detailHeadLayout->addWidget(detailCallBtn);
-
-    auto *detailListWrap = new QWidget(m_detailOverlay);
-    detailListWrap->setGeometry(168, 156, 944, 500);
-    m_detailListLayout = new QVBoxLayout(detailListWrap);
-    m_detailListLayout->setContentsMargins(0, 0, 0, 0);
-    m_detailListLayout->setSpacing(2);
-    m_detailListLayout->addStretch();
 
     m_callOverlay = new QWidget(this);
     m_callOverlay->setObjectName("callOverlay");
@@ -864,7 +798,7 @@ void PhoneWindow::rebuildHistoryList() {
         item->setData(Qt::UserRole, entry.number);
         item->setSizeHint(QSize(0, 68));
         m_historyList->addItem(item);
-        m_historyList->setItemWidget(item, createHistoryRow(entry.name, entry.number, entry.timeText, stateIcon, true));
+        m_historyList->setItemWidget(item, createHistoryRow(entry.name, entry.number, entry.timeText, stateIcon));
     }
 }
 
@@ -882,33 +816,6 @@ void PhoneWindow::rebuildContactList() {
         m_contactList->setItemWidget(item, createContactRow(contact.first, contact.second));
     }
     m_contactList->setUpdatesEnabled(true);
-}
-
-void PhoneWindow::rebuildDetailList(const QString &number) {
-    if (!m_detailListLayout) {
-        return;
-    }
-    while (QLayoutItem *item = m_detailListLayout->takeAt(0)) {
-        if (QWidget *widget = item->widget()) {
-            widget->deleteLater();
-        }
-        delete item;
-    }
-
-    bool hasEntries = false;
-    for (const CallLogEntry &entry : qAsConst(m_callEntries)) {
-        if (entry.number == number) {
-            const QString stateIcon = entry.type == 4 ? QStringLiteral(":/images/pict_callinglist_state_2.png")
-                                    : entry.type == 5 ? QStringLiteral(":/images/pict_callinglist_state_3.png")
-                                    : QStringLiteral(":/images/pict_callinglist_state_1.png");
-            m_detailListLayout->addWidget(createDetailLogRow(entry.timeText, QStringLiteral("00:00"), stateIcon));
-            hasEntries = true;
-        }
-    }
-    if (!hasEntries) {
-        m_detailListLayout->addWidget(createDetailLogRow(QStringLiteral("暂无通话记录"), QStringLiteral(""), QStringLiteral(":/images/pict_callinglist_state_1.png")));
-    }
-    m_detailListLayout->addStretch();
 }
 
 int PhoneWindow::findContactEntryIndex(const QString &number) const {
@@ -1005,7 +912,7 @@ void PhoneWindow::insertHistoryWidget(int index, const CallLogEntry &entry) {
     } else {
         m_historyList->addItem(item);
     }
-    m_historyList->setItemWidget(item, createHistoryRow(entry.name, entry.number, entry.timeText, stateIcon, true));
+    m_historyList->setItemWidget(item, createHistoryRow(entry.name, entry.number, entry.timeText, stateIcon));
 }
 
 void PhoneWindow::addCallLogEntry(int type, const QString &name, const QString &number) {
@@ -1035,7 +942,7 @@ void PhoneWindow::addCallLogEntry(int type, const QString &name, const QString &
     }
 }
 
-QWidget *PhoneWindow::createHistoryRow(const QString &name, const QString &number, const QString &timeText, const QString &stateIcon, bool detailButton) {
+QWidget *PhoneWindow::createHistoryRow(const QString &name, const QString &number, const QString &timeText, const QString &stateIcon) {
     auto *row = new QWidget();
     row->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     row->setFixedHeight(68);
@@ -1077,21 +984,23 @@ QWidget *PhoneWindow::createHistoryRow(const QString &name, const QString &numbe
     timeLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     timeLabel->setFixedWidth(260);
 
-    auto *detailBtn = new QPushButton(row);
-    detailBtn->setFixedSize(60, 60);
-    detailBtn->setCursor(Qt::PointingHandCursor);
-    detailBtn->setStyleSheet(detailButton
-                                ? "QPushButton{border:none;background:url(:/images/butt_callinglist_detail_up.png) no-repeat right center;}QPushButton:hover{background:url(:/images/butt_callinglist_detail_down.png) no-repeat right center;}"
-                                : "QPushButton{border:none;background:transparent;}");
-    connect(detailBtn, &QPushButton::clicked, this, [this, name, number]() {
-        showContactDetail(name, number);
+    auto *callBtn = new QPushButton(row);
+    callBtn->setFixedSize(60, 60);
+    callBtn->setCursor(Qt::PointingHandCursor);
+    callBtn->setStyleSheet("QPushButton{border:none;background:url(:/images/butt_calllinglist_answer_up.png) no-repeat right center;}"
+                           "QPushButton:hover{background:url(:/images/butt_calllinglist_answer_down.png) no-repeat right center;}");
+    connect(callBtn, &QPushButton::clicked, this, [this, number]() {
+        cacheDialNumber(number);
+        if (m_bluetoothManager) {
+            m_bluetoothManager->dialNumber(number);
+        }
     });
 
     layout->addWidget(userWrap);
     layout->addWidget(stateIconLabel);
     layout->addWidget(numLabel);
     layout->addWidget(timeLabel);
-    layout->addWidget(detailBtn);
+    layout->addWidget(callBtn);
     return row;
 }
 
@@ -1123,15 +1032,6 @@ QWidget *PhoneWindow::createContactRow(const QString &name, const QString &numbe
     numLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     numLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
-    auto *detailBtn = new QPushButton(row);
-    detailBtn->setFixedSize(60, 60);
-    detailBtn->setCursor(Qt::PointingHandCursor);
-    detailBtn->setStyleSheet("QPushButton{border:none;background:url(:/images/butt_callinglist_detail_up.png) no-repeat right center;}"
-                             "QPushButton:hover{background:url(:/images/butt_callinglist_detail_down.png) no-repeat right center;}");
-    connect(detailBtn, &QPushButton::clicked, this, [this, name, number]() {
-        showContactDetail(name, number);
-    });
-
     auto *callBtn = new QPushButton(row);
     callBtn->setFixedSize(60, 60);
     callBtn->setCursor(Qt::PointingHandCursor);
@@ -1148,7 +1048,6 @@ QWidget *PhoneWindow::createContactRow(const QString &name, const QString &numbe
     layout->addStretch();
     numLabel->setFixedWidth(300);
     layout->addWidget(numLabel);
-    layout->addWidget(detailBtn);
     layout->addWidget(callBtn);
     return row;
 }
@@ -1213,82 +1112,6 @@ void PhoneWindow::updateCallPanel(int status) {
     }
 }
 
-QWidget *PhoneWindow::createDetailLogRow(const QString &timeText, const QString &durationText, const QString &stateIcon) {
-    auto *row = new QWidget();
-    row->setFixedSize(872, 68);
-    row->setStyleSheet("QWidget{background:rgba(255,255,255,0.1);}");
-
-    auto *layout = new QHBoxLayout(row);
-    layout->setContentsMargins(24, 4, 24, 4);
-    layout->setSpacing(12);
-
-    auto *leftWrap = new QWidget(row);
-    auto *leftLayout = new QHBoxLayout(leftWrap);
-    leftLayout->setContentsMargins(0, 0, 0, 0);
-    leftLayout->setSpacing(16);
-    auto *icon = new QLabel(leftWrap);
-    icon->setPixmap(QPixmap(stateIcon).scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    auto *timeLabel = new QLabel(timeText, leftWrap);
-    timeLabel->setStyleSheet("QLabel{color:#fff;font-size:24px;background:transparent;}");
-    leftLayout->addWidget(icon);
-    leftLayout->addWidget(timeLabel);
-
-    auto *durationLabel = new QLabel(durationText, row);
-    durationLabel->setStyleSheet("QLabel{color:#fff;font-size:24px;background:transparent;}");
-
-    layout->addWidget(leftWrap);
-    layout->addStretch();
-    layout->addWidget(durationLabel);
-    return row;
-}
-
-void PhoneWindow::showContactDetail(const QString &name, const QString &number) {
-    if (m_tabStack) {
-        m_previousTabIndex = m_tabStack->currentIndex();
-    }
-    if (m_detailNameLabel) {
-        m_detailNameLabel->setText(name);
-    }
-    if (m_detailNumberLabel) {
-        m_detailNumberLabel->setText(number);
-    }
-    rebuildDetailList(number);
-    if (m_tabWrap) {
-        m_tabWrap->hide();
-    }
-    if (m_tabStack) {
-        m_tabStack->hide();
-    }
-    if (m_numberEdit) {
-        m_numberEdit->hide();
-    }
-    if (m_detailOverlay) {
-        m_detailOverlay->show();
-        if (m_topBar) {
-            m_detailOverlay->stackUnder(m_topBar);
-        }
-    }
-    if (m_topBar) {
-        m_topBar->show();
-        m_topBar->raise();
-    }
-}
-
-void PhoneWindow::hideContactDetail() {
-    if (m_detailOverlay) {
-        m_detailOverlay->hide();
-    }
-    if (m_tabWrap) {
-        m_tabWrap->show();
-    }
-    if (m_tabStack) {
-        activateTab(m_previousTabIndex >= 0 && m_previousTabIndex <= 2 ? m_previousTabIndex : 1);
-        m_tabStack->show();
-    }
-    if (m_numberEdit && m_tabStack && m_tabStack->currentIndex() == 0) {
-        m_numberEdit->show();
-    }
-}
 
 void PhoneWindow::keyPressEvent(QKeyEvent *event)
 {
@@ -1309,13 +1132,9 @@ void PhoneWindow::keyPressEvent(QKeyEvent *event)
         break;
     case Qt::Key_Back:
     case Qt::Key_Escape:
-        if (m_detailOverlay && m_detailOverlay->isVisible()) {
-            hideContactDetail();
-        } else {
-            emit requestReturnToMain();
-            if (isVisible()) {
-                hide();
-            }
+        emit requestReturnToMain();
+        if (isVisible()) {
+            hide();
         }
         break;
     default:
