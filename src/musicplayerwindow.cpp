@@ -355,35 +355,62 @@ static QString decodeId3TextFrame(const QByteArray &body)
     }
 }
 
+static int findId3TextTerminator(const QByteArray &bytes, int pos, quint8 encoding)
+{
+    if (pos >= bytes.size()) return -1;
+    if (encoding == 1 || encoding == 2) {
+        for (int i = pos; i + 1 < bytes.size(); i += 2) {
+            if (bytes.at(i) == '\0' && bytes.at(i + 1) == '\0') {
+                return i;
+            }
+        }
+        return -1;
+    }
+    return bytes.indexOf('\0', pos);
+}
+
 static QPixmap decodeId3PictureFrame(const QByteArray &body, int majorVersion)
 {
     if (body.size() < 4) return QPixmap();
+    quint8 encoding = static_cast<quint8>(body.at(0));
+
     if (majorVersion == 2) {
         if (body.size() < 5) return QPixmap();
-        int pos = 3; // 3-byte image format
-        if (pos >= body.size()) return QPixmap();
-        pos += 1; // picture type
-        int descEnd = body.indexOf('\0', pos);
+        int pos = 5; // after encoding + 3-byte image format + picture type
+        int descEnd = findId3TextTerminator(body, pos, encoding);
         if (descEnd < 0) {
             descEnd = pos;
         }
-        QByteArray imageData = body.mid(descEnd + 1);
+        int termLen = (encoding == 1 || encoding == 2) ? 2 : 1;
+        QByteArray imageData = body.mid(descEnd + termLen);
         QPixmap pixmap = loadPixmapFromData(imageData);
         if (!pixmap.isNull()) return pixmap;
+        if (body.size() > pos) {
+            pixmap = loadPixmapFromData(body.mid(pos));
+            if (!pixmap.isNull()) return pixmap;
+        }
         return QPixmap();
     }
 
     int pos = 1;
     int mimeEnd = body.indexOf('\0', pos);
     if (mimeEnd < 0) return QPixmap();
-    pos = mimeEnd + 1;
-    if (pos >= body.size()) return QPixmap();
-    pos += 1; // picture type
-    int descEnd = body.indexOf('\0', pos);
-    if (descEnd < 0) return QPixmap();
-    QByteArray imageData = body.mid(descEnd + 1);
+    pos = mimeEnd + 2; // skip null and picture type
+    if (pos > body.size()) return QPixmap();
+
+    int descEnd = findId3TextTerminator(body, pos, encoding);
+    if (descEnd < 0) {
+        descEnd = pos;
+    }
+    int termLen = (encoding == 1 || encoding == 2) ? 2 : 1;
+    QByteArray imageData = body.mid(descEnd + termLen);
     QPixmap pixmap = loadPixmapFromData(imageData);
     if (!pixmap.isNull()) return pixmap;
+
+    if (pos < body.size()) {
+        pixmap = loadPixmapFromData(body.mid(pos));
+        if (!pixmap.isNull()) return pixmap;
+    }
     return QPixmap();
 }
 
