@@ -198,6 +198,7 @@ private:
     {
         setFocusPolicy(Qt::StrongFocus);
         setAttribute(Qt::WA_ShowWithoutActivating);
+        setAttribute(Qt::WA_AcceptTouchEvents);
         m_updateTimer.setInterval(1000);
         connect(&m_updateTimer, &QTimer::timeout, this, [this]() { update(); });
     }
@@ -328,6 +329,10 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override {
         // 任意按键或触摸 → 完成亮屏
         const QEvent::Type t = event->type();
+        if ((t == QEvent::MouseButtonPress || t == QEvent::TouchBegin) && ScreenClockOverlay::instance()->isVisible()) {
+            ScreenClockOverlay::instance()->hideClock();
+            return true;  // 消耗事件，不让底层界面误操作
+        }
         if (t == QEvent::MouseButtonPress || t == QEvent::TouchBegin) {
             if (ScreenBlanker::instance()->isBlanked()) {
                 ScreenBlanker::instance()->unblank();
