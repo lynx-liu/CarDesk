@@ -239,7 +239,7 @@ bool BluetoothManager::playPauseMusic() {
 
 bool BluetoothManager::stopMusic() {
     if (!ensureInitialized()) return false;
-    if(sendAtCommand(QStringLiteral("PM0")) && sendAtCommand(QStringLiteral("MB")))
+    if(setPlaybackMode(0) && sendAtCommand(QStringLiteral("MB")))
         return true;
     return sendAtCommand(QStringLiteral("MC"));
 }
