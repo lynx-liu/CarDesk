@@ -678,6 +678,10 @@ MusicPlayerWindow::~MusicPlayerWindow()
 
 void MusicPlayerWindow::closeEvent(QCloseEvent *event)
 {
+    // If we are leaving the Bluetooth music interface, stop remote A2DP playback
+    if (m_bluetoothManager && !m_isUsbMode) {
+        m_bluetoothManager->stopMusic();
+    }
     releaseAudioPlayer();
     emit requestReturnToMain();
     QMainWindow::closeEvent(event);
@@ -687,6 +691,16 @@ void MusicPlayerWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
     tryConnectLastA2dpDevice();
+}
+
+void MusicPlayerWindow::hideEvent(QHideEvent *event)
+{
+    // When the music window is hidden and it's currently showing Bluetooth tab,
+    // instruct the remote device to stop playback.
+    if (m_bluetoothManager && !m_isUsbMode) {
+        m_bluetoothManager->stopMusic();
+    }
+    QMainWindow::hideEvent(event);
 }
 
 void MusicPlayerWindow::tryConnectLastA2dpDevice()
@@ -1522,6 +1536,10 @@ void MusicPlayerWindow::onRescan()
 void MusicPlayerWindow::onOpenListPage()
 {
     // 打开列表页时，根据当前 tab 决定显示本地目录或收藏列表
+    // If opening list page from Bluetooth tab, consider this as leaving BT UI
+    if (m_bluetoothManager && !m_isUsbMode) {
+        m_bluetoothManager->stopMusic();
+    }
     if (m_listFavMode)
         refreshFavoriteList();
     else
