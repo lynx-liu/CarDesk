@@ -912,11 +912,17 @@ QWidget *SystemSettingWindow::createDisplayPage()
         h24Btn->setCursor(Qt::PointingHandCursor);
         QObject::connect(h12Btn, &QPushButton::clicked, container, [container]() {
             container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_left.png) no-repeat;}");
+            QSettings settings;
+            settings.setValue("display/clock24h", false);
+            settings.sync();
             qApp->setProperty("appClock24h", false);
             AppSignals::instance()->clockFormatChanged(false);
         });
         QObject::connect(h24Btn, &QPushButton::clicked, container, [container]() {
             container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_right.png) no-repeat;}");
+            QSettings settings;
+            settings.setValue("display/clock24h", true);
+            settings.sync();
             qApp->setProperty("appClock24h", true);
             AppSignals::instance()->clockFormatChanged(true);
         });

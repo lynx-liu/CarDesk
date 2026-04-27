@@ -106,9 +106,7 @@ protected:
 
         const QTime current = QTime::currentTime();
         if (m_digitalMode) {
-            QString text = qApp->property("appClock24h").toBool()
-                ? current.toString("HH:mm")
-                : current.toString("hh:mm");
+            const QString text = current.toString(AppSignals::timeFormat());
             QFont font = p.font();
             font.setPixelSize(qMax(160, qMin(width(), height()) / 3));
             font.setWeight(QFont::ExtraBold);
@@ -536,9 +534,10 @@ int main(int argc, char *argv[]) {
     if (device.getDeviceType() != DeviceDetect::DEVICE_TYPE_PC) {
         app.setOverrideCursor(Qt::BlankCursor);  // 触控设备隐藏鼠标指针
     }
-    app.setProperty("appClock24h", false);  // 默认 12 小时制（与原始行为一致）
     {
         QSettings settings;
+        const bool init24h = settings.value("display/clock24h", false).toBool();
+        app.setProperty("appClock24h", init24h);
         QString screenClockMode = settings.value("display/screenClockMode", "digital").toString();
         if (screenClockMode != QLatin1String("analog")) {
             screenClockMode = QLatin1String("digital");
