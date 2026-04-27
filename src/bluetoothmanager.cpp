@@ -4,6 +4,8 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QTimer>
+#include <QThread>
+#include <QThread>
 
 BluetoothManager::BluetoothManager(QObject *parent)
     : QObject(parent)
@@ -356,6 +358,29 @@ bool BluetoothManager::ensureInitialized() {
 }
 
 bool BluetoothManager::openSerialPort() {
+    // Ensure gocsdk daemon is running before attempting to open the serial device.
+    auto isGocsdkRunning = []() -> bool {
+        int rc = QProcess::execute("pidof", QStringList() << "gocsdk");
+        return rc == 0;
+    };
+
+    if (!isGocsdkRunning()) {
+        qDebug() << "BluetoothManager: gocsdk not running, attempting to start...";
+        bool started = QProcess::startDetached("gocsdk");
+        if (!started) {
+            qWarning() << "BluetoothManager: failed to start gocsdk";
+        } else {
+            qDebug() << "BluetoothManager: started gocsdk, waiting for it to appear";
+            int attempts = 5;
+            while (attempts-- > 0 && !isGocsdkRunning()) {
+                QThread::msleep(200);
+            }
+            if (!isGocsdkRunning()) {
+                qWarning() << "BluetoothManager: gocsdk did not appear after start";
+            }
+        }
+    }
+
     if (m_port->isOpen())
         return true;
 
