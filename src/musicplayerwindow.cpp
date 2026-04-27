@@ -687,10 +687,16 @@ void MusicPlayerWindow::closeEvent(QCloseEvent *event)
     QMainWindow::closeEvent(event);
 }
 
+// When the window is shown and currently on Bluetooth tab, ensure PM1 is set
+// so remote device is in the expected playback mode.
+// This covers entering the BT UI by showing the window while already on BT tab.
 void MusicPlayerWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
     tryConnectLastA2dpDevice();
+    if (m_bluetoothManager && !m_isUsbMode) {
+        m_bluetoothManager->setPlaybackMode(1);
+    }
 }
 
 void MusicPlayerWindow::hideEvent(QHideEvent *event)
@@ -1536,10 +1542,6 @@ void MusicPlayerWindow::onRescan()
 void MusicPlayerWindow::onOpenListPage()
 {
     // 打开列表页时，根据当前 tab 决定显示本地目录或收藏列表
-    // If opening list page from Bluetooth tab, consider this as leaving BT UI
-    if (m_bluetoothManager && !m_isUsbMode) {
-        m_bluetoothManager->stopMusic();
-    }
     if (m_listFavMode)
         refreshFavoriteList();
     else

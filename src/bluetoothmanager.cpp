@@ -244,6 +244,12 @@ bool BluetoothManager::stopMusic() {
     return sendAtCommand(QStringLiteral("MC"));
 }
 
+bool BluetoothManager::setPlaybackMode(int mode)
+{
+    if (!ensureInitialized()) return false;
+    return sendAtCommand(QStringLiteral("PM%1").arg(mode));
+}
+
 bool BluetoothManager::nextTrack() {
     if (!ensureInitialized()) return false;
     const bool ok = sendAtCommand(QStringLiteral("MD"));

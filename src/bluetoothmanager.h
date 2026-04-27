@@ -45,6 +45,7 @@ public:
     bool stopMusic();
     bool nextTrack();
     bool previousTrack();
+    bool setPlaybackMode(int mode);
     bool connectLastA2dpDevice();
     bool disconnectA2dp();
     bool queryA2dpTrackInfo();
