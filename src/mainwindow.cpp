@@ -390,6 +390,9 @@ void MainWindow::onRadioClicked() {
         }, Qt::UniqueConnection);
     }
 
+    if (m_mediaManager && m_mediaManager->musicWindow()) {
+        m_mediaManager->musicWindow()->pauseIfPlaying();
+    }
     this->hide();
     m_radioWindow->show();
     m_radioWindow->raise();

@@ -696,6 +696,12 @@ void MusicPlayerWindow::showEvent(QShowEvent *event)
 
 void MusicPlayerWindow::hideEvent(QHideEvent *event)
 {
+    if (m_preservePlaybackOnHide) {
+        m_preservePlaybackOnHide = false;
+        QMainWindow::hideEvent(event);
+        return;
+    }
+
     // When the music window is hidden and it's currently showing Bluetooth tab,
     // instruct the remote device to stop playback.
     if (m_bluetoothManager && !m_isUsbMode) {
@@ -960,7 +966,7 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
 
     // ── 按钮信号 ─────────────────────────────────────────────────────────
     connect(m_homeButton,     &QPushButton::clicked, this, [this]() {
-        releaseAudioPlayer();
+        m_preservePlaybackOnHide = true;
         emit requestReturnToMain();
         hide();
     });
@@ -1008,7 +1014,7 @@ void MusicPlayerWindow::setupListPage(QWidget *page)
         "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/pict_home_down.png); }");
     listTopHomeBtn->setCursor(Qt::PointingHandCursor);
     connect(listTopHomeBtn, &QPushButton::clicked, this, [this]() {
-        releaseAudioPlayer();
+        m_preservePlaybackOnHide = true;
         emit requestReturnToMain();
         hide();
     });
@@ -1284,6 +1290,33 @@ void MusicPlayerWindow::playMusic(int index)
     updateMetadata();
 }
 
+void MusicPlayerWindow::pauseIfPlaying()
+{
+    if (!m_isUsbMode && m_bluetoothManager) {
+        if (m_btPlaying) {
+            m_bluetoothManager->stopMusic();
+            m_btPlaying = false;
+            setPlayButtonState(false);
+        }
+        return;
+    }
+
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer && m_sdkPlayer && m_sdkPlaying) {
+        XPlayerPause(m_sdkPlayer);
+        m_sdkPlaying = false;
+        if (m_sdkTimer) m_sdkTimer->stop();
+        setPlayButtonState(false);
+        return;
+    }
+#endif
+
+    if (m_mediaPlayer && m_mediaPlayer->state() == QMediaPlayer::PlayingState) {
+        m_mediaPlayer->pause();
+        setPlayButtonState(false);
+    }
+}
+
 void MusicPlayerWindow::releaseAudioPlayer()
 {
 #ifdef CAR_DESK_USE_T507_SDK
@@ -1328,6 +1361,7 @@ void MusicPlayerWindow::onPlayPause()
             if (m_sdkTimer) m_sdkTimer->stop();
             setPlayButtonState(false);
         } else if (m_sdkPlayer) {
+            T507SdkBridge::setAudioSource(false);
             XPlayerStart(m_sdkPlayer);
             m_sdkPlaying = true;
             if (m_sdkTimer) m_sdkTimer->start();
@@ -1854,6 +1888,7 @@ void MusicPlayerWindow::finalizeSliderSeek(int value)
         const qint64 positionMs = (static_cast<qint64>(value) * m_sdkDurationMs) / 1000;
         XPlayerSeekTo(m_sdkPlayer, static_cast<int>(positionMs), AW_SEEK_CLOSEST_SYNC);
         if (m_wasPlayingBeforeSeek) {
+            T507SdkBridge::setAudioSource(false);
             XPlayerStart(m_sdkPlayer);
             m_sdkPlaying = true;
             setPlayButtonState(true);
@@ -1870,6 +1905,7 @@ void MusicPlayerWindow::finalizeSliderSeek(int value)
         m_mediaPlayer->setPosition(position);
     }
     if (m_wasPlayingBeforeSeek && m_mediaPlayer && !m_mediaPlayer->media().isNull()) {
+        T507SdkBridge::setAudioSource(false);
         m_mediaPlayer->play();
     }
     m_wasPlayingBeforeSeek = false;
@@ -2015,8 +2051,9 @@ void MusicPlayerWindow::keyPressEvent(QKeyEvent *event)
         onPlayPause();
         break;
     case Qt::Key_HomePage:
+        m_preservePlaybackOnHide = true;
         emit requestReturnToMain();
-        close();
+        hide();
         break;
     case Qt::Key_Back:
     case Qt::Key_Escape:

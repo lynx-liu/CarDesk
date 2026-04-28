@@ -103,6 +103,7 @@ public:
     ~MusicPlayerWindow();
     void processSliderRelease(int value);
     void setBluetoothManager(BluetoothManager *manager);
+    void pauseIfPlaying();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -223,6 +224,7 @@ private:
     bool        m_btPlaying           = false;
     QStringList m_favoriteFiles;                // 由播放页添加到收藏的音频文件
     bool        m_isUsbMode          = true;
+    bool        m_preservePlaybackOnHide = false;
     PlayMode    m_playMode           = PlayMode::RepeatAll;
     const QStringList m_audioExtensions = {
         "mp3","flac","wav","aac","ogg","wma","opus","m4a","ape","ac3"
