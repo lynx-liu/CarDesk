@@ -23,6 +23,7 @@
 #include "t507sdkbridge.h"
 #include <linux/input.h>
 #include "mainwindow.h"
+#include "drivingimagewindow.h"
 #include "devicedetect.h"
 #include "appsignals.h"
 
@@ -625,8 +626,25 @@ int main(int argc, char *argv[]) {
                             qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => unblank screen";
                             ScreenBlanker::instance()->unblank();
                         } else {
-                            qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => toggle clock overlay";
-                            ScreenClockOverlay::instance()->toggle();
+                            bool closedDrivingImage = false;
+                            for (QWidget *widget : QApplication::topLevelWidgets()) {
+                                if (auto *drive = qobject_cast<DrivingImageWindow *>(widget)) {
+                                    if (drive->isVisible()) {
+                                        qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => close driving image";
+                                        drive->close();
+                                        closedDrivingImage = true;
+                                    }
+                                }
+                            }
+                            if (closedDrivingImage) {
+                                qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => schedule clock overlay after driving image close";
+                                QTimer::singleShot(0, []() {
+                                    ScreenClockOverlay::instance()->showClock();
+                                });
+                            } else {
+                                qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => toggle clock overlay";
+                                ScreenClockOverlay::instance()->toggle();
+                            }
                         }
                         break;
                     default: break;
