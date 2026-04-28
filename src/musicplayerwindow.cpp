@@ -3,6 +3,7 @@
 #include "devicedetect.h"
 #include "topbarwidget.h"
 #include "appsignals.h"
+#include "t507sdkbridge.h"
 
 #include <QVBoxLayout>
 #include <QKeyEvent>
@@ -1232,6 +1233,9 @@ void MusicPlayerWindow::playMusic(int index)
 {
     if (index < 0 || index >= m_musicFiles.count()) return;
     m_currentIndex = index;
+
+    // 音乐播放前先切回媒体声道，防止收音机音频抢占播放输出
+    T507SdkBridge::setAudioSource(false);
 
     releaseAudioPlayer();
     updateNowPlaying();

@@ -193,6 +193,7 @@ RadioWindow::RadioWindow(QWidget *parent)
     , m_tunerIndex(0)
     , m_favorite(false)
     , m_scanMode(false)
+    , m_preserveAudioOnHide(false)
     , m_seekUpward(true)
     , m_seekStartFreq(95.9)
     , m_seekStepCount(0)
@@ -293,11 +294,17 @@ void RadioWindow::showEvent(QShowEvent *event)
     // 进入收音机界面时切回收音机声道
     T507SdkBridge::setAudioSource(true);
     setMute(false);
+    m_preserveAudioOnHide = false;
 }
 
 void RadioWindow::hideEvent(QHideEvent *event)
 {
     QMainWindow::hideEvent(event);
+    if (m_preserveAudioOnHide) {
+        qDebug() << "RadioWindow::hideEvent preserving audio source";
+        m_preserveAudioOnHide = false;
+        return;
+    }
     // 隐藏收音机时切回媒体声道，防止电话呼出时仍然保留收音机音频
     T507SdkBridge::setAudioSource(false);
 }
@@ -581,7 +588,12 @@ void RadioWindow::setupUI() {
         "QPushButton{border:none;background-image:url(:/images/pict_home_up.png);}"
         "QPushButton:hover{background-image:url(:/images/pict_home_down.png);}");
     homeBtn->setCursor(Qt::PointingHandCursor);
-    connect(homeBtn, &QPushButton::clicked, this, [this]{ emit requestReturnToMain(); close(); });
+    connect(homeBtn, &QPushButton::clicked, this, [this]{
+        qDebug() << "RadioWindow home button clicked => preserve radio audio and hide";
+        m_preserveAudioOnHide = true;
+        emit requestReturnToMain();
+        hide();
+    });
 
     QLabel *titleLbl = new QLabel("收音机", topBar);
     titleLbl->setGeometry(0, 10, 1280, 54);
@@ -1427,17 +1439,18 @@ void RadioWindow::keyPressEvent(QKeyEvent *event)
         onNext();
         break;
     case Qt::Key_HomePage:
-        qDebug() << "[KeyPress] => Home -> returnToMain";
+        qDebug() << "[KeyPress] => Home -> returnToMain without stopping radio";
+        m_preserveAudioOnHide = true;
         emit requestReturnToMain();
-        close();
+        hide();
         break;
     case Qt::Key_Back:
-        qDebug() << "[KeyPress] => Back -> returnToMain";
+        qDebug() << "[KeyPress] => Back -> returnToMain and stop radio";
         emit requestReturnToMain();
         close();
         break;
     case Qt::Key_Escape:
-        qDebug() << "[KeyPress] => Escape -> returnToMain";
+        qDebug() << "[KeyPress] => Escape -> returnToMain and stop radio";
         emit requestReturnToMain();
         close();
         break;
