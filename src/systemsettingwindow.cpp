@@ -13,6 +13,8 @@
 #include <QCloseEvent>
 #include <QDialog>
 #include <QFrame>
+#include <QMouseEvent>
+#include <QStyle>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -57,6 +59,22 @@ static void performFactoryReset()
     settings.sync();
     qDebug() << "SystemSettingWindow: factory reset cleared application settings.";
 }
+
+class ClickableSlider : public QSlider {
+public:
+    ClickableSlider(Qt::Orientation orientation, QWidget *parent = nullptr)
+        : QSlider(orientation, parent) {}
+
+protected:
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (orientation() == Qt::Horizontal && event->button() == Qt::LeftButton) {
+            int value = QStyle::sliderValueFromPosition(minimum(), maximum(), event->pos().x(), width(), false);
+            setValue(value);
+        }
+        QSlider::mousePressEvent(event);
+    }
+};
 }
 
 SystemSettingWindow::SystemSettingWindow(BluetoothManager *bluetoothManager, QWidget *parent)
@@ -732,8 +750,10 @@ QWidget *SystemSettingWindow::createDisplayPage()
     auto *lowIcon = new QLabel(brightnessRow);
     lowIcon->setFixedSize(24, 24);
     lowIcon->setPixmap(QPixmap(":/images/pict_brightness_low.png").scaled(24, 24, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    auto *slider = new QSlider(Qt::Horizontal, brightnessRow);
+    auto *slider = new ClickableSlider(Qt::Horizontal, brightnessRow);
     slider->setRange(0, 100);
+    slider->setSingleStep(1);
+    slider->setPageStep(1);
     slider->setValue(initSliderVal);
     slider->setFixedHeight(44);
     slider->setStyleSheet(
@@ -959,8 +979,10 @@ QWidget *SystemSettingWindow::createSoundPage()
     auto *lowIcon = new QLabel(vRight);
     lowIcon->setFixedSize(36, 36);
     lowIcon->setPixmap(QPixmap(":/images/pict_volume_low.png").scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    auto *slider = new QSlider(Qt::Horizontal, vRight);
+    auto *slider = new ClickableSlider(Qt::Horizontal, vRight);
     slider->setRange(0, 10);
+    slider->setSingleStep(1);
+    slider->setPageStep(1);
     // 初始值从全局 appVolumeLevel 同步（0..10）
     const QVariant vp = qApp->property("appVolumeLevel");
     const int lv = qBound(0, vp.isValid() ? vp.toInt() : 10, 10);
@@ -983,11 +1005,14 @@ QWidget *SystemSettingWindow::createSoundPage()
     });
     // 用户拖动滑块时，设置系统音量（使用 amixer）
     connect(slider, &QSlider::valueChanged, this, [slider](int v) {
-        // 将 0..10 映射到百分比 0..100 转发给 amixer
-        AppSignals::runAmixer({"sset", "LINEOUT volume", QString::number(v * 10) + "%"}, slider);
+        // 将 0..10 映射到数字音量值 0..63 转发给 amixer
+        AppSignals::runAmixer({"sset", "digital volume", QString::number(AppSignals::volumeDigitalFromLevel(v))}, slider);
     });
     // 当外部（按键或其它窗口）改变音量时，更新滑块（避免产生 valueChanged 循环）
     connect(AppSignals::instance(), &AppSignals::volumeLevelChanged, this, [slider, tips](int level){
+        if (slider->isSliderDown()) {
+            return;
+        }
         const int bounded = qBound(0, level, 10);
         bool wasBlocked = slider->blockSignals(true);
         slider->setValue(bounded);
@@ -2139,10 +2164,10 @@ void SystemSettingWindow::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_VolumeUp:
-        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%+"}, this);
+        AppSignals::changeVolume(+1, this);
         break;
     case Qt::Key_VolumeDown:
-        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%-"}, this);
+        AppSignals::changeVolume(-1, this);
         break;
     case Qt::Key_HomePage:
     case Qt::Key_Back:

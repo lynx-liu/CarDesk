@@ -4,15 +4,79 @@
 #include <QCoreApplication>
 #include <QDebug>
 
+namespace {
+static const int kVolumeLevelToDigital[11] = {63, 20, 15, 10, 8, 6, 4, 3, 2, 1, 0};
+
+static int parseDigitalVolume(const QString &out)
+{
+    const int lb = out.lastIndexOf('[');
+    const QString before = (lb >= 0) ? out.left(lb).trimmed() : out.trimmed();
+    const int colon = before.lastIndexOf(':');
+    const QString token = (colon >= 0) ? before.mid(colon + 1).trimmed() : before;
+    bool ok = false;
+    const int value = token.toInt(&ok);
+    return ok ? value : 0;
+}
+}
+
+int AppSignals::volumeDigitalFromLevel(int level)
+{
+    return kVolumeLevelToDigital[qBound(0, level, 10)];
+}
+
+int AppSignals::volumeLevelFromDigital(int digitalValue)
+{
+    const int d = qBound(0, digitalValue, 63);
+    int bestLevel = 0;
+    int bestDiff = qAbs(d - kVolumeLevelToDigital[0]);
+    for (int i = 1; i < 11; ++i) {
+        const int diff = qAbs(d - kVolumeLevelToDigital[i]);
+        if (diff < bestDiff) {
+            bestLevel = i;
+            bestDiff = diff;
+        }
+    }
+    return bestLevel;
+}
+
+void AppSignals::setVolumeLevel(int level, QObject *parent)
+{
+    const int digitalValue = AppSignals::volumeDigitalFromLevel(level);
+    qDebug() << "[AppSignals] setVolumeLevel:" << level
+             << "-> digital volume:" << digitalValue;
+    runAmixer({"sset", "digital volume", QString::number(digitalValue)}, parent);
+}
+
+void AppSignals::changeVolume(int delta, QObject *parent)
+{
+    QProcess *reader = new QProcess(parent ? parent : AppSignals::instance());
+    QObject::connect(reader, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), reader,
+        [reader, parent, delta]() {
+            const QString out = QString::fromLocal8Bit(reader->readAllStandardOutput());
+            reader->deleteLater();
+            const int lb = out.lastIndexOf('[');
+            const int pct = out.indexOf('%', lb);
+            int v = 0;
+            if (lb >= 0 && pct > lb) {
+                bool ok = false;
+                v = out.mid(lb + 1, pct - lb - 1).toInt(&ok) ? out.mid(lb + 1, pct - lb - 1).toInt() : 0;
+            }
+            const int currentLevel = AppSignals::volumeLevelFromDigital(parseDigitalVolume(out));
+            const int targetLevel = qBound(0, currentLevel + delta, 10);
+            AppSignals::setVolumeLevel(targetLevel, parent);
+    });
+    reader->start("amixer", {"sget", "digital volume"});
+}
+
 // AppSignals 是 header-only 单例；此文件提供 runAmixer 实现，
 // 用于集中执行系统音量变更并在变更后读取最新数值广播给所有监听者。
 
 void AppSignals::runAmixer(const QStringList &args, QObject *parent)
 {
 	// Special-case relative +/- commands like "5%+" or "5%-":
-	// read current percent, map to 0..10 level, apply delta (+1/-1),
-	// then set exact percent = level*10 to avoid uneven quantization.
-	if (args.size() >= 3 && args[0] == "sset" && args[1] == "LINEOUT volume") {
+	// read current digital volume, map to the app volume level, apply delta (+1/-1),
+	// and set the target digital value using the fixed volume table.
+	if (args.size() >= 3 && args[0] == "sset" && args[1] == "digital volume") {
 		const QString op = args[2];
 		if (op.endsWith("%+") || op.endsWith("%-")) {
 			const int delta = op.endsWith("%+") ? 1 : -1;
@@ -28,11 +92,15 @@ void AppSignals::runAmixer(const QStringList &args, QObject *parent)
 					bool ok = false;
 					v = out.mid(lb + 1, pct - lb - 1).toInt(&ok) ? out.mid(lb + 1, pct - lb - 1).toInt() : 0;
 				}
-				// Map percent to 0..10 level (nearest)
-				int curLevel = qRound(v / 10.0);
+				// Map digital volume to 0..10 level (nearest)
+				int curLevel = AppSignals::volumeLevelFromDigital(parseDigitalVolume(out));
 				int targetLevel = qBound(0, curLevel + delta, 10);
-				int targetPercent = targetLevel * 10;
-				QString percentArg = QString::number(targetPercent) + "%";
+				int targetValue = AppSignals::volumeDigitalFromLevel(targetLevel);
+                qDebug() << "[AppSignals] changeVolume delta:" << delta \
+                         << "currentLevel:" << curLevel \
+                         << "targetLevel:" << targetLevel \
+                         << "targetDigital:" << targetValue;
+				QString valueArg = QString::number(targetValue);
 				QProcess *proc = new QProcess(parent ? parent : AppSignals::instance());
 				QObject::connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), proc,
 					[proc]() {
@@ -47,18 +115,21 @@ void AppSignals::runAmixer(const QStringList &args, QObject *parent)
 								bool ok = false;
 								const int v2 = out2.mid(lb2 + 1, pct2 - lb2 - 1).toInt(&ok);
 								if (ok) {
-									const int lv = qBound(0, (v2 + 5) / 10, 10);
+									const int lv = AppSignals::volumeLevelFromDigital(parseDigitalVolume(out2));
+                                    qDebug() << "[AppSignals] readback digital volume:" << parseDigitalVolume(out2) \
+                                         << "level:" << lv \
+                                         << "raw:" << out2;
 									QCoreApplication::instance()->setProperty("appVolumeLevel", lv);
 									AppSignals::instance()->volumeLevelChanged(lv);
 								}
 							}
 					});
-					reader2->start("amixer", {"sget", "LINEOUT volume"});
+					reader2->start("amixer", {"sget", "digital volume"});
 					proc->deleteLater();
 				});
-				proc->start("amixer", {"sset", "LINEOUT volume", percentArg});
+				proc->start("amixer", {"sset", "digital volume", valueArg});
 			});
-			reader->start("amixer", {"sget", "LINEOUT volume"});
+			reader->start("amixer", {"sget", "digital volume"});
 			return;
 		}
 	}
@@ -78,13 +149,16 @@ void AppSignals::runAmixer(const QStringList &args, QObject *parent)
 				bool ok = false;
 				const int v = out.mid(lb + 1, pct - lb - 1).toInt(&ok);
 				if (ok) {
-					const int lv = qBound(0, (v + 5) / 10, 10);
+					const int lv = AppSignals::volumeLevelFromDigital(parseDigitalVolume(out));
+					qDebug() << "[AppSignals] readback digital volume:" << parseDigitalVolume(out)
+					         << "level:" << lv
+					         << "raw:" << out;
 					QCoreApplication::instance()->setProperty("appVolumeLevel", lv);
 					AppSignals::instance()->volumeLevelChanged(lv);
 				}
 			}
 		});
-		reader->start("amixer", {"sget", "LINEOUT volume"});
+		reader->start("amixer", {"sget", "digital volume"});
 		proc->deleteLater();
 	});
 	proc->start("amixer", args);

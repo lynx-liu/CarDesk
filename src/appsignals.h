@@ -28,6 +28,15 @@ public:
      */
     static void runAmixer(const QStringList &args, QObject *parent = nullptr);
 
+    /** Change volume up/down by one app level. */
+    static void changeVolume(int delta, QObject *parent = nullptr);
+    /** Set the app volume level directly (0..10). */
+    static void setVolumeLevel(int level, QObject *parent = nullptr);
+    /** Convert app volume 0..10 into digital volume control value (0..63). */
+    static int volumeDigitalFromLevel(int level);
+    /** Convert amixer digital volume value into the nearest app volume 0..10. */
+    static int volumeLevelFromDigital(int digitalValue);
+
 signals:
     /** 音量等级变化（0–10 整数等级，对应 amixer 0-100% 归一化）*/
     void volumeLevelChanged(int level);

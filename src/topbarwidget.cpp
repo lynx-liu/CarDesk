@@ -153,12 +153,12 @@ void TopBarRightWidget::onVolumeBtnClicked()
         const int curLv = cur.isValid() ? cur.toInt() : 10;
         qApp->setProperty("appVolumePrevLevel", curLv);
         qApp->setProperty("appVolumeLevel", 0);
-        AppSignals::runAmixer({"sset", "LINEOUT volume", QString::number(0) + "%"}, this);
+        AppSignals::runAmixer({"sset", "digital volume", QString::number(0)}, this);
     } else {
         const QVariant prev = qApp->property("appVolumePrevLevel");
         const int restore = prev.isValid() ? prev.toInt() : 10;
         qApp->setProperty("appVolumeLevel", restore);
-        AppSignals::runAmixer({"sset", "LINEOUT volume", QString::number(restore * 10) + "%"}, this);
+        AppSignals::runAmixer({"sset", "digital volume", QString::number(AppSignals::volumeDigitalFromLevel(restore))}, this);
     }
 }
 

@@ -1412,11 +1412,11 @@ void RadioWindow::keyPressEvent(QKeyEvent *event)
     switch (event->key()) {
     case Qt::Key_VolumeUp:
         qDebug() << "[KeyPress] => VolumeUp";
-        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%+"}, this);
+        AppSignals::changeVolume(+1, this);
         break;
     case Qt::Key_VolumeDown:
         qDebug() << "[KeyPress] => VolumeDown";
-        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%-"}, this);
+        AppSignals::changeVolume(-1, this);
         break;
     case Qt::Key_HomePage:
         qDebug() << "[KeyPress] => Home -> returnToMain";

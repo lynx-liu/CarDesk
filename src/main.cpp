@@ -291,6 +291,17 @@ private:
     QTimer *m_hideTimer;
 };
 
+static int parseDigitalVolumeOutput(const QString &out)
+{
+    const int lb = out.lastIndexOf('[');
+    const QString before = (lb >= 0) ? out.left(lb).trimmed() : out.trimmed();
+    const int colon = before.lastIndexOf(':');
+    const QString token = (colon >= 0) ? before.mid(colon + 1).trimmed() : before;
+    bool ok = false;
+    const int value = token.toInt(&ok);
+    return ok ? value : 0;
+}
+
 // 异步读取当前音量百分比（在 amixer set 之后 100ms 延迟再读，等待 set 完成）
 static void scheduleVolumeRead(VolumeOverlay *overlay) {
     QTimer::singleShot(120, overlay, [overlay]() {
@@ -306,16 +317,16 @@ static void scheduleVolumeRead(VolumeOverlay *overlay) {
                 bool ok = false;
                 int v = out.mid(lb + 1, pct - lb - 1).toInt(&ok);
                 if (ok) {
-                    overlay->showVolume(v);
+                    const int lv = AppSignals::volumeLevelFromDigital(parseDigitalVolumeOutput(out));
+                    overlay->showVolume(lv * 10);
                     // 同步更新全局音量等级（各界面顶部栏可读取）
-                    const int lv = qBound(0, (v + 5) / 10, 10);
                     QCoreApplication::instance()->setProperty("appVolumeLevel", lv);
                     // 通知所有已注册的顶部栏实时刷新音量显示
                     AppSignals::instance()->volumeLevelChanged(lv);
                 }
             }
         });
-        proc->start("amixer", {"sget", "LINEOUT volume"});
+        proc->start("amixer", {"sget", "digital volume"});
     });
 }
 
@@ -393,12 +404,12 @@ protected:
             switch (key) {
             case Qt::Key_VolumeUp:
                 qDebug() << "[GlobalKey] => VolumeUp";
-                AppSignals::runAmixer({"sset", "LINEOUT volume", "5%+"}, nullptr);
+                AppSignals::changeVolume(+1, nullptr);
                 scheduleVolumeRead(m_overlay);
                 return true;
             case Qt::Key_VolumeDown:
                 qDebug() << "[GlobalKey] => VolumeDown";
-                AppSignals::runAmixer({"sset", "LINEOUT volume", "5%-"}, nullptr);
+                AppSignals::changeVolume(-1, nullptr);
                 scheduleVolumeRead(m_overlay);
                 return true;
             case Qt::Key_HomePage:
@@ -626,7 +637,7 @@ int main(int argc, char *argv[]) {
 // 启动时同步读取实际音量 (0-10 级)，存入应用属性供各界面颈部栏展示
     {
         QProcess volProc;
-        volProc.start("amixer", {"sget", "LINEOUT volume"});
+        volProc.start("amixer", {"sget", "digital volume"});
         int volLv = 10;
         if (volProc.waitForFinished(400)) {
             const QString vo = QString::fromLocal8Bit(volProc.readAllStandardOutput());
@@ -634,7 +645,7 @@ int main(int argc, char *argv[]) {
             if (lb >= 0 && pc > lb) {
                 bool ok;
                 const int v = vo.mid(lb + 1, pc - lb - 1).toInt(&ok);
-                if (ok) volLv = qBound(0, (v + 5) / 10, 10);
+                if (ok) volLv = AppSignals::volumeLevelFromDigital(parseDigitalVolumeOutput(vo));
             }
         }
         app.setProperty("appVolumeLevel", volLv);

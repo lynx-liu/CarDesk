@@ -1159,10 +1159,10 @@ void PhoneWindow::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_VolumeUp:
-        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%+"}, this);
+        AppSignals::changeVolume(+1, this);
         break;
     case Qt::Key_VolumeDown:
-        AppSignals::runAmixer({"sset", "LINEOUT volume", "5%-"}, this);
+        AppSignals::changeVolume(-1, this);
         break;
     case Qt::Key_HomePage:
     case Qt::Key_Home:
