@@ -32,6 +32,8 @@ public:
     static void changeVolume(int delta, QObject *parent = nullptr);
     /** Set the app volume level directly (0..10). */
     static void setVolumeLevel(int level, QObject *parent = nullptr);
+    /** Toggle mute on/off based on the current app volume level. */
+    static void toggleMute(QObject *parent = nullptr);
     /** Convert app volume 0..10 into digital volume control value (0..63). */
     static int volumeDigitalFromLevel(int level);
     /** Convert amixer digital volume value into the nearest app volume 0..10. */

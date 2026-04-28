@@ -1999,6 +1999,17 @@ void MusicPlayerWindow::keyPressEvent(QKeyEvent *event)
     case Qt::Key_VolumeDown:
         AppSignals::changeVolume(-1, this);
         break;
+    case Qt::Key_MediaPrevious:
+        onPreviousMusic();
+        break;
+    case Qt::Key_MediaNext:
+        onNextMusic();
+        break;
+    case Qt::Key_MediaPlay:
+    case Qt::Key_MediaPause:
+    case Qt::Key_MediaTogglePlayPause:
+        onPlayPause();
+        break;
     case Qt::Key_HomePage:
         emit requestReturnToMain();
         close();

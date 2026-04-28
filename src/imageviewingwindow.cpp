@@ -399,6 +399,12 @@ void ImageViewingWindow::keyPressEvent(QKeyEvent *event)
     case Qt::Key_VolumeDown:
         AppSignals::changeVolume(-1, this);
         break;
+    case Qt::Key_MediaPrevious:
+        onPrevImage();
+        break;
+    case Qt::Key_MediaNext:
+        onNextImage();
+        break;
     case Qt::Key_HomePage:
         emit requestReturnToMain();
         hide();   // ★ 不 close()，保留当前目录路径

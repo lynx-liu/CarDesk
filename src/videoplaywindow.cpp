@@ -1158,6 +1158,17 @@ void VideoPlayWindow::keyPressEvent(QKeyEvent *event)
     case Qt::Key_VolumeDown:
         AppSignals::changeVolume(-1, this);
         break;
+    case Qt::Key_MediaPrevious:
+        onPreviousVideo();
+        break;
+    case Qt::Key_MediaNext:
+        onNextVideo();
+        break;
+    case Qt::Key_MediaPlay:
+    case Qt::Key_MediaPause:
+    case Qt::Key_MediaTogglePlayPause:
+        onPlayVideo();
+        break;
     case Qt::Key_HomePage:
         // 保存当前位置 + 完整释放 SDK（XPlayerReset 清除硬件叠加层）
         // m_sdkSeeking 标志保护 releaseSdkPlayer：seek 进行中时跳过 XPlayerPause 直接 Reset

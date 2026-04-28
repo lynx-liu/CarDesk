@@ -412,6 +412,28 @@ protected:
                 AppSignals::changeVolume(-1, nullptr);
                 scheduleVolumeRead(m_overlay);
                 return true;
+            case Qt::Key_VolumeMute:
+                qDebug() << "[GlobalKey] => Mute";
+                AppSignals::toggleMute(nullptr);
+                scheduleVolumeRead(m_overlay);
+                return true;
+            case Qt::Key_Menu:
+                qDebug() << "[GlobalKey] => Menu";
+                {
+                    QWidget *w = QApplication::activeWindow();
+                    if (!w) {
+                        for (QWidget *tw : QApplication::topLevelWidgets()) {
+                            if (tw->isVisible() && tw->isWindow()) { w = tw; break; }
+                        }
+                    }
+                    if (w) {
+                        QApplication::postEvent(w,
+                            new QKeyEvent(QEvent::KeyPress, Qt::Key_HomePage, Qt::NoModifier));
+                        QApplication::postEvent(w,
+                            new QKeyEvent(QEvent::KeyRelease, Qt::Key_HomePage, Qt::NoModifier));
+                    }
+                }
+                return true;
             case Qt::Key_HomePage:
                 qDebug() << "[GlobalKey] => HomePage";
                 break;  // 交给各窗口 keyPressEvent 处理
@@ -584,9 +606,15 @@ int main(int argc, char *argv[]) {
                     if (ev.type != EV_KEY || ev.value != 1) continue; // 只处理 key-down
                     int qtKey = 0;
                     switch (ev.code) {
-                    case KEY_HOMEPAGE: qtKey = Qt::Key_HomePage; break;
-                    case KEY_HOME:     qtKey = Qt::Key_HomePage; break;
-                    case KEY_BACK:     qtKey = Qt::Key_Back;     break;
+                    case KEY_HOMEPAGE:      qtKey = Qt::Key_HomePage; break;
+                    case KEY_HOME:          qtKey = Qt::Key_HomePage; break;
+                    case KEY_BACK:          qtKey = Qt::Key_Back;     break;
+                    case KEY_MENU:          qtKey = Qt::Key_Menu;     break;
+                    case KEY_MUTE:          qtKey = Qt::Key_VolumeMute;     break;
+                    case KEY_PLAYPAUSE:     qtKey = Qt::Key_MediaTogglePlayPause; break;
+                    case KEY_PREVIOUSSONG:  qtKey = Qt::Key_MediaPrevious; break;
+                    case KEY_NEXTSONG:      qtKey = Qt::Key_MediaNext; break;
+                    case KEY_PHONE:         qtKey = Qt::Key_Phone;    break;
                     case KEY_SLEEP:
                         qDebug() << "[InputNotifier] ev.code=142 KEY_SLEEP => blank screen";
                         ScreenClockOverlay::instance()->hideClock();

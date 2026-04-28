@@ -47,6 +47,21 @@ void AppSignals::setVolumeLevel(int level, QObject *parent)
     runAmixer({"sset", "digital volume", QString::number(digitalValue)}, parent);
 }
 
+void AppSignals::toggleMute(QObject *parent)
+{
+    const int currentLevel = qBound(0, qApp->property("appVolumeLevel").toInt(), 10);
+    if (currentLevel == 0) {
+        const QVariant previous = qApp->property("appVolumePrevLevel");
+        const int restoreLevel = previous.isValid() ? qBound(1, previous.toInt(), 10) : 10;
+        qDebug() << "[AppSignals] toggleMute: unmute restoreLevel=" << restoreLevel;
+        setVolumeLevel(restoreLevel, parent);
+    } else {
+        qApp->setProperty("appVolumePrevLevel", currentLevel);
+        qDebug() << "[AppSignals] toggleMute: mute currentLevel=" << currentLevel;
+        setVolumeLevel(0, parent);
+    }
+}
+
 void AppSignals::changeVolume(int delta, QObject *parent)
 {
     QProcess *reader = new QProcess(parent ? parent : AppSignals::instance());
