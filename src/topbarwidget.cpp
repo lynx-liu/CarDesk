@@ -103,7 +103,7 @@ void TopBarRightWidget::onVolumeChanged(int level)
 {
     const int bounded = qBound(0, level, 10);
     if (bounded == 0) {
-        // 硬件音量降至 0：自动切换为静音图标
+        // app level 0 对应静音
         m_isMuted = true;
         if (m_volBtn) {
             m_volBtn->setStyleSheet(
@@ -112,7 +112,7 @@ void TopBarRightWidget::onVolumeChanged(int level)
         }
         if (m_volLabel) m_volLabel->setText("");
     } else {
-        // 硬件音量 > 0：恢复音量图标 + 数字（同时取消手动静音状态）
+        // app level 1..10 对应有声音状态
         m_isMuted = false;
         if (m_volBtn) {
             m_volBtn->setStyleSheet(
@@ -150,10 +150,10 @@ void TopBarRightWidget::onVolumeBtnClicked()
     }
     if (m_isMuted) {
         const QVariant cur = qApp->property("appVolumeLevel");
-        const int curLv = cur.isValid() ? cur.toInt() : 10;
+        const int curLv = cur.isValid() ? cur.toInt() : 0;
         qApp->setProperty("appVolumePrevLevel", curLv);
         qApp->setProperty("appVolumeLevel", 0);
-        AppSignals::runAmixer({"sset", "digital volume", QString::number(0)}, this);
+        AppSignals::runAmixer({"sset", "digital volume", QString::number(63)}, this);
     } else {
         const QVariant prev = qApp->property("appVolumePrevLevel");
         const int restore = prev.isValid() ? prev.toInt() : 10;
