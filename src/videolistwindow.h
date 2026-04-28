@@ -64,6 +64,7 @@ public:
 
     // 若视频播放器处于 HOME 键暂停状态，直接恢复播放并返回 true
     bool tryResumeVideo();
+    void pauseVideoIfPlaying();
     void setBluetoothManager(BluetoothManager *manager);
     void setMusicWindow(MusicPlayerWindow *musicWindow);
 

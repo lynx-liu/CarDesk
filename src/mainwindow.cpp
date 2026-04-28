@@ -299,7 +299,7 @@ void MainWindow::onMusicUSBClicked() {
 
 void MainWindow::ensurePhoneWindow() {
     if (!m_phoneWindow) {
-        m_phoneWindow = new PhoneWindow(m_bluetoothManager);
+        m_phoneWindow = new PhoneWindow(m_bluetoothManager, m_mediaManager);
         connect(m_phoneWindow, &PhoneWindow::requestReturnToMain, this, [this]() {
             qDebug() << "MainWindow received PhoneWindow requestReturnToMain";
             restorePreviousWindow();

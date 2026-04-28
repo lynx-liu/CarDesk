@@ -1,5 +1,8 @@
 #include "phonewindow.h"
 #include "bluetoothmanager.h"
+#include "mediamanager.h"
+#include "musicplayerwindow.h"
+#include "videolistwindow.h"
 #include "topbarwidget.h"
 #include "appsignals.h"
 
@@ -26,9 +29,10 @@
 QString PhoneWindow::s_cachedDialNumber;
 QList<QPair<QString, QString>> PhoneWindow::s_cachedContactEntries;
 
-PhoneWindow::PhoneWindow(BluetoothManager *bluetoothManager, QWidget *parent)
+PhoneWindow::PhoneWindow(BluetoothManager *bluetoothManager, MediaManager *mediaManager, QWidget *parent)
     : QMainWindow(parent)
     , m_bluetoothManager(bluetoothManager)
+    , m_mediaManager(mediaManager)
     , m_tabStack(nullptr)
     , m_tabDial(nullptr)
     , m_tabHistory(nullptr)
@@ -1094,6 +1098,17 @@ QWidget *PhoneWindow::createContactRow(const QString &name, const QString &numbe
 }
 
 void PhoneWindow::showCallOverlay(int status) {
+    if (m_mediaManager) {
+        if (m_mediaManager->musicWindow()) {
+            m_mediaManager->musicWindow()->pauseIfPlaying();
+        }
+        if (m_mediaManager->videoListWindow()) {
+            m_mediaManager->videoListWindow()->pauseVideoIfPlaying();
+        }
+    }
+    if (m_bluetoothManager) {
+        m_bluetoothManager->setPlaybackMode(1);
+    }
     if (m_tabStack && m_callOverlay && m_tabStack->currentWidget() != m_callOverlay) {
         m_previousTabIndex = m_tabStack->currentIndex();
     }

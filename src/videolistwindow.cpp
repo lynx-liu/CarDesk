@@ -331,6 +331,13 @@ bool VideoListWindow::tryResumeVideo()
     return false;
 }
 
+void VideoListWindow::pauseVideoIfPlaying()
+{
+    if (m_playWindow) {
+        m_playWindow->pauseIfPlaying();
+    }
+}
+
 void VideoListWindow::setBluetoothManager(BluetoothManager *manager) {
     m_bluetoothManager = manager;
     if (m_playWindow) {

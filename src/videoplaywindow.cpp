@@ -1220,6 +1220,22 @@ void VideoPlayWindow::keyPressEvent(QKeyEvent *event)
     }
 }
 
+void VideoPlayWindow::pauseIfPlaying()
+{
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer && m_sdkPlayer && m_sdkPlaying) {
+        XPlayerPause(m_sdkPlayer);
+        m_sdkPlaying = false;
+        setPlayButtonState(false);
+        return;
+    }
+#endif
+    if (m_mediaPlayer && m_mediaPlayer->state() == QMediaPlayer::PlayingState) {
+        m_mediaPlayer->pause();
+        setPlayButtonState(false);
+    }
+}
+
 void VideoPlayWindow::hideEvent(QHideEvent *event)
 {
     QMainWindow::hideEvent(event);

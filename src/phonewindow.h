@@ -14,12 +14,13 @@ class QVBoxLayout;
 class QWidget;
 
 class BluetoothManager;
+class MediaManager;
 
 class PhoneWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit PhoneWindow(BluetoothManager *bluetoothManager, QWidget *parent = nullptr);
+    explicit PhoneWindow(BluetoothManager *bluetoothManager, MediaManager *mediaManager, QWidget *parent = nullptr);
 
 signals:
     void requestReturnToMain();
@@ -76,6 +77,7 @@ private:
     QString findContactNameForNumber(const QString &number) const;
 
     BluetoothManager *m_bluetoothManager;
+    MediaManager *m_mediaManager;
     QWidget *m_topBar;
     QWidget *m_tabWrap;
     QStackedWidget *m_tabStack;
