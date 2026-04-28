@@ -1164,6 +1164,10 @@ void PhoneWindow::keyPressEvent(QKeyEvent *event)
     case Qt::Key_VolumeDown:
         AppSignals::changeVolume(-1, this);
         break;
+    case Qt::Key_Phone:
+        qDebug() << "PhoneWindow keyPressEvent Key_Phone => dial";
+        onDial();
+        break;
     case Qt::Key_HomePage:
     case Qt::Key_Home:
         qDebug() << "PhoneWindow keyPressEvent Home/HomePage";

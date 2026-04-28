@@ -15,6 +15,7 @@
 #include "topbarwidget.h"
 
 #include <QApplication>
+#include <QKeyEvent>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
@@ -321,6 +322,16 @@ void MainWindow::onPhoneClicked() {
     m_phoneWindow->show();
     m_phoneWindow->raise();
     m_phoneWindow->activateWindow();
+}
+
+void MainWindow::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Phone) {
+        qDebug() << "MainWindow keyPressEvent Key_Phone => open phone";
+        onPhoneClicked();
+        return;
+    }
+    QMainWindow::keyPressEvent(event);
 }
 
 void MainWindow::onBluetoothCallStatusChanged(int status) {
