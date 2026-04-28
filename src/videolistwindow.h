@@ -8,6 +8,8 @@
 #include <QStyledItemDelegate>
 #include <QPainter>
 
+class BluetoothManager;
+class MusicPlayerWindow;
 class VideoPlayWindow;
 
 // 自定义委托来绘制item背景（匹配HTML设计）
@@ -62,6 +64,8 @@ public:
 
     // 若视频播放器处于 HOME 键暂停状态，直接恢复播放并返回 true
     bool tryResumeVideo();
+    void setBluetoothManager(BluetoothManager *manager);
+    void setMusicWindow(MusicPlayerWindow *musicWindow);
 
 signals:
     void requestReturnToMain();
@@ -91,6 +95,8 @@ protected:
     QStringList m_videoExtensions;
 
     VideoPlayWindow *m_playWindow = nullptr;
+    BluetoothManager *m_bluetoothManager = nullptr;
+    MusicPlayerWindow *m_musicWindow = nullptr;
 };
 
 #endif // VIDEOLISTWINDOW_H

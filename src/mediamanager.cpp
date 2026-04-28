@@ -28,10 +28,16 @@ void MediaManager::openVideoList() {
     
     if (!m_videoListWindow) {
         m_videoListWindow = new VideoListWindow();
+        if (m_bluetoothManager) {
+            m_videoListWindow->setBluetoothManager(m_bluetoothManager);
+        }
+        m_videoListWindow->setMusicWindow(m_musicWindow);
         m_videoListWindow->setAttribute(Qt::WA_DeleteOnClose);
         connect(m_videoListWindow, &QObject::destroyed, this, [this]() {
             m_videoListWindow = nullptr;
         });
+    } else if (m_videoListWindow) {
+        m_videoListWindow->setMusicWindow(m_musicWindow);
     }
     // 若视频播放器处于 HOME 键暂停状态，直接恢复播放，跳过文件列表界面
     // 避免在 showEvent 内 hide() 后再 raise() 引发的窗口状态混乱
@@ -66,6 +72,9 @@ void MediaManager::openMusicPlayer() {
         m_musicWindow = new MusicPlayerWindow();
         if (m_bluetoothManager) {
             m_musicWindow->setBluetoothManager(m_bluetoothManager);
+        }
+        if (m_videoListWindow) {
+            m_videoListWindow->setMusicWindow(m_musicWindow);
         }
     }
     m_musicWindow->showNormal();

@@ -11,6 +11,8 @@
 #include <QMediaPlayer>
 #include <QVideoWidget>
 
+class BluetoothManager;
+
 #ifdef CAR_DESK_USE_T507_SDK
 #include <xplayer.h>
 #include <outputCtrl.h>
@@ -26,6 +28,7 @@ public:
     
     void setVideoFiles(const QStringList &files, int currentIndex = 0);
     void setCurrentVideo(const QString &filePath);
+    void setBluetoothManager(BluetoothManager *manager);
     bool isPausedForHome() const { return m_pausedForHome; }
 
 signals:
@@ -98,6 +101,7 @@ private:
     bool m_useSdkPlayer;
     bool m_controlsHidden;
     bool m_sliderDragging;
+    BluetoothManager *m_bluetoothManager;
     bool m_wasPlayingBeforeSeek;
     bool m_pausedForHome;      // HOME 键退出时置位，供 tryResumeVideo 判断
     QString m_resumePath;      // HOME 退出前的视频文件路径

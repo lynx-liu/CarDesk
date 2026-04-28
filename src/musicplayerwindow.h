@@ -104,6 +104,7 @@ public:
     void processSliderRelease(int value);
     void setBluetoothManager(BluetoothManager *manager);
     void pauseIfPlaying();
+    void stopIfPlaying();
 
 protected:
     void closeEvent(QCloseEvent *event) override;

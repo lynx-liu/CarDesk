@@ -1,5 +1,7 @@
 #include "videoplaywindow.h"
+#include "bluetoothmanager.h"
 #include "devicedetect.h"
+#include "t507sdkbridge.h"
 #include "appsignals.h"
 
 #include <QVBoxLayout>
@@ -140,6 +142,7 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     , m_useSdkPlayer(false)
     , m_controlsHidden(false)
     , m_sliderDragging(false)
+    , m_bluetoothManager(nullptr)
     , m_wasPlayingBeforeSeek(false)
     , m_pausedForHome(false)
     , m_resumePositionMs(0)
@@ -330,6 +333,10 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     });
     qApp->installEventFilter(this);
     resetInactivityTimer();
+}
+
+void VideoPlayWindow::setBluetoothManager(BluetoothManager *manager) {
+    m_bluetoothManager = manager;
 }
 
 VideoPlayWindow::~VideoPlayWindow() {
@@ -607,6 +614,11 @@ void VideoPlayWindow::onPlayVideo() {
     
     QString videoPath = m_videoFiles[m_currentIndex];
     qDebug() << "Playing video:" << videoPath;
+    if (m_bluetoothManager) {
+        m_bluetoothManager->stopMusic();
+        m_bluetoothManager->setPlaybackMode(0);
+    }
+    T507SdkBridge::setAudioSource(false);
     updateTitle();
 
 #ifdef CAR_DESK_USE_T507_SDK
@@ -1226,6 +1238,9 @@ void VideoPlayWindow::showEvent(QShowEvent *event)
     if (!m_pausedForHome || m_resumePath.isEmpty()) {
         return;
     }
+
+    T507SdkBridge::setAudioSource(false);
+
     const QString path = m_resumePath;
     const int posMs = m_resumePositionMs;
     m_pausedForHome = false;

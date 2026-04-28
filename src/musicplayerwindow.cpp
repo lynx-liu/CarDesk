@@ -1240,6 +1240,9 @@ void MusicPlayerWindow::playMusic(int index)
     if (index < 0 || index >= m_musicFiles.count()) return;
     m_currentIndex = index;
 
+    if (m_bluetoothManager) {
+        m_bluetoothManager->setPlaybackMode(0);
+    }
     // 音乐播放前先切回媒体声道，防止收音机音频抢占播放输出
     T507SdkBridge::setAudioSource(false);
 
@@ -1317,6 +1320,20 @@ void MusicPlayerWindow::pauseIfPlaying()
     }
 }
 
+void MusicPlayerWindow::stopIfPlaying()
+{
+    if (!m_isUsbMode && m_bluetoothManager) {
+        if (m_btPlaying) {
+            m_bluetoothManager->stopMusic();
+            m_btPlaying = false;
+            setPlayButtonState(false);
+        }
+        return;
+    }
+
+    releaseAudioPlayer();
+}
+
 void MusicPlayerWindow::releaseAudioPlayer()
 {
 #ifdef CAR_DESK_USE_T507_SDK
@@ -1346,6 +1363,9 @@ void MusicPlayerWindow::releaseAudioPlayer()
 void MusicPlayerWindow::onPlayPause()
 {
     if (!m_isUsbMode && m_bluetoothManager) {
+        if (!m_btPlaying) {
+            T507SdkBridge::setAudioSource(false);
+        }
         if (m_bluetoothManager->playPauseMusic()) {
             m_btPlaying = !m_btPlaying;
             setPlayButtonState(m_btPlaying);
@@ -1560,6 +1580,9 @@ void MusicPlayerWindow::onBluetoothA2dpProgressChanged(qint64 posMs, qint64 durM
 void MusicPlayerWindow::onBluetoothA2dpPlaybackStateChanged(bool playing)
 {
     if (m_isUsbMode) return;
+    if (playing && !m_btPlaying) {
+        T507SdkBridge::setAudioSource(false);
+    }
     m_btPlaying = playing;
     setPlayButtonState(playing);
 }

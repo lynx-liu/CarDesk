@@ -1,5 +1,6 @@
 #include "videolistwindow.h"
 #include "videoplaywindow.h"
+#include "musicplayerwindow.h"
 #include "devicedetect.h"
 #include "topbarwidget.h"
 
@@ -321,10 +322,24 @@ void VideoListWindow::keyPressEvent(QKeyEvent *event)
 bool VideoListWindow::tryResumeVideo()
 {
     if (m_playWindow && m_playWindow->isPausedForHome()) {
+        if (m_musicWindow) {
+            m_musicWindow->stopIfPlaying();
+        }
         m_playWindow->show();
         return true;
     }
     return false;
+}
+
+void VideoListWindow::setBluetoothManager(BluetoothManager *manager) {
+    m_bluetoothManager = manager;
+    if (m_playWindow) {
+        m_playWindow->setBluetoothManager(manager);
+    }
+}
+
+void VideoListWindow::setMusicWindow(MusicPlayerWindow *musicWindow) {
+    m_musicWindow = musicWindow;
 }
 
 void VideoListWindow::onItemClicked(QListWidgetItem *item) {
@@ -359,6 +374,9 @@ void VideoListWindow::onItemClicked(QListWidgetItem *item) {
         
         if (!m_playWindow) {
             m_playWindow = new VideoPlayWindow(this);
+            if (m_bluetoothManager) {
+                m_playWindow->setBluetoothManager(m_bluetoothManager);
+            }
             connect(m_playWindow, &VideoPlayWindow::requestReturnToList, this, [this]() {
                 this->show();
             });
@@ -366,6 +384,9 @@ void VideoListWindow::onItemClicked(QListWidgetItem *item) {
                 emit requestReturnToMain();
                 this->hide();
             });
+        }
+        if (m_musicWindow) {
+            m_musicWindow->stopIfPlaying();
         }
         m_playWindow->setVideoFiles(videoList, currentIdx);
         this->hide();
