@@ -1251,40 +1251,78 @@ void VideoPlayWindow::showEvent(QShowEvent *event)
     QMainWindow::showEvent(event);
     showControls();
     resetInactivityTimer();
-    if (!m_pausedForHome || m_resumePath.isEmpty()) {
-        return;
-    }
+    if (m_pausedForHome && !m_resumePath.isEmpty()) {
+        T507SdkBridge::setAudioSource(false);
 
-    T507SdkBridge::setAudioSource(false);
-
-    const QString path = m_resumePath;
-    const int posMs = m_resumePositionMs;
-    m_pausedForHome = false;
-    m_resumePath.clear();
-    m_resumePositionMs = 0;
+        const QString path = m_resumePath;
+        const int posMs = m_resumePositionMs;
+        m_pausedForHome = false;
+        m_resumePath.clear();
+        m_resumePositionMs = 0;
 #ifdef CAR_DESK_USE_T507_SDK
-    if (m_useSdkPlayer) {
-        if (initSdkPlayer(path)) {
-            m_sdkPlaying = true;
-            setPlayButtonState(true);
-            if (posMs > 0) {
-                // 给解码器 400ms 启动时间后 Seek 到 HOME 前的位置
-                // m_sdkSeeking 标志由此进入，SEEK_COMPLETE 后由 onSdkSeekComplete 清除
-                QTimer::singleShot(400, this, [this, posMs]() {
-                    if (m_sdkPlayer && m_sdkPlaying) {
-                        m_sdkSeeking = true;
-                        XPlayerSeekTo(m_sdkPlayer, posMs, AW_SEEK_CLOSEST_SYNC);
-                    }
-                });
+        if (m_useSdkPlayer) {
+            if (initSdkPlayer(path)) {
+                m_sdkPlaying = true;
+                setPlayButtonState(true);
+                if (posMs > 0) {
+                    // 给解码器 400ms 启动时间后 Seek 到 HOME 前的位置
+                    // m_sdkSeeking 标志由此进入，SEEK_COMPLETE 后由 onSdkSeekComplete 清除
+                    QTimer::singleShot(400, this, [this, posMs]() {
+                        if (m_sdkPlayer && m_sdkPlaying) {
+                            m_sdkSeeking = true;
+                            XPlayerSeekTo(m_sdkPlayer, posMs, AW_SEEK_CLOSEST_SYNC);
+                        }
+                    });
+                }
+                if (m_sdkTimer && !m_sdkTimer->isActive()) {
+                    m_sdkTimer->start();
+                }
             }
-            if (m_sdkTimer && !m_sdkTimer->isActive()) {
-                m_sdkTimer->start();
-            }
+            return;
+        }
+#endif
+        if (!m_useSdkPlayer && m_mediaPlayer) {
+            m_mediaPlayer->play();  // PC 路径：媒体仍在暂停状态，直接恢复
         }
         return;
     }
+
+    if (m_currentIndex < 0 || m_currentIndex >= m_videoFiles.count()) {
+        return;
+    }
+
+    const QString currentVideo = m_videoFiles.value(m_currentIndex);
+    if (currentVideo.isEmpty()) {
+        return;
+    }
+
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        if (m_sdkPlayer) {
+            XPlayerStart(m_sdkPlayer);
+            m_sdkPlaying = true;
+            setPlayButtonState(true);
+            if (m_sdkTimer && !m_sdkTimer->isActive()) {
+                m_sdkTimer->start();
+            }
+            return;
+        }
+        onPlayVideo();
+        return;
+    }
 #endif
-    if (!m_useSdkPlayer && m_mediaPlayer) {
-        m_mediaPlayer->play();  // PC 路径：媒体仍在暂停状态，直接恢复
+
+    if (!m_mediaPlayer) {
+        return;
+    }
+
+    if (!m_mediaPlayer->media().isNull() && m_mediaPlayer->state() == QMediaPlayer::PausedState) {
+        T507SdkBridge::setAudioSource(false);
+        m_mediaPlayer->play();
+        return;
+    }
+
+    if (m_mediaPlayer->state() != QMediaPlayer::PlayingState) {
+        onPlayVideo();
     }
 }
