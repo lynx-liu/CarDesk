@@ -22,6 +22,7 @@ DrivingImageWindow::DrivingImageWindow(QWidget *parent)
     , m_exitHintLabel(nullptr)
     , m_ahdManager(new AhdManager(360, this))
     , m_singleClickTimer(new QTimer(this))
+    , m_cameraMode(360)
     , m_returning(false)
     , m_previewLoading(true)
     , m_exitInProgress(false)
@@ -265,7 +266,7 @@ void DrivingImageWindow::startPreviewIfNeeded()
     // 先 kill 旧进程，确保标签不会叠加在仍在输出的视频上
     m_ahdManager->stopPreview();
     m_ahdManager->stopCamera();
-    m_ahdManager->setCameraId(360);
+    m_ahdManager->setCameraId(m_cameraMode);
     m_ahdManager->setPreviewCameraIndex(m_isFullscreen ? m_fullscreenCameraId : -1);
 
     m_previewLoading = true;
@@ -280,7 +281,15 @@ void DrivingImageWindow::startPreviewIfNeeded()
 
     m_exitHintLabel->setText(m_isFullscreen
                                  ? QStringLiteral("加载中... 单路%1").arg(m_fullscreenCameraId + 1)
-                                 : QStringLiteral("加载中... 四路"));
+                                 : QStringLiteral("加载中... %1").arg([this]() {
+                                       switch (m_cameraMode) {
+                                       case 270: return QStringLiteral("倒车");
+                                       case 271: return QStringLiteral("左转");
+                                       case 272: return QStringLiteral("右转");
+                                       case 180: return QStringLiteral("行车");
+                                       default:  return QStringLiteral("四路");
+                                       }
+                                   }()));
     layoutCenterHint();
     m_exitHintLabel->show();
 
@@ -301,6 +310,22 @@ void DrivingImageWindow::stopPreview()
         m_ahdManager->stopPreview();
         m_ahdManager->stopCamera();
     }
+}
+
+void DrivingImageWindow::setDrivingMode(int mode)
+{
+    if (mode == m_cameraMode) {
+        return;
+    }
+    m_cameraMode = mode;
+    if (isVisible()) {
+        startPreviewIfNeeded();
+    }
+}
+
+int DrivingImageWindow::drivingMode() const
+{
+    return m_cameraMode;
 }
 
 QRect DrivingImageWindow::previewRectOnScreen() const

@@ -18,6 +18,8 @@ class DrivingImageWindow : public QMainWindow {
 public:
     explicit DrivingImageWindow(QWidget *parent = nullptr);
     void warmupCamera();
+    void setDrivingMode(int mode);
+    int drivingMode() const;
 
 signals:
     void requestReturnToMain();
@@ -51,6 +53,7 @@ private:
     bool m_startScheduled;
     bool m_isFullscreen;
     int m_fullscreenCameraId;
+    int m_cameraMode;
     QPoint m_pendingClickGlobalPos;
     qint64 m_lastClickMs;
     QPoint m_lastClickPos;

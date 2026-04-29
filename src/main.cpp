@@ -575,7 +575,11 @@ static bool hasHardwareKeyDevice(int fd)
     if (!supportsKeyCode(fd, KEY_POWER) && !supportsKeyCode(fd, KEY_BACK) &&
         !supportsKeyCode(fd, KEY_HOME) && !supportsKeyCode(fd, KEY_HOMEPAGE) &&
         !supportsKeyCode(fd, KEY_VOLUMEUP) && !supportsKeyCode(fd, KEY_VOLUMEDOWN) &&
-        !supportsKeyCode(fd, KEY_MENU) && !supportsKeyCode(fd, KEY_SLEEP)) {
+        !supportsKeyCode(fd, KEY_MENU) && !supportsKeyCode(fd, KEY_SLEEP) &&
+        !supportsKeyCode(fd, KEY_A) && !supportsKeyCode(fd, KEY_B) &&
+        !supportsKeyCode(fd, KEY_C) && !supportsKeyCode(fd, KEY_D) &&
+        !supportsKeyCode(fd, KEY_K) && !supportsKeyCode(fd, KEY_L) &&
+        !supportsKeyCode(fd, KEY_M) && !supportsKeyCode(fd, KEY_N)) {
         return false;
     }
     return true;
@@ -584,22 +588,62 @@ static bool hasHardwareKeyDevice(int fd)
 static QStringList findInputEventDevices()
 {
     QStringList devices;
-    const QDir inputDir("/dev/input");
-    const auto entries = inputDir.entryInfoList(QStringList() << "event*",
-                                               QDir::System | QDir::Readable,
-                                               QDir::Name);
-    for (const QFileInfo &entry : entries) {
-        const QString path = entry.absoluteFilePath();
-        const int fd = ::open(path.toLocal8Bit().constData(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
-        if (fd < 0) {
-            continue;
-        }
-        if (hasHardwareKeyDevice(fd)) {
+    for (int i = 0; i <= 3; ++i) {
+        const QString path = QStringLiteral("/dev/input/event%1").arg(i);
+        if (QFileInfo(path).exists()) {
             devices.append(path);
         }
-        ::close(fd);
     }
     return devices;
+}
+
+static DrivingImageWindow *findDrivingImageWindow()
+{
+    for (QWidget *widget : QApplication::topLevelWidgets()) {
+        if (auto *drive = qobject_cast<DrivingImageWindow *>(widget)) {
+            return drive;
+        }
+    }
+    return nullptr;
+}
+
+static MainWindow *findMainWindow()
+{
+    for (QWidget *widget : QApplication::topLevelWidgets()) {
+        if (auto *main = qobject_cast<MainWindow *>(widget)) {
+            return main;
+        }
+    }
+    return nullptr;
+}
+
+static void activateDrivingImageMode(int mode)
+{
+    if (DrivingImageWindow *drive = findDrivingImageWindow()) {
+        drive->setDrivingMode(mode);
+        if (!drive->isVisible()) {
+            drive->show();
+        }
+        drive->raise();
+        drive->activateWindow();
+        return;
+    }
+
+    if (MainWindow *main = findMainWindow()) {
+        QMetaObject::invokeMethod(main, "onDrivingImageClicked", Qt::DirectConnection);
+        if (DrivingImageWindow *drive = findDrivingImageWindow()) {
+            drive->setDrivingMode(mode);
+        }
+    }
+}
+
+static void deactivateDrivingImageMode(int mode)
+{
+    if (DrivingImageWindow *drive = findDrivingImageWindow()) {
+        if (drive->isVisible() && drive->drivingMode() == mode) {
+            drive->close();
+        }
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -676,6 +720,38 @@ int main(int argc, char *argv[]) {
                     case KEY_PREVIOUSSONG:  qtKey = Qt::Key_MediaPrevious; break;
                     case KEY_NEXTSONG:      qtKey = Qt::Key_MediaNext; break;
                     case KEY_PHONE:         qtKey = Qt::Key_Phone;    break;
+                    case KEY_A:
+                        qDebug() << "[InputNotifier] ev.code=30 KEY_A => driving reverse mode";
+                        activateDrivingImageMode(270);
+                        continue;
+                    case KEY_B:
+                        qDebug() << "[InputNotifier] ev.code=78 KEY_B => exit reverse mode";
+                        deactivateDrivingImageMode(270);
+                        continue;
+                    case KEY_C:
+                        qDebug() << "[InputNotifier] ev.code=46 KEY_C => enter left-turn mode";
+                        activateDrivingImageMode(271);
+                        continue;
+                    case KEY_D:
+                        qDebug() << "[InputNotifier] ev.code=32 KEY_D => exit left-turn mode";
+                        deactivateDrivingImageMode(271);
+                        continue;
+                    case KEY_K:
+                        qDebug() << "[InputNotifier] ev.code=37 KEY_K => enter right-turn mode";
+                        activateDrivingImageMode(272);
+                        continue;
+                    case KEY_L:
+                        qDebug() << "[InputNotifier] ev.code=38 KEY_L => exit right-turn mode";
+                        deactivateDrivingImageMode(272);
+                        continue;
+                    case KEY_M:
+                        qDebug() << "[InputNotifier] ev.code=50 KEY_M => enter illumination mode";
+                        activateDrivingImageMode(180);
+                        continue;
+                    case KEY_N:
+                        qDebug() << "[InputNotifier] ev.code=49 KEY_N => exit illumination mode";
+                        deactivateDrivingImageMode(180);
+                        continue;
                     case KEY_SLEEP:
                         qDebug() << "[InputNotifier] ev.code=142 KEY_SLEEP => blank screen";
                         ScreenClockOverlay::instance()->hideClock();
