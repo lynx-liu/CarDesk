@@ -1,6 +1,7 @@
 #include "t507sdkbridge.h"
 #include <QMap>
 #include <QDebug>
+#include <QStorageInfo>
 #ifdef CAR_DESK_DEVICE_CARUNIT
 #  include <fcntl.h>
 #  include <unistd.h>
@@ -119,6 +120,16 @@ QString T507SdkBridge::ahdTestCommand(int index)
 
 QString T507SdkBridge::usbMountPath()
 {
+    const QString base = QStringLiteral("/mnt/usb");
+    for (const QStorageInfo &storage : QStorageInfo::mountedVolumes()) {
+        if (!storage.isValid() || !storage.isReady())
+            continue;
+
+        const QString root = storage.rootPath();
+        if (root == base || root.startsWith(base + QStringLiteral("/"))) {
+            return root;
+        }
+    }
     return QStringLiteral("/mnt/usb/sda1");
 }
 

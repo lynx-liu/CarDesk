@@ -172,14 +172,13 @@ void TopBarRightWidget::onClockTick()
 void TopBarRightWidget::updateUsbState()
 {
     bool foundUsb = false;
-    const QString usbPath = T507SdkBridge::usbMountPath();
 
     for (const QStorageInfo &storage : QStorageInfo::mountedVolumes()) {
-        if (!storage.isValid() || storage.isReadOnly() || !storage.isReady())
+        if (!storage.isValid() || !storage.isReady())
             continue;
 
         const QString root = storage.rootPath();
-        if (root == usbPath) {
+        if (root == QStringLiteral("/mnt/usb") || root.startsWith(QStringLiteral("/mnt/usb/"))) {
             foundUsb = true;
             break;
         }
