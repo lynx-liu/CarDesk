@@ -16,9 +16,11 @@
 #include <QDialog>
 #include <QSettings>
 #include <QTime>
+#include <QSocketNotifier>
 #include <fcntl.h>
 #include <unistd.h>
-#include <QSocketNotifier>
+#include <sys/ioctl.h>
+#include <cstring>
 #include "backlight.h"
 #include "t507sdkbridge.h"
 #include <linux/input.h>
@@ -557,12 +559,61 @@ static void configureApplicationFont(QApplication &app) {
     qDebug() << "Using application font:" << family;
 }
 
+static bool supportsKeyCode(int fd, int keyCode)
+{
+    const int keyBytes = (KEY_MAX + 1 + 7) / 8;
+    unsigned char keys[keyBytes];
+    std::memset(keys, 0, sizeof(keys));
+    if (::ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keys)), keys) < 0) {
+        return false;
+    }
+    return keys[keyCode / 8] & (1 << (keyCode % 8));
+}
+
+static bool hasHardwareKeyDevice(int fd)
+{
+    if (!supportsKeyCode(fd, KEY_POWER) && !supportsKeyCode(fd, KEY_BACK) &&
+        !supportsKeyCode(fd, KEY_HOME) && !supportsKeyCode(fd, KEY_HOMEPAGE) &&
+        !supportsKeyCode(fd, KEY_VOLUMEUP) && !supportsKeyCode(fd, KEY_VOLUMEDOWN) &&
+        !supportsKeyCode(fd, KEY_MENU) && !supportsKeyCode(fd, KEY_SLEEP)) {
+        return false;
+    }
+    return true;
+}
+
+static QStringList findInputEventDevices()
+{
+    QStringList devices;
+    const QDir inputDir("/dev/input");
+    const auto entries = inputDir.entryInfoList(QStringList() << "event*",
+                                               QDir::System | QDir::Readable,
+                                               QDir::Name);
+    for (const QFileInfo &entry : entries) {
+        const QString path = entry.absoluteFilePath();
+        const int fd = ::open(path.toLocal8Bit().constData(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+        if (fd < 0) {
+            continue;
+        }
+        if (hasHardwareKeyDevice(fd)) {
+            devices.append(path);
+        }
+        ::close(fd);
+    }
+    return devices;
+}
+
 int main(int argc, char *argv[]) {
     // eglfs 平台下 Qt 不自动扫描 /dev/input，需在 QApplication 构造前设置。
-    // 所有硬件按键（HOME/BACK/VOL+/-/POWER）均来自 event3（goodix-ts 虚拟按键区）。
-    // 外部未设置时才覆盖，允许 run.sh 或环境变量优先级更高。
+    // 如果环境变量未设置，则选择第一个支持硬件按键的 event 设备。
     if (qgetenv("QT_QPA_EVDEV_KEYBOARD_PARAMETERS").isEmpty()) {
-        qputenv("QT_QPA_EVDEV_KEYBOARD_PARAMETERS", "/dev/input/event3");
+        const QStringList keyboardDevices = findInputEventDevices();
+        if (!keyboardDevices.isEmpty()) {
+            qputenv("QT_QPA_EVDEV_KEYBOARD_PARAMETERS", keyboardDevices.first().toLocal8Bit());
+            qDebug() << "QT_QPA_EVDEV_KEYBOARD_PARAMETERS set to" << keyboardDevices.first();
+        } else {
+            qWarning() << "No keyboard input device found; fallback to /dev/input/event3";
+            qputenv("QT_QPA_EVDEV_KEYBOARD_PARAMETERS", "/dev/input/event3");
+        }
     }
 
     QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
@@ -593,12 +644,21 @@ int main(int argc, char *argv[]) {
     app.installEventFilter(new GlobalKeyFilter(volumeOverlay, &app));
 
     // Qt 5.12 evdevkeyboard 默认 keymap 里没有 KEY_HOMEPAGE(172) 和 KEY_BACK(158)，
-    // 直接用第二个 fd + QSocketNotifier 读 event3 来补全这两个键。
+    // 直接用额外的 fd + QSocketNotifier 读 event* 来补全这两个键。
     // 与 evdevkeyboard 共用同一设备不冲突（内核允许多个 reader）。
     {
-        const char *kbDev = "/dev/input/event3";
-        int kbFd = ::open(kbDev, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
-        if (kbFd >= 0) {
+        QStringList keyboardDevices = findInputEventDevices();
+        if (keyboardDevices.isEmpty()) {
+            qWarning() << "[InputNotifier] no keyboard input device found; fallback to /dev/input/event3";
+            keyboardDevices.append("/dev/input/event3");
+        }
+
+        for (const QString &kbDev : keyboardDevices) {
+            int kbFd = ::open(kbDev.toLocal8Bit().constData(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+            if (kbFd < 0) {
+                qWarning() << "[InputNotifier] failed to open" << kbDev;
+                continue;
+            }
             qDebug() << "[InputNotifier] opened" << kbDev;
             auto *notifier = new QSocketNotifier(kbFd, QSocketNotifier::Read, &app);
             QObject::connect(notifier, &QSocketNotifier::activated, &app, [kbFd]() {
@@ -611,7 +671,7 @@ int main(int argc, char *argv[]) {
                     case KEY_HOME:          qtKey = Qt::Key_HomePage; break;
                     case KEY_BACK:          qtKey = Qt::Key_Back;     break;
                     case KEY_MENU:          qtKey = Qt::Key_Menu;     break;
-                    case KEY_MUTE:          qtKey = Qt::Key_VolumeMute;     break;
+                    case KEY_MUTE:          qtKey = Qt::Key_VolumeMute; break;
                     case KEY_PLAYPAUSE:     qtKey = Qt::Key_MediaTogglePlayPause; break;
                     case KEY_PREVIOUSSONG:  qtKey = Qt::Key_MediaPrevious; break;
                     case KEY_NEXTSONG:      qtKey = Qt::Key_MediaNext; break;
@@ -651,7 +711,6 @@ int main(int argc, char *argv[]) {
                     }
                     if (qtKey == 0) continue;
                     qDebug() << "[InputNotifier] ev.code=" << ev.code << "=> qtKey=" << qtKey;
-                    // 找当前可见的顶层窗口（eglfs 上 activeWindow() 可能为 null）
                     QWidget *w = QApplication::activeWindow();
                     if (!w) {
                         for (QWidget *tw : QApplication::topLevelWidgets()) {
@@ -666,8 +725,6 @@ int main(int argc, char *argv[]) {
                     }
                 }
             });
-        } else {
-            qWarning() << "[InputNotifier] failed to open" << kbDev;
         }
     }
     // 检测设备信息
