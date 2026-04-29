@@ -504,8 +504,14 @@ void MainWindow::onDrivingImageClicked() {
 }
 
 QWidget *MainWindow::findCurrentVisibleNonPhoneWindow() const {
-    if (m_mediaManager && m_mediaManager->videoListWindow() && m_mediaManager->videoListWindow()->isVisible()) {
-        return m_mediaManager->videoListWindow();
+    if (m_mediaManager && m_mediaManager->videoListWindow()) {
+        if (m_mediaManager->videoListWindow()->videoPlayWindow()
+                && m_mediaManager->videoListWindow()->videoPlayWindow()->isVisible()) {
+            return m_mediaManager->videoListWindow()->videoPlayWindow();
+        }
+        if (m_mediaManager->videoListWindow()->isVisible()) {
+            return m_mediaManager->videoListWindow();
+        }
     }
     if (m_mediaManager && m_mediaManager->musicWindow() && m_mediaManager->musicWindow()->isVisible()) {
         return m_mediaManager->musicWindow();

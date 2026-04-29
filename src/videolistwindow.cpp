@@ -338,6 +338,11 @@ void VideoListWindow::pauseVideoIfPlaying()
     }
 }
 
+QWidget *VideoListWindow::videoPlayWindow() const
+{
+    return m_playWindow;
+}
+
 void VideoListWindow::setBluetoothManager(BluetoothManager *manager) {
     m_bluetoothManager = manager;
     if (m_playWindow) {
