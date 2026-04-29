@@ -25,6 +25,7 @@
 #include "t507sdkbridge.h"
 #include <linux/input.h>
 #include "mainwindow.h"
+#include "phonewindow.h"
 #include "drivingimagewindow.h"
 #include "devicedetect.h"
 #include "appsignals.h"
@@ -617,6 +618,32 @@ static MainWindow *findMainWindow()
     return nullptr;
 }
 
+static PhoneWindow *findPhoneWindow()
+{
+    for (QWidget *widget : QApplication::topLevelWidgets()) {
+        if (auto *phone = qobject_cast<PhoneWindow *>(widget)) {
+            return phone;
+        }
+    }
+    return nullptr;
+}
+
+static bool handlePhoneKeyPress()
+{
+    if (PhoneWindow *phone = findPhoneWindow()) {
+        return phone->handlePhoneKeyPress();
+    }
+    return false;
+}
+
+static bool handleEndKeyPress()
+{
+    if (PhoneWindow *phone = findPhoneWindow()) {
+        return phone->handleEndKeyPress();
+    }
+    return false;
+}
+
 static void activateDrivingImageMode(int mode)
 {
     if (DrivingImageWindow *drive = findDrivingImageWindow()) {
@@ -719,7 +746,19 @@ int main(int argc, char *argv[]) {
                     case KEY_PLAYPAUSE:     qtKey = Qt::Key_MediaTogglePlayPause; break;
                     case KEY_PREVIOUSSONG:  qtKey = Qt::Key_MediaPrevious; break;
                     case KEY_NEXTSONG:      qtKey = Qt::Key_MediaNext; break;
-                    case KEY_PHONE:         qtKey = Qt::Key_Phone;    break;
+                    case KEY_PHONE:
+                        if (handlePhoneKeyPress()) {
+                            continue;
+                        }
+                        qtKey = Qt::Key_Phone;
+                        break;
+                    case KEY_END:
+                        qDebug() << "[InputNotifier] ev.code=" << ev.code << "KEY_END => hangup";
+                        if (handleEndKeyPress()) {
+                            continue;
+                        }
+                        qtKey = Qt::Key_End;
+                        break;
                     case KEY_A:
                         qDebug() << "[InputNotifier] ev.code=30 KEY_A => driving reverse mode";
                         activateDrivingImageMode(270);

@@ -1170,6 +1170,26 @@ void PhoneWindow::updateCallPanel(int status) {
 }
 
 
+bool PhoneWindow::handlePhoneKeyPress()
+{
+    if (m_currentCallStatus == 5) {
+        qDebug() << "PhoneWindow handlePhoneKeyPress incoming call => answer";
+        onAnswer();
+        return true;
+    }
+    return false;
+}
+
+bool PhoneWindow::handleEndKeyPress()
+{
+    if (m_currentCallStatus == 4 || m_currentCallStatus == 5 || m_currentCallStatus == 6) {
+        qDebug() << "PhoneWindow handleEndKeyPress call active => hangup";
+        onHangup();
+        return true;
+    }
+    return false;
+}
+
 void PhoneWindow::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
@@ -1180,8 +1200,17 @@ void PhoneWindow::keyPressEvent(QKeyEvent *event)
         AppSignals::changeVolume(-1, this);
         break;
     case Qt::Key_Phone:
-        qDebug() << "PhoneWindow keyPressEvent Key_Phone => dial";
-        onDial();
+        qDebug() << "PhoneWindow keyPressEvent Key_Phone";
+        if (!handlePhoneKeyPress()) {
+            qDebug() << "PhoneWindow keyPressEvent Key_Phone => dial";
+            onDial();
+        }
+        break;
+    case Qt::Key_End:
+        qDebug() << "PhoneWindow keyPressEvent Key_End => hangup";
+        if (handleEndKeyPress()) {
+            return;
+        }
         break;
     case Qt::Key_HomePage:
     case Qt::Key_Home:

@@ -234,7 +234,7 @@ QWidget *DiagnosticWindow::createFaultPage()
         connect(btn, &QPushButton::clicked, this, [this, ctrl]() {
             showFaultDetail(ctrl);
         });
-        // 故障徽标（有活跃故障时显示）
+        // 故障徽标（有故障时显示）
         m_faultBadgeLabels[i] = new QLabel(btn);
         m_faultBadgeLabels[i]->setGeometry(77, -8, 32, 32);
         m_faultBadgeLabels[i]->setAlignment(Qt::AlignCenter);
@@ -1071,8 +1071,8 @@ void DiagnosticWindow::populateFaultDetailContent()
 
     m_faultDetailTitleLabel->setText(
         faults.isEmpty()
-            ? QStringLiteral("%1  —  当前无活跃故障").arg(dispName)
-            : QStringLiteral("%1  —  %2 个活跃故障").arg(dispName).arg(faults.size()));
+            ? QStringLiteral("%1  —  当前无故障").arg(dispName)
+            : QStringLiteral("%1  —  %2 个故障").arg(dispName).arg(faults.size()));
 
     // 清除旧内容
     if (QWidget *old = m_faultDetailScrollArea->takeWidget())
@@ -1089,7 +1089,7 @@ void DiagnosticWindow::populateFaultDetailContent()
     layout->setSpacing(4);
 
     if (faults.isEmpty()) {
-        auto *empty = new QLabel(QStringLiteral("当前控制器无活跃故障"), content);
+        auto *empty = new QLabel(QStringLiteral("当前控制器无故障"), content);
         empty->setAlignment(Qt::AlignCenter);
         empty->setStyleSheet(
             "QLabel{color:#88aacc;font-size:26px;background:transparent;padding:60px 0;}");

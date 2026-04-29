@@ -21,6 +21,8 @@ class PhoneWindow : public QMainWindow {
 
 public:
     explicit PhoneWindow(BluetoothManager *bluetoothManager, MediaManager *mediaManager, QWidget *parent = nullptr);
+    bool handlePhoneKeyPress();
+    bool handleEndKeyPress();
 
 signals:
     void requestReturnToMain();

@@ -8,7 +8,7 @@
 
 class QSerialPort;
 
-// 单条活跃故障信息（来自 MCU DM1 报文）
+// 单条故障信息（来自 MCU DM1 报文）
 struct McuFaultInfo {
     int     spn;      // Suspect Parameter Number
     int     fmi;      // Failure Mode Identifier
@@ -37,7 +37,7 @@ public:
     bool isOpen() const;
 
 signals:
-    // 每次解析完整 DM1 块后发射（faults 为空表示该控制器无活跃故障）
+    // 每次解析完整 DM1 块后发射（faults 为空表示该控制器无故障）
     void dm1Received(const QString &controller, const QVector<McuFaultInfo> &faults);
 
 private slots:
