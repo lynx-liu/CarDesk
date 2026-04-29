@@ -94,6 +94,7 @@ public:
 // ────────────────────────────────────────────────────────────────────────────
 
 class BluetoothManager;
+class MediaManager;
 
 class MusicPlayerWindow : public QMainWindow {
     Q_OBJECT
@@ -103,6 +104,7 @@ public:
     ~MusicPlayerWindow();
     void processSliderRelease(int value);
     void setBluetoothManager(BluetoothManager *manager);
+    void setMediaManager(MediaManager *manager);
     void pauseIfPlaying();
     void stopIfPlaying();
     bool isPlaying() const;
@@ -223,6 +225,7 @@ private:
     int         m_currentIndex       = -1;
     QStringList m_musicFiles;                    // 当前播放列表（平铺）
     BluetoothManager *m_bluetoothManager = nullptr;
+    MediaManager *m_mediaManager = nullptr;
     bool        m_btPlaying           = false;
     QStringList m_favoriteFiles;                // 由播放页添加到收藏的音频文件
     bool        m_isUsbMode          = true;

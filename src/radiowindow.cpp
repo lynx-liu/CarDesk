@@ -317,6 +317,17 @@ bool RadioWindow::isAudioActive() const
     return isVisible() || m_audioPreserved;
 }
 
+void RadioWindow::forceStopAudio()
+{
+    if (m_preserveAudioOnHide) {
+        m_preserveAudioOnHide = false;
+    }
+    if (m_audioPreserved) {
+        m_audioPreserved = false;
+    }
+    T507SdkBridge::setAudioSource(false);
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // 鼠标拖拽事件过滤器：使频率条 QScrollArea 可手动拖动
 // ──────────────────────────────────────────────────────────────────────────────

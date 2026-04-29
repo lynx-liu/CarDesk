@@ -7,6 +7,9 @@
 #include <QDir>
 #include <QStandardPaths>
 
+#include "t507sdkbridge.h"
+#include "radiowindow.h"
+
 MediaManager::MediaManager(QObject *parent)
     : QObject(parent)
     , m_isPlaying(false)
@@ -14,6 +17,7 @@ MediaManager::MediaManager(QObject *parent)
     , m_videoPlayWindow(nullptr)
     , m_musicWindow(nullptr)
     , m_bluetoothManager(nullptr)
+    , m_radioWindow(nullptr)
 {
 }
 
@@ -64,6 +68,58 @@ void MediaManager::setBluetoothManager(BluetoothManager *manager) {
     }
 }
 
+void MediaManager::setRadioWindow(RadioWindow *window) {
+    m_radioWindow = window;
+}
+
+RadioWindow *MediaManager::radioWindow() const {
+    return m_radioWindow;
+}
+
+void MediaManager::prepareForBluetoothMusic() {
+    qDebug() << "MediaManager: prepareForBluetoothMusic";
+    if (m_radioWindow) {
+        m_radioWindow->forceStopAudio();
+    }
+    if (m_musicWindow) {
+        m_musicWindow->stopIfPlaying();
+    }
+    if (m_videoListWindow) {
+        m_videoListWindow->pauseVideoIfPlaying();
+    }
+    if (m_bluetoothManager) {
+        m_bluetoothManager->setPlaybackMode(1);
+    }
+    T507SdkBridge::setAudioSource(false);
+}
+
+void MediaManager::prepareForNonBluetoothAudio() {
+    qDebug() << "MediaManager: prepareForNonBluetoothAudio";
+    if (m_radioWindow) {
+        m_radioWindow->forceStopAudio();
+    }
+    if (m_bluetoothManager) {
+        m_bluetoothManager->setPlaybackMode(0);
+        m_bluetoothManager->stopMusic();
+    }
+    T507SdkBridge::setAudioSource(false);
+}
+
+void MediaManager::prepareForRadioAudio() {
+    qDebug() << "MediaManager: prepareForRadioAudio";
+    if (m_musicWindow) {
+        m_musicWindow->pauseIfPlaying();
+    }
+    if (m_videoListWindow) {
+        m_videoListWindow->pauseVideoIfPlaying();
+    }
+    if (m_bluetoothManager) {
+        m_bluetoothManager->setPlaybackMode(0);
+        m_bluetoothManager->stopMusic();
+    }
+    T507SdkBridge::setAudioSource(true);
+}
+
 void MediaManager::openMusicPlayer() {
     qDebug() << "Opening music player...";
 
@@ -73,6 +129,7 @@ void MediaManager::openMusicPlayer() {
         if (m_bluetoothManager) {
             m_musicWindow->setBluetoothManager(m_bluetoothManager);
         }
+        m_musicWindow->setMediaManager(this);
         if (m_videoListWindow) {
             m_videoListWindow->setMusicWindow(m_musicWindow);
         }

@@ -3,6 +3,7 @@
 #include "devicedetect.h"
 #include "topbarwidget.h"
 #include "appsignals.h"
+#include "mediamanager.h"
 #include "t507sdkbridge.h"
 
 #include <QVBoxLayout>
@@ -670,6 +671,11 @@ void MusicPlayerWindow::setBluetoothManager(BluetoothManager *manager)
         }
         tryConnectLastA2dpDevice();
     }
+}
+
+void MusicPlayerWindow::setMediaManager(MediaManager *manager)
+{
+    m_mediaManager = manager;
 }
 
 MusicPlayerWindow::~MusicPlayerWindow()
@@ -1492,6 +1498,9 @@ void MusicPlayerWindow::onMusicListItemClicked(QListWidgetItem *item)
 void MusicPlayerWindow::onUsbTabClicked()
 {
     if (m_isUsbMode) return;
+    if (m_mediaManager) {
+        m_mediaManager->prepareForNonBluetoothAudio();
+    }
     // 保持蓝牙 A2DP 连接，退出蓝牙界面时停止播放，而不是断开连接。
     if (m_bluetoothManager) {
         m_bluetoothManager->stopMusic();
@@ -1516,6 +1525,9 @@ void MusicPlayerWindow::onUsbTabClicked()
 void MusicPlayerWindow::onBtTabClicked()
 {
     if (!m_isUsbMode) return;
+    if (m_mediaManager) {
+        m_mediaManager->prepareForBluetoothMusic();
+    }
     m_isUsbMode = false;
     tryConnectLastA2dpDevice();
     releaseAudioPlayer();

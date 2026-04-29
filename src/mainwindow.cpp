@@ -260,6 +260,9 @@ void MainWindow::onUSBClicked() {
 
 void MainWindow::onVideoListClicked() {
     qDebug() << "Video List button clicked";
+    if (m_mediaManager) {
+        m_mediaManager->prepareForNonBluetoothAudio();
+    }
     m_mediaManager->openVideoList();
 
     if (auto *listWindow = m_mediaManager->videoListWindow()) {
@@ -279,6 +282,9 @@ void MainWindow::onVideoListClicked() {
 
 void MainWindow::onMusicUSBClicked() {
     qDebug() << "Music USB button clicked";
+    if (m_mediaManager) {
+        m_mediaManager->prepareForNonBluetoothAudio();
+    }
     m_mediaManager->openMusicPlayer();
     
     // 连接音频窗口的返回信号
@@ -316,6 +322,9 @@ void MainWindow::ensurePhoneWindow() {
 
 void MainWindow::onPhoneClicked() {
     qDebug() << "Phone button clicked";
+    if (m_mediaManager) {
+        m_mediaManager->prepareForBluetoothMusic();
+    }
     m_restoreStack.clear();
     ensurePhoneWindow();
     this->hide();
@@ -337,6 +346,9 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
 void MainWindow::onBluetoothCallStatusChanged(int status) {
     if (status == 1) {
         // 通话结束
+        if (m_bluetoothManager) {
+            m_bluetoothManager->setPlaybackMode(0);
+        }
         if (!m_restoreStack.isEmpty()) {
             // 如果我们之前为通话推入了恢复目标，隐藏 PhoneWindow 并恢复栈顶
             if (m_phoneWindow && m_phoneWindow->isVisible()) {
@@ -350,6 +362,10 @@ void MainWindow::onBluetoothCallStatusChanged(int status) {
 
     if (status != 4 && status != 5 && status != 6) {
         return;
+    }
+
+    if (m_mediaManager) {
+        m_mediaManager->prepareForBluetoothMusic();
     }
 
     QWidget *current = findCurrentVisibleNonPhoneWindow();
@@ -376,6 +392,9 @@ void MainWindow::onRadioClicked() {
 
     if (!m_radioWindow) {
         m_radioWindow = new RadioWindow();
+        if (m_mediaManager) {
+            m_mediaManager->setRadioWindow(m_radioWindow);
+        }
         m_radioWindow->setAttribute(Qt::WA_DeleteOnClose);
         connect(m_radioWindow, &RadioWindow::requestReturnToMain, this, [this]() {
             this->show();
@@ -383,13 +402,21 @@ void MainWindow::onRadioClicked() {
             this->activateWindow();
         }, Qt::UniqueConnection);
         connect(m_radioWindow, &QObject::destroyed, this, [this]() {
+            if (m_mediaManager) {
+                m_mediaManager->setRadioWindow(nullptr);
+            }
             m_radioWindow = nullptr;
             this->show();
             this->raise();
             this->activateWindow();
         }, Qt::UniqueConnection);
+    } else if (m_mediaManager) {
+        m_mediaManager->setRadioWindow(m_radioWindow);
     }
 
+    if (m_mediaManager) {
+        m_mediaManager->prepareForRadioAudio();
+    }
     if (m_mediaManager && m_mediaManager->musicWindow()) {
         m_mediaManager->musicWindow()->pauseIfPlaying();
     }

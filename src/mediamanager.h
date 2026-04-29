@@ -8,6 +8,7 @@
 class VideoListWindow;
 class VideoPlayWindow;
 class MusicPlayerWindow;
+class RadioWindow;
 
 class BluetoothManager;
 
@@ -19,8 +20,12 @@ public:
     ~MediaManager();
     
     void setBluetoothManager(BluetoothManager *manager);
+    void setRadioWindow(RadioWindow *window);
     void openVideoList();
     void openMusicPlayer();
+    void prepareForBluetoothMusic();
+    void prepareForNonBluetoothAudio();
+    void prepareForRadioAudio();
     void playMedia(const QString &filePath);
     void stopPlayback();
     void pausePlayback();
@@ -28,6 +33,7 @@ public:
 
     VideoListWindow *videoListWindow() const;
     MusicPlayerWindow *musicWindow() const;
+    RadioWindow *radioWindow() const;
     
     QStringList getVideoFiles(const QString &directory = "");
     QStringList getAudioFiles(const QString &directory = "");
@@ -47,6 +53,7 @@ private:
     VideoPlayWindow *m_videoPlayWindow;
     MusicPlayerWindow *m_musicWindow;
     BluetoothManager *m_bluetoothManager;
+    RadioWindow *m_radioWindow;
 };
 
 #endif // MEDIAMANAGER_H

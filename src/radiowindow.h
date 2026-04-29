@@ -20,6 +20,7 @@ public:
 public slots:
     void setRadioVolumeDb(int db); // db 范围通常 -60 ~ 24（驱动定义）
     bool isAudioActive() const;
+    void forceStopAudio();
 
 signals:
     void requestReturnToMain();
