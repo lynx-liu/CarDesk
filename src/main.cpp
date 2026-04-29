@@ -27,6 +27,9 @@
 #include "mainwindow.h"
 #include "phonewindow.h"
 #include "drivingimagewindow.h"
+#include "musicplayerwindow.h"
+#include "radiowindow.h"
+#include "videolistwindow.h"
 #include "devicedetect.h"
 #include "appsignals.h"
 
@@ -644,6 +647,132 @@ static bool handleEndKeyPress()
     return false;
 }
 
+static MusicPlayerWindow *findMusicPlayerWindow()
+{
+    for (QWidget *widget : QApplication::topLevelWidgets()) {
+        if (auto *music = qobject_cast<MusicPlayerWindow *>(widget)) {
+            return music;
+        }
+    }
+    return nullptr;
+}
+
+static RadioWindow *findRadioWindow()
+{
+    for (QWidget *widget : QApplication::topLevelWidgets()) {
+        if (auto *radio = qobject_cast<RadioWindow *>(widget)) {
+            return radio;
+        }
+    }
+    return nullptr;
+}
+
+static VideoListWindow *findVideoListWindow()
+{
+    for (QWidget *widget : QApplication::topLevelWidgets()) {
+        if (auto *video = qobject_cast<VideoListWindow *>(widget)) {
+            return video;
+        }
+    }
+    return nullptr;
+}
+
+static bool handleMenuKeyPress()
+{
+    if (PhoneWindow *phone = findPhoneWindow()) {
+        if (phone->isVisible()) {
+            return false;
+        }
+    }
+
+    MainWindow *main = findMainWindow();
+    if (!main) {
+        return false;
+    }
+
+    QWidget *current = nullptr;
+    if (auto *music = findMusicPlayerWindow()) {
+        if (music->isVisible()) current = music;
+    }
+    if (!current) {
+        if (auto *radio = findRadioWindow()) {
+            if (radio->isVisible()) current = radio;
+        }
+    }
+    if (!current) {
+        if (auto *video = findVideoListWindow()) {
+            if (video->isVisible()) current = video;
+        }
+    }
+    if (!current) {
+        if (main->isVisible()) {
+            current = main;
+        } else {
+            for (QWidget *widget : QApplication::topLevelWidgets()) {
+                if (!widget->isVisible()) continue;
+                if (qobject_cast<PhoneWindow *>(widget)) continue;
+                if (widget == main) continue;
+                current = widget;
+                break;
+            }
+        }
+    }
+
+    if (current && current != main) {
+        current->hide();
+    }
+
+    if (qobject_cast<RadioWindow *>(current) || current == main) {
+        qDebug() << "[InputNotifier] KEY_MENU => switch from radio/main to music";
+        QMetaObject::invokeMethod(main, "onMusicUSBClicked", Qt::QueuedConnection);
+        return true;
+    }
+    if (qobject_cast<MusicPlayerWindow *>(current)) {
+        qDebug() << "[InputNotifier] KEY_MENU => switch from music to video";
+        QMetaObject::invokeMethod(main, "onVideoListClicked", Qt::QueuedConnection);
+        return true;
+    }
+    if (qobject_cast<VideoListWindow *>(current)) {
+        qDebug() << "[InputNotifier] KEY_MENU => switch from video to radio";
+        QMetaObject::invokeMethod(main, "onRadioClicked", Qt::QueuedConnection);
+        return true;
+    }
+
+    qDebug() << "[InputNotifier] KEY_MENU => fallback to radio";
+    QMetaObject::invokeMethod(main, "onRadioClicked", Qt::QueuedConnection);
+    return true;
+}
+
+static bool routeMediaKeyToBackground(int qtKey)
+{
+    if (qtKey != Qt::Key_MediaPrevious && qtKey != Qt::Key_MediaNext) {
+        return false;
+    }
+
+    MusicPlayerWindow *music = findMusicPlayerWindow();
+    RadioWindow *radio = findRadioWindow();
+    QWidget *target = nullptr;
+
+    if (music && music->isVisible()) {
+        target = music;
+    } else if (radio && radio->isVisible()) {
+        target = radio;
+    } else if (music) {
+        target = music;
+    } else if (radio) {
+        target = radio;
+    }
+
+    if (!target) {
+        return false;
+    }
+
+    qDebug() << "[InputNotifier] routeMediaKeyToBackground =>" << qtKey << "target=" << target;
+    QApplication::postEvent(target, new QKeyEvent(QEvent::KeyPress, qtKey, Qt::NoModifier));
+    QApplication::postEvent(target, new QKeyEvent(QEvent::KeyRelease, qtKey, Qt::NoModifier));
+    return true;
+}
+
 static void activateDrivingImageMode(int mode)
 {
     if (DrivingImageWindow *drive = findDrivingImageWindow()) {
@@ -741,11 +870,32 @@ int main(int argc, char *argv[]) {
                     case KEY_HOMEPAGE:      qtKey = Qt::Key_HomePage; break;
                     case KEY_HOME:          qtKey = Qt::Key_HomePage; break;
                     case KEY_BACK:          qtKey = Qt::Key_Back;     break;
-                    case KEY_MENU:          qtKey = Qt::Key_Menu;     break;
+                    case KEY_MENU:
+                        if (handleMenuKeyPress()) {
+                            continue;
+                        }
+                        qtKey = Qt::Key_Menu;
+                        break;
+                    case KEY_VOLUMEUP:
+                        qtKey = Qt::Key_VolumeUp;
+                        break;
+                    case KEY_VOLUMEDOWN:
+                        qtKey = Qt::Key_VolumeDown;
+                        break;
                     case KEY_MUTE:          qtKey = Qt::Key_VolumeMute; break;
                     case KEY_PLAYPAUSE:     qtKey = Qt::Key_MediaTogglePlayPause; break;
-                    case KEY_PREVIOUSSONG:  qtKey = Qt::Key_MediaPrevious; break;
-                    case KEY_NEXTSONG:      qtKey = Qt::Key_MediaNext; break;
+                    case KEY_PREVIOUSSONG:
+                        qtKey = Qt::Key_MediaPrevious;
+                        if (routeMediaKeyToBackground(qtKey)) {
+                            continue;
+                        }
+                        break;
+                    case KEY_NEXTSONG:
+                        qtKey = Qt::Key_MediaNext;
+                        if (routeMediaKeyToBackground(qtKey)) {
+                            continue;
+                        }
+                        break;
                     case KEY_PHONE:
                         if (handlePhoneKeyPress()) {
                             continue;
