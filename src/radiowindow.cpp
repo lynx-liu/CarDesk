@@ -295,6 +295,7 @@ void RadioWindow::showEvent(QShowEvent *event)
     T507SdkBridge::setAudioSource(true);
     setMute(false);
     m_preserveAudioOnHide = false;
+    m_audioPreserved = false;
 }
 
 void RadioWindow::hideEvent(QHideEvent *event)
@@ -303,10 +304,17 @@ void RadioWindow::hideEvent(QHideEvent *event)
     if (m_preserveAudioOnHide) {
         qDebug() << "RadioWindow::hideEvent preserving audio source";
         m_preserveAudioOnHide = false;
+        m_audioPreserved = true;
         return;
     }
+    m_audioPreserved = false;
     // 隐藏收音机时切回媒体声道，防止电话呼出时仍然保留收音机音频
     T507SdkBridge::setAudioSource(false);
+}
+
+bool RadioWindow::isAudioActive() const
+{
+    return isVisible() || m_audioPreserved;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

@@ -105,6 +105,7 @@ public:
     void setBluetoothManager(BluetoothManager *manager);
     void pauseIfPlaying();
     void stopIfPlaying();
+    bool isPlaying() const;
 
 protected:
     void closeEvent(QCloseEvent *event) override;

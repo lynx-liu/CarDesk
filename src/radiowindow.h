@@ -19,6 +19,7 @@ public:
 
 public slots:
     void setRadioVolumeDb(int db); // db 范围通常 -60 ~ 24（驱动定义）
+    bool isAudioActive() const;
 
 signals:
     void requestReturnToMain();
@@ -87,7 +88,8 @@ private:
     bool    m_favorite;
     bool    m_scanMode;     // 是否正在自动扫台（连续扫台模式）
     bool    m_preserveAudioOnHide; // 隐藏时保持收音机音频继续播放
-    
+    bool    m_audioPreserved;
+
     // ── 搜台（用户空间逐频点检测）────────────────────────────────────────
     bool    m_seekUpward;       // 搜台方向
     double  m_seekStartFreq;    // 本次搜台起始频率（用于绕圈检测）

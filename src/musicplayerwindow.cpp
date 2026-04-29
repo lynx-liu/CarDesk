@@ -1334,6 +1334,19 @@ void MusicPlayerWindow::stopIfPlaying()
     releaseAudioPlayer();
 }
 
+bool MusicPlayerWindow::isPlaying() const
+{
+    if (!m_isUsbMode && m_bluetoothManager) {
+        return m_btPlaying;
+    }
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        return m_sdkPlaying;
+    }
+#endif
+    return m_mediaPlayer && m_mediaPlayer->state() == QMediaPlayer::PlayingState;
+}
+
 void MusicPlayerWindow::releaseAudioPlayer()
 {
 #ifdef CAR_DESK_USE_T507_SDK

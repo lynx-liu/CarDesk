@@ -757,10 +757,14 @@ static bool routeMediaKeyToBackground(int qtKey)
         target = music;
     } else if (radio && radio->isVisible()) {
         target = radio;
-    } else if (music) {
+    } else if (radio && radio->isAudioActive()) {
+        target = radio;
+    } else if (music && music->isPlaying()) {
         target = music;
     } else if (radio) {
         target = radio;
+    } else if (music) {
+        target = music;
     }
 
     if (!target) {
