@@ -28,6 +28,7 @@ class MainWindow : public QMainWindow {
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+    MediaManager *mediaManager() const;
 
 private slots:
     void onBluetoothClicked();

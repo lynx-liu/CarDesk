@@ -25,6 +25,7 @@
 #include "t507sdkbridge.h"
 #include <linux/input.h>
 #include "mainwindow.h"
+#include "mediamanager.h"
 #include "phonewindow.h"
 #include "drivingimagewindow.h"
 #include "musicplayerwindow.h"
@@ -751,11 +752,19 @@ static bool routeMediaKeyToBackground(int qtKey)
 
     MusicPlayerWindow *music = findMusicPlayerWindow();
     RadioWindow *radio = findRadioWindow();
+    MainWindow *main = findMainWindow();
+    MediaManager::AudioSource currentAudioSource = MediaManager::AudioSource::None;
+    if (main && main->mediaManager()) {
+        currentAudioSource = main->mediaManager()->currentAudioSource();
+    }
+
     QWidget *target = nullptr;
 
     if (music && music->isVisible()) {
         target = music;
     } else if (radio && radio->isVisible()) {
+        target = radio;
+    } else if (currentAudioSource == MediaManager::AudioSource::Radio && radio) {
         target = radio;
     } else if (radio && radio->isAudioActive()) {
         target = radio;

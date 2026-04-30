@@ -64,6 +64,10 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow() {
 }
 
+MediaManager *MainWindow::mediaManager() const {
+    return m_mediaManager;
+}
+
 void MainWindow::setupWindowSize() {
     const DeviceDetect &device = DeviceDetect::instance();
     

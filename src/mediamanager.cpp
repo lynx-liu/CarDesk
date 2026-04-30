@@ -13,6 +13,7 @@
 MediaManager::MediaManager(QObject *parent)
     : QObject(parent)
     , m_isPlaying(false)
+    , m_currentAudioSource(AudioSource::None)
     , m_videoListWindow(nullptr)
     , m_videoPlayWindow(nullptr)
     , m_musicWindow(nullptr)
@@ -72,6 +73,14 @@ void MediaManager::setRadioWindow(RadioWindow *window) {
     m_radioWindow = window;
 }
 
+MediaManager::AudioSource MediaManager::currentAudioSource() const {
+    return m_currentAudioSource;
+}
+
+void MediaManager::setCurrentAudioSource(AudioSource source) {
+    m_currentAudioSource = source;
+}
+
 RadioWindow *MediaManager::radioWindow() const {
     return m_radioWindow;
 }
@@ -91,6 +100,7 @@ void MediaManager::prepareForBluetoothMusic() {
         m_bluetoothManager->setPlaybackMode(1);
     }
     T507SdkBridge::setAudioSource(false);
+    setCurrentAudioSource(AudioSource::BluetoothMusic);
 }
 
 void MediaManager::prepareForNonBluetoothAudio() {
@@ -103,6 +113,7 @@ void MediaManager::prepareForNonBluetoothAudio() {
         m_bluetoothManager->stopMusic();
     }
     T507SdkBridge::setAudioSource(false);
+    setCurrentAudioSource(AudioSource::Media);
 }
 
 void MediaManager::prepareForRadioAudio() {
@@ -118,6 +129,7 @@ void MediaManager::prepareForRadioAudio() {
         m_bluetoothManager->stopMusic();
     }
     T507SdkBridge::setAudioSource(true);
+    setCurrentAudioSource(AudioSource::Radio);
 }
 
 void MediaManager::openMusicPlayer() {

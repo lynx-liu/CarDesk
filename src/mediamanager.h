@@ -16,6 +16,13 @@ class MediaManager : public QObject {
     Q_OBJECT
 
 public:
+    enum class AudioSource {
+        None,
+        Radio,
+        Media,
+        BluetoothMusic
+    };
+
     explicit MediaManager(QObject *parent = nullptr);
     ~MediaManager();
     
@@ -34,6 +41,8 @@ public:
     VideoListWindow *videoListWindow() const;
     MusicPlayerWindow *musicWindow() const;
     RadioWindow *radioWindow() const;
+    AudioSource currentAudioSource() const;
+    void setCurrentAudioSource(AudioSource source);
     
     QStringList getVideoFiles(const QString &directory = "");
     QStringList getAudioFiles(const QString &directory = "");
@@ -49,6 +58,7 @@ signals:
 private:
     QString m_currentMediaFile;
     bool m_isPlaying;
+    AudioSource m_currentAudioSource;
     VideoListWindow *m_videoListWindow;
     VideoPlayWindow *m_videoPlayWindow;
     MusicPlayerWindow *m_musicWindow;
