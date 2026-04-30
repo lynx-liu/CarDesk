@@ -1294,13 +1294,6 @@ void VideoPlayWindow::resumeAfterInterruption()
             if (XPlayerStart(m_sdkPlayer) == 0) {
                 m_sdkPlaying = true;
                 setPlayButtonState(true);
-                if (m_resumeInterruptPositionMs > 0) {
-                    QTimer::singleShot(400, this, [this]() {
-                        if (m_sdkPlayer && m_sdkPlaying) {
-                            XPlayerSeekTo(m_sdkPlayer, m_resumeInterruptPositionMs, AW_SEEK_CLOSEST_SYNC);
-                        }
-                    });
-                }
             }
         }
     } else
@@ -1308,9 +1301,6 @@ void VideoPlayWindow::resumeAfterInterruption()
     {
         if (m_mediaPlayer) {
             T507SdkBridge::setAudioSource(false);
-            if (m_resumeInterruptPositionMs > 0 && qAbs(static_cast<int>(m_mediaPlayer->position()) - m_resumeInterruptPositionMs) > 1000) {
-                m_mediaPlayer->setPosition(m_resumeInterruptPositionMs);
-            }
             m_mediaPlayer->play();
             setPlayButtonState(true);
         }

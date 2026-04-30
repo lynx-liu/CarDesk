@@ -1379,13 +1379,6 @@ void MusicPlayerWindow::resumeAfterInterruption()
         if (m_sdkPlayer && !m_sdkPlaying) {
             if (XPlayerStart(m_sdkPlayer) == 0) {
                 m_sdkPlaying = true;
-                if (m_resumeInterruptionPositionMs > 0) {
-                    QTimer::singleShot(400, this, [this]() {
-                        if (m_sdkPlayer && m_sdkPlaying) {
-                            XPlayerSeekTo(m_sdkPlayer, static_cast<int>(m_resumeInterruptionPositionMs), AW_SEEK_CLOSEST_SYNC);
-                        }
-                    });
-                }
                 if (m_sdkTimer && !m_sdkTimer->isActive()) {
                     m_sdkTimer->start();
                 }
@@ -1397,9 +1390,6 @@ void MusicPlayerWindow::resumeAfterInterruption()
 #endif
 
     if (m_mediaPlayer) {
-        if (m_resumeInterruptionPositionMs > 0 && qAbs(m_mediaPlayer->position() - m_resumeInterruptionPositionMs) > 1000) {
-            m_mediaPlayer->setPosition(m_resumeInterruptionPositionMs);
-        }
         m_mediaPlayer->play();
         setPlayButtonState(true);
     }
