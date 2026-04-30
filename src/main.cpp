@@ -31,6 +31,7 @@
 #include "musicplayerwindow.h"
 #include "radiowindow.h"
 #include "videolistwindow.h"
+#include "videoplaywindow.h"
 #include "devicedetect.h"
 #include "appsignals.h"
 
@@ -750,6 +751,16 @@ static bool routeMediaKeyToBackground(int qtKey)
         return false;
     }
 
+    QWidget *activeWindow = QApplication::activeWindow();
+    if (!activeWindow) {
+        for (QWidget *tw : QApplication::topLevelWidgets()) {
+            if (tw->isVisible() && tw->isWindow()) { activeWindow = tw; break; }
+        }
+    }
+    if (activeWindow && qobject_cast<VideoPlayWindow *>(activeWindow)) {
+        return false;
+    }
+
     MusicPlayerWindow *music = findMusicPlayerWindow();
     RadioWindow *radio = findRadioWindow();
     MainWindow *main = findMainWindow();
@@ -769,10 +780,6 @@ static bool routeMediaKeyToBackground(int qtKey)
     } else if (radio && radio->isAudioActive()) {
         target = radio;
     } else if (music && music->isPlaying()) {
-        target = music;
-    } else if (radio) {
-        target = radio;
-    } else if (music) {
         target = music;
     }
 
