@@ -46,6 +46,7 @@ private slots:
     void onBluetoothPhonebookDownloadFinished();
     void onBluetoothCallLogDownloadFinished();
     void onBluetoothDeviceConnected(const QString &name);
+    void onBluetoothDeviceDisconnected();
 
 private:
     void setupUI();

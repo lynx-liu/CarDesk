@@ -1556,6 +1556,7 @@ void MusicPlayerWindow::onBluetoothDeviceConnected(const QString &name)
     if (m_isUsbMode) return;
     if (m_nowPlayingLabel) {
         m_nowPlayingLabel->setText(QStringLiteral("蓝牙音乐"));
+        m_nowPlayingLabel->setStyleSheet("color: #fff; font-size: 48px; background: transparent;");
     }
 }
 
@@ -1563,7 +1564,8 @@ void MusicPlayerWindow::onBluetoothDeviceDisconnected()
 {
     if (m_isUsbMode) return;
     if (m_nowPlayingLabel) {
-        m_nowPlayingLabel->setText(QStringLiteral("蓝牙音乐"));
+        m_nowPlayingLabel->setText(QStringLiteral("蓝牙未链接"));
+        m_nowPlayingLabel->setStyleSheet("color: #FF4D4F; font-size: 48px; background: transparent;");
     }
     if (m_singerLabel) m_singerLabel->setText("--");
     if (m_albumLabel) m_albumLabel->setText("--");

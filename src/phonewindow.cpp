@@ -141,10 +141,7 @@ void PhoneWindow::setupUI() {
         connect(m_bluetoothManager, &BluetoothManager::phonebookDownloadFinished, this, &PhoneWindow::onBluetoothPhonebookDownloadFinished);
         connect(m_bluetoothManager, &BluetoothManager::callLogDownloadFinished, this, &PhoneWindow::onBluetoothCallLogDownloadFinished);
         connect(m_bluetoothManager, &BluetoothManager::deviceConnected, this, &PhoneWindow::onBluetoothDeviceConnected);
-
-        if (m_bluetoothManager->isConnected()) {
-            onBluetoothDeviceConnected(m_bluetoothManager->getConnectedDeviceName());
-        }
+        connect(m_bluetoothManager, &BluetoothManager::deviceDisconnected, this, &PhoneWindow::onBluetoothDeviceDisconnected);
     }
 
     m_tabStack = new QStackedWidget(central);
@@ -157,11 +154,24 @@ void PhoneWindow::setupUI() {
     m_numberEdit = new QLineEdit(dialPage);
     m_numberEdit->setPlaceholderText(QStringLiteral("请输入电话号码"));
     m_numberEdit->setFixedSize(816, 72);
-    m_numberEdit->setStyleSheet("QLineEdit{color:#fff;font-size:48px;background:rgba(255,255,255,0.1);border:1px solid #0068FF;padding:0 20px;}");
+    m_numberEdit->setStyleSheet("QLineEdit{color:#fff;font-size:48px;background:rgba(255,255,255,0.1);border:1px solid #0068FF;padding:0 20px;} QLineEdit::placeholderText { color: #8c8c8c; }");
     if (!s_cachedDialNumber.isEmpty()) {
         m_numberEdit->setText(s_cachedDialNumber);
     }
     dial->addWidget(m_numberEdit);
+
+    if (m_bluetoothManager) {
+        if (m_bluetoothManager->isConnected()) {
+            onBluetoothDeviceConnected(m_bluetoothManager->getConnectedDeviceName());
+        } else {
+            onBluetoothDeviceDisconnected();
+        }
+    } else {
+        m_numberEdit->clear();
+        m_numberEdit->setEnabled(false);
+        m_numberEdit->setStyleSheet("QLineEdit{color:#FF4D4F;font-size:48px;background:rgba(255,255,255,0.1);border:1px solid #FF4D4F;padding:0 20px;} QLineEdit::placeholderText { color: #FF4D4F; }");
+        m_numberEdit->setPlaceholderText(QStringLiteral("蓝牙未链接"));
+    }
 
     QWidget *contentWrap = new QWidget(dialPage);
     QHBoxLayout *contentLayout = new QHBoxLayout(contentWrap);
@@ -764,6 +774,12 @@ void PhoneWindow::onBluetoothDeviceConnected(const QString &name) {
         return;
     }
 
+    if (m_numberEdit) {
+        m_numberEdit->setEnabled(true);
+        m_numberEdit->setStyleSheet("QLineEdit{color:#fff;font-size:48px;background:rgba(255,255,255,0.1);border:1px solid #0068FF;padding:0 20px;} QLineEdit::placeholderText { color: #8c8c8c; }");
+        m_numberEdit->setPlaceholderText(QStringLiteral("请输入要拨的号码"));
+    }
+
     const QString connectedAddress = m_bluetoothManager->getConnectedDeviceAddress().trimmed().toUpper();
     const bool samePhonebookDevice = !connectedAddress.isEmpty() && connectedAddress == m_lastSyncedDeviceAddress;
     const bool sameCallLogDevice = !connectedAddress.isEmpty() && connectedAddress == m_lastSyncedCallLogDeviceAddress;
@@ -784,6 +800,15 @@ void PhoneWindow::onBluetoothDeviceConnected(const QString &name) {
         if (!sameCallLogDevice) {
             startCallLogSync();
         }
+    }
+}
+
+void PhoneWindow::onBluetoothDeviceDisconnected() {
+    if (m_numberEdit) {
+        m_numberEdit->clear();
+        m_numberEdit->setEnabled(false);
+        m_numberEdit->setStyleSheet("QLineEdit{color:#FF4D4F;font-size:48px;background:rgba(255,255,255,0.1);border:1px solid #FF4D4F;padding:0 20px;} QLineEdit::placeholderText { color: #FF4D4F; }");
+        m_numberEdit->setPlaceholderText(QStringLiteral("蓝牙未链接"));
     }
 }
 
