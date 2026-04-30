@@ -105,6 +105,7 @@ private:
     BluetoothManager *m_bluetoothManager;
     bool m_wasPlayingBeforeSeek;
     bool m_pausedForHome;      // HOME 键退出时置位，供 tryResumeVideo 判断
+    bool m_pausedForOcclusion; // 其他窗口覆盖时暂停，恢复时继续播放
     QString m_resumePath;      // HOME 退出前的视频文件路径
     int m_resumePositionMs;    // HOME 退出前的播放位置（ms）
 

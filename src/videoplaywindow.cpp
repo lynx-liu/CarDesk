@@ -145,6 +145,7 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     , m_bluetoothManager(nullptr)
     , m_wasPlayingBeforeSeek(false)
     , m_pausedForHome(false)
+    , m_pausedForOcclusion(false)
     , m_resumePositionMs(0)
 #ifdef CAR_DESK_USE_T507_SDK
     , m_sdkPlayer(nullptr)
@@ -827,6 +828,47 @@ void VideoPlayWindow::handleUserActivity()
 
 bool VideoPlayWindow::event(QEvent *event)
 {
+    if (event->type() == QEvent::ActivationChange) {
+        if (!isActiveWindow()) {
+            if (isVisible()) {
+#ifdef CAR_DESK_USE_T507_SDK
+                if ((m_useSdkPlayer && m_sdkPlayer && m_sdkPlaying) ||
+                    (!m_useSdkPlayer && m_mediaPlayer && m_mediaPlayer->state() == QMediaPlayer::PlayingState)) {
+                    m_pausedForOcclusion = true;
+                    pauseIfPlaying();
+                }
+#else
+                if (m_mediaPlayer && m_mediaPlayer->state() == QMediaPlayer::PlayingState) {
+                    m_pausedForOcclusion = true;
+                    pauseIfPlaying();
+                }
+#endif
+            }
+        } else if (m_pausedForOcclusion) {
+            m_pausedForOcclusion = false;
+#ifdef CAR_DESK_USE_T507_SDK
+            if (m_useSdkPlayer) {
+                if (m_sdkPlayer) {
+                    XPlayerStart(m_sdkPlayer);
+                    m_sdkPlaying = true;
+                    setPlayButtonState(true);
+                    if (m_sdkTimer && !m_sdkTimer->isActive()) {
+                        m_sdkTimer->start();
+                    }
+                } else {
+                    onPlayVideo();
+                }
+            } else
+#endif
+            {
+                if (m_mediaPlayer) {
+                    T507SdkBridge::setAudioSource(false);
+                    m_mediaPlayer->play();
+                }
+            }
+        }
+    }
+
     switch (event->type()) {
     case QEvent::MouseButtonPress:
     case QEvent::MouseButtonRelease:
