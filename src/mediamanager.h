@@ -33,6 +33,8 @@ public:
     void prepareForBluetoothMusic();
     void prepareForNonBluetoothAudio();
     void prepareForRadioAudio();
+    void pausePlaybackForInterruption();
+    void resumePlaybackAfterInterruption();
     void playMedia(const QString &filePath);
     void stopPlayback();
     void pausePlayback();
@@ -59,6 +61,9 @@ private:
     QString m_currentMediaFile;
     bool m_isPlaying;
     AudioSource m_currentAudioSource;
+    AudioSource m_interruptedAudioSource;
+    bool m_resumeAfterInterruption;
+    bool m_resumeVideoAfterInterruption;
     VideoListWindow *m_videoListWindow;
     VideoPlayWindow *m_videoPlayWindow;
     MusicPlayerWindow *m_musicWindow;

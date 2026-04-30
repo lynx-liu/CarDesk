@@ -14,6 +14,9 @@ MediaManager::MediaManager(QObject *parent)
     : QObject(parent)
     , m_isPlaying(false)
     , m_currentAudioSource(AudioSource::None)
+    , m_interruptedAudioSource(AudioSource::None)
+    , m_resumeAfterInterruption(false)
+    , m_resumeVideoAfterInterruption(false)
     , m_videoListWindow(nullptr)
     , m_videoPlayWindow(nullptr)
     , m_musicWindow(nullptr)
@@ -130,6 +133,65 @@ void MediaManager::prepareForRadioAudio() {
     }
     T507SdkBridge::setAudioSource(true);
     setCurrentAudioSource(AudioSource::Radio);
+}
+
+void MediaManager::pausePlaybackForInterruption() {
+    if (m_resumeAfterInterruption) {
+        return;
+    }
+
+    if (m_radioWindow && m_radioWindow->isAudioActive()) {
+        qDebug() << "MediaManager: interrupting radio playback";
+        m_interruptedAudioSource = AudioSource::Radio;
+        m_resumeAfterInterruption = true;
+        m_radioWindow->forceStopAudio();
+        return;
+    }
+
+    if (m_musicWindow && m_musicWindow->isPlaying()) {
+        qDebug() << "MediaManager: interrupting music playback";
+        m_interruptedAudioSource = (m_currentAudioSource == AudioSource::BluetoothMusic)
+            ? AudioSource::BluetoothMusic
+            : AudioSource::Media;
+        m_resumeAfterInterruption = true;
+        m_musicWindow->pauseIfPlaying();
+        return;
+    }
+
+    if (m_videoListWindow) {
+        qDebug() << "MediaManager: interrupting video playback";
+        m_resumeVideoAfterInterruption = true;
+        m_videoListWindow->pauseVideoIfPlaying();
+    }
+}
+
+void MediaManager::resumePlaybackAfterInterruption() {
+    qDebug() << "MediaManager: resuming interrupted playback";
+    if (m_resumeAfterInterruption) {
+        switch (m_interruptedAudioSource) {
+    case AudioSource::Radio:
+        if (m_radioWindow) {
+            T507SdkBridge::setAudioSource(true);
+        }
+        break;
+    case AudioSource::Media:
+    case AudioSource::BluetoothMusic:
+        if (m_musicWindow) {
+            m_musicWindow->resumeAfterInterruption();
+        }
+        break;
+    default:
+        break;
+    }
+    m_interruptedAudioSource = AudioSource::None;
+    m_resumeAfterInterruption = false;
+    
+    if (m_resumeVideoAfterInterruption && m_videoListWindow) {
+        m_videoListWindow->resumeVideoAfterInterruption();
+    }
+    m_resumeVideoAfterInterruption = false;
+}
+
 }
 
 void MediaManager::openMusicPlayer() {

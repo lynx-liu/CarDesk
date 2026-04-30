@@ -360,6 +360,9 @@ void MainWindow::onBluetoothCallStatusChanged(int status) {
             }
             restorePreviousWindow();
         }
+        if (m_mediaManager) {
+            m_mediaManager->resumePlaybackAfterInterruption();
+        }
         // 如果栈为空，则表示 PhoneWindow 本来就在前台，保留 PhoneWindow，PhoneWindow 自身会恢复到之前的 tab
         return;
     }

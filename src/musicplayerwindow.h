@@ -106,6 +106,7 @@ public:
     void setBluetoothManager(BluetoothManager *manager);
     void setMediaManager(MediaManager *manager);
     void pauseIfPlaying();
+    void resumeAfterInterruption();
     void stopIfPlaying();
     bool isPlaying() const;
 
@@ -227,6 +228,8 @@ private:
     BluetoothManager *m_bluetoothManager = nullptr;
     MediaManager *m_mediaManager = nullptr;
     bool        m_btPlaying           = false;
+    bool        m_pausedForInterruption = false;
+    qint64      m_resumeInterruptionPositionMs = 0;
     QStringList m_favoriteFiles;                // 由播放页添加到收藏的音频文件
     bool        m_isUsbMode          = true;
     bool        m_preservePlaybackOnHide = false;

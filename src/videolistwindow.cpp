@@ -338,6 +338,15 @@ void VideoListWindow::pauseVideoIfPlaying()
     }
 }
 
+bool VideoListWindow::resumeVideoAfterInterruption()
+{
+    if (m_playWindow) {
+        m_playWindow->resumeAfterInterruption();
+        return true;
+    }
+    return false;
+}
+
 QWidget *VideoListWindow::videoPlayWindow() const
 {
     return m_playWindow;

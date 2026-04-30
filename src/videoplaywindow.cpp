@@ -147,6 +147,7 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     , m_pausedForHome(false)
     , m_pausedForOcclusion(false)
     , m_resumePositionMs(0)
+    , m_resumeInterruptPositionMs(0)
 #ifdef CAR_DESK_USE_T507_SDK
     , m_sdkPlayer(nullptr)
     , m_sdkSoundCtrl(nullptr)
@@ -1266,6 +1267,11 @@ void VideoPlayWindow::pauseIfPlaying()
 {
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer && m_sdkPlayer && m_sdkPlaying) {
+        int curPos = 0;
+        if (XPlayerGetCurrentPosition(m_sdkPlayer, &curPos) == 0) {
+            m_resumeInterruptPositionMs = curPos;
+        }
+        m_pausedForOcclusion = true;
         XPlayerPause(m_sdkPlayer);
         m_sdkPlaying = false;
         setPlayButtonState(false);
@@ -1273,9 +1279,44 @@ void VideoPlayWindow::pauseIfPlaying()
     }
 #endif
     if (m_mediaPlayer && m_mediaPlayer->state() == QMediaPlayer::PlayingState) {
+        m_resumeInterruptPositionMs = static_cast<int>(m_mediaPlayer->position());
+        m_pausedForOcclusion = true;
         m_mediaPlayer->pause();
         setPlayButtonState(false);
     }
+}
+
+void VideoPlayWindow::resumeAfterInterruption()
+{
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        if (m_sdkPlayer && !m_sdkPlaying) {
+            if (XPlayerStart(m_sdkPlayer) == 0) {
+                m_sdkPlaying = true;
+                setPlayButtonState(true);
+                if (m_resumeInterruptPositionMs > 0) {
+                    QTimer::singleShot(400, this, [this]() {
+                        if (m_sdkPlayer && m_sdkPlaying) {
+                            XPlayerSeekTo(m_sdkPlayer, m_resumeInterruptPositionMs, AW_SEEK_CLOSEST_SYNC);
+                        }
+                    });
+                }
+            }
+        }
+    } else
+#endif
+    {
+        if (m_mediaPlayer) {
+            T507SdkBridge::setAudioSource(false);
+            if (m_resumeInterruptPositionMs > 0 && qAbs(static_cast<int>(m_mediaPlayer->position()) - m_resumeInterruptPositionMs) > 1000) {
+                m_mediaPlayer->setPosition(m_resumeInterruptPositionMs);
+            }
+            m_mediaPlayer->play();
+            setPlayButtonState(true);
+        }
+    }
+    m_pausedForOcclusion = false;
+    m_resumeInterruptPositionMs = 0;
 }
 
 void VideoPlayWindow::hideEvent(QHideEvent *event)

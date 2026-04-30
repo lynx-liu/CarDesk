@@ -600,6 +600,8 @@ MusicPlayerWindow::MusicPlayerWindow(QWidget *parent)
     , m_mediaPlayer(new QMediaPlayer(this))
     , m_bluetoothManager(nullptr)
     , m_btPlaying(false)
+    , m_pausedForInterruption(false)
+    , m_resumeInterruptionPositionMs(0)
 {
     setWindowTitle("音乐播放");
     setFixedSize(1280, 720);
@@ -1312,6 +1314,11 @@ void MusicPlayerWindow::pauseIfPlaying()
 
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer && m_sdkPlayer && m_sdkPlaying) {
+        int curPos = 0;
+        if (XPlayerGetCurrentPosition(m_sdkPlayer, &curPos) == 0) {
+            m_resumeInterruptionPositionMs = curPos;
+        }
+        m_pausedForInterruption = true;
         XPlayerPause(m_sdkPlayer);
         m_sdkPlaying = false;
         if (m_sdkTimer) m_sdkTimer->stop();
@@ -1321,6 +1328,8 @@ void MusicPlayerWindow::pauseIfPlaying()
 #endif
 
     if (m_mediaPlayer && m_mediaPlayer->state() == QMediaPlayer::PlayingState) {
+        m_resumeInterruptionPositionMs = m_mediaPlayer->position();
+        m_pausedForInterruption = true;
         m_mediaPlayer->pause();
         setPlayButtonState(false);
     }
@@ -1351,6 +1360,51 @@ bool MusicPlayerWindow::isPlaying() const
     }
 #endif
     return m_mediaPlayer && m_mediaPlayer->state() == QMediaPlayer::PlayingState;
+}
+
+void MusicPlayerWindow::resumeAfterInterruption()
+{
+    if (!m_isUsbMode && m_bluetoothManager) {
+        if (!m_btPlaying) {
+            if (m_bluetoothManager->playPauseMusic()) {
+                m_btPlaying = true;
+                setPlayButtonState(true);
+            }
+        }
+        return;
+    }
+
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        if (m_sdkPlayer && !m_sdkPlaying) {
+            if (XPlayerStart(m_sdkPlayer) == 0) {
+                m_sdkPlaying = true;
+                if (m_resumeInterruptionPositionMs > 0) {
+                    QTimer::singleShot(400, this, [this]() {
+                        if (m_sdkPlayer && m_sdkPlaying) {
+                            XPlayerSeekTo(m_sdkPlayer, static_cast<int>(m_resumeInterruptionPositionMs), AW_SEEK_CLOSEST_SYNC);
+                        }
+                    });
+                }
+                if (m_sdkTimer && !m_sdkTimer->isActive()) {
+                    m_sdkTimer->start();
+                }
+                setPlayButtonState(true);
+            }
+        }
+        return;
+    }
+#endif
+
+    if (m_mediaPlayer) {
+        if (m_resumeInterruptionPositionMs > 0 && qAbs(m_mediaPlayer->position() - m_resumeInterruptionPositionMs) > 1000) {
+            m_mediaPlayer->setPosition(m_resumeInterruptionPositionMs);
+        }
+        m_mediaPlayer->play();
+        setPlayButtonState(true);
+    }
+    m_pausedForInterruption = false;
+    m_resumeInterruptionPositionMs = 0;
 }
 
 void MusicPlayerWindow::releaseAudioPlayer()

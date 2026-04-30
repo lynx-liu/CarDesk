@@ -36,6 +36,9 @@
 #include "appsignals.h"
 
 // ── 背光控制（POWER 键关/亮屏，SLEEP 键关机，具体 dispdbg 操作在 backlight.cpp）─
+static MainWindow *findMainWindow();
+static DrivingImageWindow *findDrivingImageWindow();
+
 class ScreenBlanker : public QObject {
 public:
     static ScreenBlanker *instance() {
@@ -46,6 +49,11 @@ public:
 
     void blank() {
         if (m_blanked) return;
+        if (MainWindow *main = findMainWindow()) {
+            if (main->mediaManager()) {
+                main->mediaManager()->pausePlaybackForInterruption();
+            }
+        }
         // 保存当前亮度（来自 Backlight 缓存或 sysfs）
         m_savedBrightness = Backlight::get();
         qDebug() << "[ScreenBlanker] blank: saved brightness=" << m_savedBrightness;
@@ -57,6 +65,11 @@ public:
         m_blanked = false;
         Backlight::set(m_savedBrightness);
         qDebug() << "[ScreenBlanker] unblank: restore brightness=" << m_savedBrightness;
+        if (MainWindow *main = findMainWindow()) {
+            if (main->mediaManager()) {
+                main->mediaManager()->resumePlaybackAfterInterruption();
+            }
+        }
     }
     void toggle() {
         if (m_blanked) unblank(); else blank();
@@ -86,6 +99,12 @@ public:
         if (ScreenBlanker::instance()->isBlanked()) {
             ScreenBlanker::instance()->unblank();
         }
+        if (DrivingImageWindow *drive = findDrivingImageWindow()) {
+            if (drive->isVisible()) {
+                qDebug() << "[ScreenClockOverlay] closing driving image before showing clock";
+                drive->close();
+            }
+        }
         pauseBackgroundPlayback();
         updateMode();
         if (!isVisible()) {
@@ -102,18 +121,9 @@ public:
     }
 
     void pauseBackgroundPlayback() {
-        for (QWidget *widget : QApplication::topLevelWidgets()) {
-            if (auto *music = qobject_cast<MusicPlayerWindow *>(widget)) {
-                music->pauseIfPlaying();
-            }
-            if (auto *radio = qobject_cast<RadioWindow *>(widget)) {
-                radio->forceStopAudio();
-            }
-            if (auto *videoList = qobject_cast<VideoListWindow *>(widget)) {
-                videoList->pauseVideoIfPlaying();
-            }
-            if (auto *videoPlay = qobject_cast<VideoPlayWindow *>(widget)) {
-                videoPlay->pauseIfPlaying();
+        if (MainWindow *main = findMainWindow()) {
+            if (main->mediaManager()) {
+                main->mediaManager()->pausePlaybackForInterruption();
             }
         }
     }
@@ -122,6 +132,11 @@ public:
         if (isVisible()) {
             hide();
             m_updateTimer.stop();
+            if (MainWindow *main = findMainWindow()) {
+                if (main->mediaManager()) {
+                    main->mediaManager()->resumePlaybackAfterInterruption();
+                }
+            }
         }
     }
 
@@ -551,32 +566,6 @@ static void configureApplicationFont(QApplication &app) {
     font.setStyleStrategy(QFont::PreferAntialias);
     app.setFont(font);
     qDebug() << "Using application font:" << family;
-}
-
-static bool supportsKeyCode(int fd, int keyCode)
-{
-    const int keyBytes = (KEY_MAX + 1 + 7) / 8;
-    unsigned char keys[keyBytes];
-    std::memset(keys, 0, sizeof(keys));
-    if (::ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keys)), keys) < 0) {
-        return false;
-    }
-    return keys[keyCode / 8] & (1 << (keyCode % 8));
-}
-
-static bool hasHardwareKeyDevice(int fd)
-{
-    if (!supportsKeyCode(fd, KEY_POWER) && !supportsKeyCode(fd, KEY_BACK) &&
-        !supportsKeyCode(fd, KEY_HOME) && !supportsKeyCode(fd, KEY_HOMEPAGE) &&
-        !supportsKeyCode(fd, KEY_VOLUMEUP) && !supportsKeyCode(fd, KEY_VOLUMEDOWN) &&
-        !supportsKeyCode(fd, KEY_MENU) && !supportsKeyCode(fd, KEY_SLEEP) &&
-        !supportsKeyCode(fd, KEY_A) && !supportsKeyCode(fd, KEY_B) &&
-        !supportsKeyCode(fd, KEY_C) && !supportsKeyCode(fd, KEY_D) &&
-        !supportsKeyCode(fd, KEY_K) && !supportsKeyCode(fd, KEY_L) &&
-        !supportsKeyCode(fd, KEY_M) && !supportsKeyCode(fd, KEY_N)) {
-        return false;
-    }
-    return true;
 }
 
 static QStringList findInputEventDevices()
