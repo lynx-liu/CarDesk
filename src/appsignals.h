@@ -3,7 +3,6 @@
 
 #include <QObject>
 #include <QApplication>
-#include <QStringList>
 
 /**
  * AppSignals — 应用级信号总线（单例）
@@ -23,21 +22,12 @@ public:
     }
 
     /**
-     * Run `amixer` with given args and refresh system volume level afterwards.
-     * This will emit `volumeLevelChanged(int)` after reading current volume.
-     */
-    static void runAmixer(const QStringList &args, QObject *parent = nullptr);
-
     /** Change volume up/down by one app level. */
     static void changeVolume(int delta, QObject *parent = nullptr);
     /** Set the app volume level directly (0..10). */
     static void setVolumeLevel(int level, QObject *parent = nullptr);
     /** Toggle mute on/off based on the current app volume level. */
     static void toggleMute(QObject *parent = nullptr);
-    /** Convert app volume 0..10 into digital volume control value (0..63). */
-    static int volumeDigitalFromLevel(int level);
-    /** Convert amixer digital volume value into the nearest app volume 0..10. */
-    static int volumeLevelFromDigital(int digitalValue);
 
 signals:
     /** 音量等级变化（0–10 整数等级，对应 amixer 0-100% 归一化）*/

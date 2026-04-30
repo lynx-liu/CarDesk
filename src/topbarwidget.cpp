@@ -148,18 +148,7 @@ void TopBarRightWidget::onVolumeBtnClicked()
             QString("QPushButton { border: none; background-image: url(%1); "
                     "background-repeat: no-repeat; background-position: center; }").arg(icon));
     }
-    if (m_isMuted) {
-        const QVariant cur = qApp->property("appVolumeLevel");
-        const int curLv = cur.isValid() ? cur.toInt() : 0;
-        qApp->setProperty("appVolumePrevLevel", curLv);
-        qApp->setProperty("appVolumeLevel", 0);
-        AppSignals::runAmixer({"sset", "digital volume", QString::number(63)}, this);
-    } else {
-        const QVariant prev = qApp->property("appVolumePrevLevel");
-        const int restore = prev.isValid() ? prev.toInt() : 10;
-        qApp->setProperty("appVolumeLevel", restore);
-        AppSignals::runAmixer({"sset", "digital volume", QString::number(AppSignals::volumeDigitalFromLevel(restore))}, this);
-    }
+    AppSignals::toggleMute(this);
 }
 
 void TopBarRightWidget::onClockTick()

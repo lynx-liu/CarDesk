@@ -1003,10 +1003,10 @@ QWidget *SystemSettingWindow::createSoundPage()
     connect(slider, &QSlider::valueChanged, tips, [tips](int v) {
         tips->setText(QString::number(v));
     });
-    // 用户拖动滑块时，设置系统音量（使用 amixer）
+    // 用户拖动滑块时，设置系统音量（统一使用 TM2313 / AppSignals）
     connect(slider, &QSlider::valueChanged, this, [slider](int v) {
-        // 将 0..10 映射到数字音量值 0..63 转发给 amixer
-        AppSignals::runAmixer({"sset", "digital volume", QString::number(AppSignals::volumeDigitalFromLevel(v))}, slider);
+        // 将 0..10 映射到系统音量等级，统一使用 TM2313 / AppSignals 中央控制。
+        AppSignals::setVolumeLevel(v, slider);
     });
     // 当外部（按键或其它窗口）改变音量时，更新滑块（避免产生 valueChanged 循环）
     connect(AppSignals::instance(), &AppSignals::volumeLevelChanged, this, [slider, tips](int level){

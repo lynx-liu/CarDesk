@@ -22,6 +22,9 @@ public:
     // 切换 TM2313 音频输入源。
     // radioMode=true  → STEREO_1（IN1，收音承接 TEA685x 模拟输出）
     // radioMode=false → STEREO_2（IN2，媒体声道 SoC DAC）
-    static void setAudioSource(bool radioMode);};
+    static void setAudioSource(bool radioMode);
+    // 设置 TM2313 输出音量增益。level 0..10 对应最小到最大系统音量。
+    static void setVolumeLevel(int level);
+};
 
 #endif // T507SDKBRIDGE_H

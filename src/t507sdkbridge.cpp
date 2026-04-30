@@ -10,11 +10,24 @@
 
 // TM2313 ioctl 命令（来自内核驱动 tm2313.h，用户空间直接引用数值）
 static const int TM2313_LOUDNESS               = 10000; // arg: 1=开, 0=关
+static const int TM2313_VOLUME_OUT_GAIN        = 10001; // arg: 0..63, 0=max gain, 63=min gain
 static const int TM2313_TREBLE                 = 10002; // arg: 0-15，TDA7313编码(0=+14dB,7=0dB,8=-2dB,15=-14dB)
 static const int TM2313_BASS                   = 10003; // arg: 同上
 static const int TM2313_MUTE_ENABLE            = 10008; // arg: 1=取消静音, 0=静音
 static const int TM2313_INPUT_SWITCH_STEREO_1  = 10011; // 切换到 IN1（收音机 / TEA685x 模拟输出）
 static const int TM2313_INPUT_SWITCH_STEREO_2  = 10012; // 切换到 IN2（媒体声道 / SoC DAC，默认）
+
+static int volumeGainFromLevel(int level)
+{
+    const int clamped = qBound(0, level, 10);
+    if (clamped == 0) {
+        return 0; // level0 直接静音，不使用 gain 表
+    }
+    // 使用旧音量等级映射：level1..level10 对应 gain 值
+    // 1:0x29  2:0x25  3:0x20  4:0x1A  5:0x15  6:0x10  7:0x09  8:0x05  9:0x00 10:0x00
+    static const int gainTable[10] = {0x29, 0x25, 0x20, 0x1A, 0x15, 0x10, 0x09, 0x05, 0x00, 0x00};
+    return gainTable[clamped - 1];
+}
 
 // 声场预设表：{treble(0-15), bass(0-15), loudness(0/1)}
 // 编码参考 TDA7313 兼容规范：0=+14dB, 1=+12dB ... 7=0dB(flat), 8=-2dB ... 15=-14dB
@@ -91,6 +104,34 @@ void T507SdkBridge::setAudioSource(bool radioMode)
     Q_UNUSED(radioMode)
     Q_UNUSED(TM2313_INPUT_SWITCH_STEREO_1)
     Q_UNUSED(TM2313_INPUT_SWITCH_STEREO_2)
+    Q_UNUSED(TM2313_MUTE_ENABLE)
+#endif
+}
+
+void T507SdkBridge::setVolumeLevel(int level)
+{
+    const int clampedLevel = qBound(0, level, 10);
+    const int gainValue = volumeGainFromLevel(clampedLevel);
+    qDebug() << "[TM2313] setVolumeLevel:" << clampedLevel << "gainValue:" << gainValue;
+#ifdef CAR_DESK_DEVICE_CARUNIT
+    int fd = ::open("/dev/tm2313", O_RDWR);
+    if (fd < 0) {
+        qWarning() << "[TM2313] Cannot open /dev/tm2313";
+        return;
+    }
+    if (clampedLevel == 0) {
+        qDebug() << "[TM2313] mute";
+        ::ioctl(fd, TM2313_MUTE_ENABLE, 0);
+    } else {
+        qDebug() << "[TM2313] unmute";
+        ::ioctl(fd, TM2313_MUTE_ENABLE, 1);
+        ::ioctl(fd, TM2313_VOLUME_OUT_GAIN, (unsigned long)gainValue);
+    }
+    ::close(fd);
+#else
+    Q_UNUSED(clampedLevel)
+    Q_UNUSED(gainValue)
+    Q_UNUSED(TM2313_VOLUME_OUT_GAIN)
     Q_UNUSED(TM2313_MUTE_ENABLE)
 #endif
 }

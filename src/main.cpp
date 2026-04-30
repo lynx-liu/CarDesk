@@ -300,43 +300,13 @@ private:
     QTimer *m_hideTimer;
 };
 
-static int parseDigitalVolumeOutput(const QString &out)
-{
-    const int lb = out.lastIndexOf('[');
-    const QString before = (lb >= 0) ? out.left(lb).trimmed() : out.trimmed();
-    const int colon = before.lastIndexOf(':');
-    const QString token = (colon >= 0) ? before.mid(colon + 1).trimmed() : before;
-    bool ok = false;
-    const int value = token.toInt(&ok);
-    return ok ? value : 0;
-}
-
-// 异步读取当前音量百分比（在 amixer set 之后 100ms 延迟再读，等待 set 完成）
+// 异步读取当前音量百分比
 static void scheduleVolumeRead(VolumeOverlay *overlay) {
-    QTimer::singleShot(120, overlay, [overlay]() {
-        auto *proc = new QProcess(overlay);
-        QObject::connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-                         overlay, [proc, overlay](int) {
-            const QString out = QString::fromLocal8Bit(proc->readAllStandardOutput());
-            proc->deleteLater();
-            // 解析 "[87%]" 格式
-            const int lb = out.lastIndexOf('[');
-            const int pct = out.indexOf('%', lb);
-            if (lb >= 0 && pct > lb) {
-                bool ok = false;
-                int v = out.mid(lb + 1, pct - lb - 1).toInt(&ok);
-                if (ok) {
-                    const int lv = AppSignals::volumeLevelFromDigital(parseDigitalVolumeOutput(out));
-                    overlay->showVolume(lv * 10);
-                    // 同步更新全局音量等级（各界面顶部栏可读取）
-                    QCoreApplication::instance()->setProperty("appVolumeLevel", lv);
-                    // 通知所有已注册的顶部栏实时刷新音量显示
-                    AppSignals::instance()->volumeLevelChanged(lv);
-                }
-            }
-        });
-        proc->start("amixer", {"sget", "digital volume"});
-    });
+    const QVariant currentVolume = qApp->property("appVolumeLevel");
+    const int level = currentVolume.isValid()
+        ? qBound(0, currentVolume.toInt(), 10)
+        : QSettings().value("sound/volumeLevel", 10).toInt();
+    overlay->showVolume(qBound(0, level, 10) * 10);
 }
 
 // 挂在 QApplication 上，能拦截所有窗口的 KeyPress，不依赖窗口焦点
@@ -867,6 +837,7 @@ int main(int argc, char *argv[]) {
     // 直接用额外的 fd + QSocketNotifier 读 event* 来补全这两个键。
     // 与 evdevkeyboard 共用同一设备不冲突（内核允许多个 reader）。
     {
+        const QString qtKeyboardDevice = QString::fromLocal8Bit(qgetenv("QT_QPA_EVDEV_KEYBOARD_PARAMETERS"));
         QStringList keyboardDevices = findInputEventDevices();
         if (keyboardDevices.isEmpty()) {
             qWarning() << "[InputNotifier] no keyboard input device found; fallback to /dev/input/event3";
@@ -881,10 +852,14 @@ int main(int argc, char *argv[]) {
             }
             qDebug() << "[InputNotifier] opened" << kbDev;
             auto *notifier = new QSocketNotifier(kbFd, QSocketNotifier::Read, &app);
-            QObject::connect(notifier, &QSocketNotifier::activated, &app, [kbFd]() {
+            QObject::connect(notifier, &QSocketNotifier::activated, &app, [kbFd, kbDev, qtKeyboardDevice]() {
                 struct input_event ev;
                 while (::read(kbFd, &ev, sizeof(ev)) == (ssize_t)sizeof(ev)) {
                     if (ev.type != EV_KEY || ev.value != 1) continue; // 只处理 key-down
+                    if (kbDev == qtKeyboardDevice &&
+                        (ev.code == KEY_VOLUMEUP || ev.code == KEY_VOLUMEDOWN || ev.code == KEY_MUTE)) {
+                        continue; // 避免 Qt 已经从该设备收到同一音量/静音按键，导致双重处理
+                    }
                     int qtKey = 0;
                     switch (ev.code) {
                     case KEY_HOMEPAGE:      qtKey = Qt::Key_HomePage; break;
@@ -1022,21 +997,12 @@ int main(int argc, char *argv[]) {
     qDebug() << "Touch Device:" << (device.isTouchDevice() ? "Yes" : "No");
     qDebug() << "==============================================";
     
-// 启动时同步读取实际音量 (0-10 级)，存入应用属性供各界面颈部栏展示
+    // 启动时从配置读取音量等级并应用到 TM2313 / 系统音量
     {
-        QProcess volProc;
-        volProc.start("amixer", {"sget", "digital volume"});
-        int volLv = 10;
-        if (volProc.waitForFinished(400)) {
-            const QString vo = QString::fromLocal8Bit(volProc.readAllStandardOutput());
-            const int lb = vo.lastIndexOf('['), pc = vo.indexOf('%', lb);
-            if (lb >= 0 && pc > lb) {
-                bool ok;
-                const int v = vo.mid(lb + 1, pc - lb - 1).toInt(&ok);
-                if (ok) volLv = AppSignals::volumeLevelFromDigital(parseDigitalVolumeOutput(vo));
-            }
-        }
-        app.setProperty("appVolumeLevel", volLv);
+        QSettings settings;
+        const int savedLevel = qBound(0, settings.value("sound/volumeLevel", 10).toInt(), 10);
+        AppSignals::setVolumeLevel(savedLevel, nullptr);
+        app.setProperty("appVolumeLevel", savedLevel);
     }
 
     MainWindow window;
