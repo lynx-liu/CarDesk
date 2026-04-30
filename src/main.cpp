@@ -86,6 +86,7 @@ public:
         if (ScreenBlanker::instance()->isBlanked()) {
             ScreenBlanker::instance()->unblank();
         }
+        pauseBackgroundPlayback();
         updateMode();
         if (!isVisible()) {
             if (QScreen *sc = QGuiApplication::primaryScreen()) {
@@ -97,6 +98,23 @@ public:
             setFocus(Qt::ActiveWindowFocusReason);
             m_updateTimer.start();
             update();
+        }
+    }
+
+    void pauseBackgroundPlayback() {
+        for (QWidget *widget : QApplication::topLevelWidgets()) {
+            if (auto *music = qobject_cast<MusicPlayerWindow *>(widget)) {
+                music->pauseIfPlaying();
+            }
+            if (auto *radio = qobject_cast<RadioWindow *>(widget)) {
+                radio->forceStopAudio();
+            }
+            if (auto *videoList = qobject_cast<VideoListWindow *>(widget)) {
+                videoList->pauseVideoIfPlaying();
+            }
+            if (auto *videoPlay = qobject_cast<VideoPlayWindow *>(widget)) {
+                videoPlay->pauseIfPlaying();
+            }
         }
     }
 
