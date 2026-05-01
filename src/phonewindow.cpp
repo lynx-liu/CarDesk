@@ -1125,9 +1125,6 @@ QWidget *PhoneWindow::createContactRow(const QString &name, const QString &numbe
 void PhoneWindow::showCallOverlay(int status) {
     if (m_mediaManager) {
         m_mediaManager->pausePlaybackForInterruption();
-        if (m_mediaManager->videoListWindow()) {
-            m_mediaManager->videoListWindow()->pauseVideoIfPlaying();
-        }
     }
     if (m_bluetoothManager) {
         m_bluetoothManager->setPlaybackMode(1);

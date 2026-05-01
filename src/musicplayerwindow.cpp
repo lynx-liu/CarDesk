@@ -1303,35 +1303,8 @@ void MusicPlayerWindow::playMusic(int index)
 
 void MusicPlayerWindow::pauseIfPlaying()
 {
-    if (!m_isUsbMode && m_bluetoothManager) {
-        if (m_btPlaying) {
-            m_bluetoothManager->stopMusic();
-            m_btPlaying = false;
-            setPlayButtonState(false);
-        }
-        return;
-    }
-
-#ifdef CAR_DESK_USE_T507_SDK
-    if (m_useSdkPlayer && m_sdkPlayer && m_sdkPlaying) {
-        int curPos = 0;
-        if (XPlayerGetCurrentPosition(m_sdkPlayer, &curPos) == 0) {
-            m_resumeInterruptionPositionMs = curPos;
-        }
-        m_pausedForInterruption = true;
-        XPlayerPause(m_sdkPlayer);
-        m_sdkPlaying = false;
-        if (m_sdkTimer) m_sdkTimer->stop();
-        setPlayButtonState(false);
-        return;
-    }
-#endif
-
-    if (m_mediaPlayer && m_mediaPlayer->state() == QMediaPlayer::PlayingState) {
-        m_resumeInterruptionPositionMs = m_mediaPlayer->position();
-        m_pausedForInterruption = true;
-        m_mediaPlayer->pause();
-        setPlayButtonState(false);
+    if(isPlaying()) {
+        onPlayPause();
     }
 }
 
@@ -2154,8 +2127,10 @@ void MusicPlayerWindow::keyPressEvent(QKeyEvent *event)
         if (m_stackedWidget && m_stackedWidget->currentIndex() == kPageList) {
             onBackFromListPage();
         } else {
+            m_preservePlaybackOnHide = true;
+            pauseIfPlaying();
             emit requestReturnToMain();
-            close();
+            hide();
         }
         break;
     default:
