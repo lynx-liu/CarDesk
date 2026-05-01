@@ -141,6 +141,8 @@ void MediaManager::pausePlaybackForInterruption() {
     if (m_resumeAfterInterruption) {
         return;
     }
+    // 开始新中断前清除上次残留的视频恢复标志，防止状态泄漏到本次恢复流程
+    m_resumeVideoAfterInterruption = false;
 
     if (m_radioWindow && m_radioWindow->isAudioActive()) {
         qDebug() << "MediaManager: interrupting radio playback";
@@ -173,6 +175,8 @@ void MediaManager::pausePlaybackForOcclusion() {
     if (m_resumeAfterInterruption) {
         return;
     }
+    // 开始新遮挡前清除上次残留的视频恢复标志
+    m_resumeVideoAfterInterruption = false;
 
     if (m_radioWindow && m_radioWindow->isAudioActive()) {
         qDebug() << "MediaManager: occluding radio playback";
