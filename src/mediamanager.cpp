@@ -224,13 +224,12 @@ void MediaManager::resumePlaybackAfterInterruption() {
     }
     m_interruptedAudioSource = AudioSource::None;
     m_resumeAfterInterruption = false;
-    
+    }
+
     if (m_resumeVideoAfterInterruption && m_videoListWindow) {
         m_videoListWindow->resumeVideoAfterInterruption();
     }
     m_resumeVideoAfterInterruption = false;
-}
-
 }
 
 void MediaManager::openMusicPlayer() {
