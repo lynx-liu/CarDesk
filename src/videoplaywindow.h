@@ -31,6 +31,7 @@ public:
     void setBluetoothManager(BluetoothManager *manager);
     bool isPausedForHome() const { return m_pausedForHome; }
     void pauseIfPlaying();
+    void pauseForInterruption();
     void resumeAfterInterruption();
 
 signals:
@@ -80,6 +81,8 @@ private:
 #ifdef CAR_DESK_USE_T507_SDK
     bool initSdkPlayer(const QString &videoPath);
     void releaseSdkPlayer();
+    void resetSdkPlayerForCall();
+    bool restoreSdkPlaybackAfterInterruption();
 #endif
 
     QLabel *m_titleLabel;
@@ -107,6 +110,7 @@ private:
     bool m_wasPlayingBeforeSeek;
     bool m_pausedForHome;      // HOME 键退出时置位，供 tryResumeVideo 判断
     bool m_pausedForOcclusion; // 其他窗口覆盖时暂停，恢复时继续播放
+    bool m_pausedForInterruption; // 电话中断时保存播放状态，待恢复
     QString m_resumePath;      // HOME 退出前的视频文件路径
     int m_resumePositionMs;    // HOME 退出前的播放位置（ms）
     int m_resumeInterruptPositionMs; // 其他中断时的视频恢复位置（ms）

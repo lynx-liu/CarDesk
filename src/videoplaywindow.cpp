@@ -146,6 +146,7 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     , m_wasPlayingBeforeSeek(false)
     , m_pausedForHome(false)
     , m_pausedForOcclusion(false)
+    , m_pausedForInterruption(false)
     , m_resumePositionMs(0)
     , m_resumeInterruptPositionMs(0)
 #ifdef CAR_DESK_USE_T507_SDK
@@ -614,7 +615,7 @@ void VideoPlayWindow::onPlayVideo() {
         return;
     }
     
-    QString videoPath = m_videoFiles[m_currentIndex];
+    const QString videoPath = m_videoFiles[m_currentIndex];
     qDebug() << "Playing video:" << videoPath;
     if (m_bluetoothManager) {
         m_bluetoothManager->stopMusic();
@@ -625,6 +626,27 @@ void VideoPlayWindow::onPlayVideo() {
 
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer) {
+        if (m_pausedForInterruption) {
+            if (restoreSdkPlaybackAfterInterruption()) {
+                m_sdkPlaying = true;
+                setPlayButtonState(true);
+                if (m_sdkTimer && !m_sdkTimer->isActive()) {
+                    m_sdkTimer->start();
+                }
+                return;
+            }
+        }
+        if (m_sdkPlayer && !m_sdkPlaying) {
+            if (XPlayerStart(m_sdkPlayer) == 0) {
+                m_sdkPlaying = true;
+                setPlayButtonState(true);
+                if (m_sdkTimer && !m_sdkTimer->isActive()) {
+                    m_sdkTimer->start();
+                }
+                return;
+            }
+        }
+
         if (!initSdkPlayer(videoPath)) {
             setPlayButtonState(false);
             qWarning() << "Failed to init XPlayer backend:" << videoPath;
@@ -643,6 +665,20 @@ void VideoPlayWindow::onPlayVideo() {
     if (!m_mediaPlayer) {
         return;
     }
+
+    if (m_pausedForInterruption
+            && !m_mediaPlayer->media().isNull()
+            && m_mediaPlayer->media().canonicalUrl() == QUrl::fromLocalFile(videoPath)) {
+        if (m_resumeInterruptPositionMs > 0) {
+            m_mediaPlayer->setPosition(m_resumeInterruptPositionMs);
+        }
+        m_mediaPlayer->play();
+        setPlayButtonState(true);
+        m_pausedForInterruption = false;
+        m_resumeInterruptPositionMs = 0;
+        return;
+    }
+
     m_mediaPlayer->setMedia(QMediaContent(QUrl::fromLocalFile(videoPath)));
     m_mediaPlayer->play();
 }
@@ -1166,6 +1202,7 @@ bool VideoPlayWindow::initSdkPlayer(const QString &videoPath)
         return false;
     }
 
+    qDebug() << "VideoPlayWindow::initSdkPlayer: started" << videoPath << "durationMs=" << m_sdkDurationMs;
     return true;
 }
 
@@ -1201,6 +1238,53 @@ void VideoPlayWindow::releaseSdkPlayer()
     m_sdkLayerCtrl = nullptr;
     m_sdkSubCtrl = nullptr;
     m_sdkDi = nullptr;
+}
+
+void VideoPlayWindow::resetSdkPlayerForCall()
+{
+    if (!m_useSdkPlayer || !m_sdkPlayer) {
+        return;
+    }
+
+    if (m_sdkTimer) {
+        m_sdkTimer->stop();
+    }
+    m_sdkPlaying = false;
+    m_pausedForInterruption = true;
+    if (m_sdkPlayer) {
+        XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
+        XPlayerReset(m_sdkPlayer);
+        m_sdkPlayer = nullptr;
+    }
+}
+
+bool VideoPlayWindow::restoreSdkPlaybackAfterInterruption()
+{
+    qDebug() << "VideoPlayWindow::restoreSdkPlaybackAfterInterruption: useSdk=" << m_useSdkPlayer
+             << " sdkPlayer=" << static_cast<void*>(m_sdkPlayer)
+             << " pausedForInterruption=" << m_pausedForInterruption
+             << " currentIndex=" << m_currentIndex
+             << " resumeInterruptPositionMs=" << m_resumeInterruptPositionMs;
+    if (!m_useSdkPlayer || m_sdkPlayer || !m_pausedForInterruption || m_currentIndex < 0 || m_currentIndex >= m_videoFiles.count()) {
+        qWarning() << "VideoPlayWindow::restoreSdkPlaybackAfterInterruption: invalid state, cannot restore";
+        return false;
+    }
+
+    const QString videoPath = m_videoFiles[m_currentIndex];
+    if (!initSdkPlayer(videoPath)) {
+        qWarning() << "VideoPlayWindow::restoreSdkPlaybackAfterInterruption: initSdkPlayer failed for" << videoPath;
+        return false;
+    }
+
+    if (m_resumeInterruptPositionMs > 0) {
+        qDebug() << "VideoPlayWindow::restoreSdkPlaybackAfterInterruption: seeking to" << m_resumeInterruptPositionMs;
+        m_sdkSeeking = true;
+        XPlayerSeekTo(m_sdkPlayer, m_resumeInterruptPositionMs, AW_SEEK_CLOSEST_SYNC);
+    }
+
+    m_pausedForInterruption = false;
+    m_resumeInterruptPositionMs = 0;
+    return true;
 }
 #endif
 
@@ -1286,14 +1370,56 @@ void VideoPlayWindow::pauseIfPlaying()
     }
 }
 
-void VideoPlayWindow::resumeAfterInterruption()
+void VideoPlayWindow::pauseForInterruption()
 {
 #ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer && m_sdkPlayer && m_sdkPlaying) {
+        int curPos = 0;
+        if (XPlayerGetCurrentPosition(m_sdkPlayer, &curPos) == 0) {
+            m_resumeInterruptPositionMs = curPos;
+        }
+        m_pausedForInterruption = true;
+        resetSdkPlayerForCall();
+        return;
+    }
+#endif
+    if (m_mediaPlayer && m_mediaPlayer->state() == QMediaPlayer::PlayingState) {
+        m_resumeInterruptPositionMs = static_cast<int>(m_mediaPlayer->position());
+        m_pausedForInterruption = true;
+        m_mediaPlayer->pause();
+        setPlayButtonState(false);
+    }
+}
+
+void VideoPlayWindow::resumeAfterInterruption()
+{
+    qDebug() << "VideoPlayWindow::resumeAfterInterruption: pausedForInterruption=" << m_pausedForInterruption
+             << " pausedForOcclusion=" << m_pausedForOcclusion
+             << " currentIndex=" << m_currentIndex
+             << " resumeInterruptPositionMs=" << m_resumeInterruptPositionMs;
+#ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer) {
+        T507SdkBridge::setAudioSource(false);
+        if (m_pausedForInterruption) {
+            if (restoreSdkPlaybackAfterInterruption()) {
+                m_sdkPlaying = true;
+                setPlayButtonState(true);
+                if (m_sdkTimer && !m_sdkTimer->isActive()) {
+                    m_sdkTimer->start();
+                }
+                m_pausedForOcclusion = false;
+                m_resumeInterruptPositionMs = 0;
+                return;
+            }
+            qWarning() << "VideoPlayWindow::resumeAfterInterruption: restoreSdkPlaybackAfterInterruption failed";
+        }
         if (m_sdkPlayer && !m_sdkPlaying) {
             if (XPlayerStart(m_sdkPlayer) == 0) {
                 m_sdkPlaying = true;
                 setPlayButtonState(true);
+                if (m_sdkTimer && !m_sdkTimer->isActive()) {
+                    m_sdkTimer->start();
+                }
             }
         }
     } else
@@ -1313,7 +1439,7 @@ void VideoPlayWindow::hideEvent(QHideEvent *event)
 {
     QMainWindow::hideEvent(event);
 #ifdef CAR_DESK_USE_T507_SDK
-    if (m_useSdkPlayer) {
+    if (m_useSdkPlayer && !m_pausedForOcclusion && !m_pausedForHome) {
         releaseSdkPlayer();  // HOME 路径已由 keyPressEvent 释放，m_sdkPlayer==nullptr 此处为空操作
     }
 #endif
@@ -1356,6 +1482,13 @@ void VideoPlayWindow::showEvent(QShowEvent *event)
 #endif
         if (!m_useSdkPlayer && m_mediaPlayer) {
             m_mediaPlayer->play();  // PC 路径：媒体仍在暂停状态，直接恢复
+        }
+        return;
+    }
+
+    if (m_pausedForOcclusion || m_pausedForInterruption) {
+        if (m_pausedForInterruption) {
+            resumeAfterInterruption();
         }
         return;
     }

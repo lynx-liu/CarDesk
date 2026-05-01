@@ -34,6 +34,7 @@ public:
     void prepareForNonBluetoothAudio();
     void prepareForRadioAudio();
     void pausePlaybackForInterruption();
+    void pausePlaybackForOcclusion();
     void resumePlaybackAfterInterruption();
     void playMedia(const QString &filePath);
     void stopPlayback();

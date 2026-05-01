@@ -136,6 +136,8 @@ void MediaManager::prepareForRadioAudio() {
 }
 
 void MediaManager::pausePlaybackForInterruption() {
+    qDebug() << "MediaManager: pausePlaybackForInterruption: resumeAfterInterruption=" << m_resumeAfterInterruption
+             << " resumeVideoAfterInterruption=" << m_resumeVideoAfterInterruption;
     if (m_resumeAfterInterruption) {
         return;
     }
@@ -165,8 +167,41 @@ void MediaManager::pausePlaybackForInterruption() {
     }
 }
 
+void MediaManager::pausePlaybackForOcclusion() {
+    qDebug() << "MediaManager: pausePlaybackForOcclusion: resumeAfterInterruption=" << m_resumeAfterInterruption
+             << " resumeVideoAfterInterruption=" << m_resumeVideoAfterInterruption;
+    if (m_resumeAfterInterruption) {
+        return;
+    }
+
+    if (m_radioWindow && m_radioWindow->isAudioActive()) {
+        qDebug() << "MediaManager: occluding radio playback";
+        m_interruptedAudioSource = AudioSource::Radio;
+        m_resumeAfterInterruption = true;
+        m_radioWindow->forceStopAudio();
+        return;
+    }
+
+    if (m_musicWindow && m_musicWindow->isPlaying()) {
+        qDebug() << "MediaManager: occluding music playback";
+        m_interruptedAudioSource = (m_currentAudioSource == AudioSource::BluetoothMusic)
+            ? AudioSource::BluetoothMusic
+            : AudioSource::Media;
+        m_resumeAfterInterruption = true;
+        m_musicWindow->pauseForInterruption();
+        return;
+    }
+
+    if (m_videoListWindow) {
+        qDebug() << "MediaManager: occluding video playback";
+        m_resumeVideoAfterInterruption = true;
+        m_videoListWindow->pauseVideoForOcclusion();
+    }
+}
+
 void MediaManager::resumePlaybackAfterInterruption() {
-    qDebug() << "MediaManager: resuming interrupted playback";
+    qDebug() << "MediaManager: resumePlaybackAfterInterruption: resumeAfterInterruption=" << m_resumeAfterInterruption
+             << " resumeVideoAfterInterruption=" << m_resumeVideoAfterInterruption;
     if (m_resumeAfterInterruption) {
         switch (m_interruptedAudioSource) {
     case AudioSource::Radio:

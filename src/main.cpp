@@ -38,6 +38,8 @@
 // ── 背光控制（POWER 键关/亮屏，SLEEP 键关机，具体 dispdbg 操作在 backlight.cpp）─
 static MainWindow *findMainWindow();
 static DrivingImageWindow *findDrivingImageWindow();
+static void hideClockOverlayIfVisible(bool resume = true);
+class ScreenClockOverlay;
 
 class ScreenBlanker : public QObject {
 public:
@@ -49,9 +51,14 @@ public:
 
     void blank() {
         if (m_blanked) return;
+        qDebug() << "[ScreenBlanker] blank: hiding clock overlay and pausing playback";
+        hideClockOverlayIfVisible(false);
         if (MainWindow *main = findMainWindow()) {
             if (main->mediaManager()) {
-                main->mediaManager()->pausePlaybackForInterruption();
+                QTimer::singleShot(0, this, [main]() {
+                    qDebug() << "[ScreenBlanker] blank: executing deferred pausePlaybackForInterruption";
+                    main->mediaManager()->pausePlaybackForInterruption();
+                });
             }
         }
         // 保存当前亮度（来自 Backlight 缓存或 sysfs）
@@ -65,9 +72,13 @@ public:
         m_blanked = false;
         Backlight::set(m_savedBrightness);
         qDebug() << "[ScreenBlanker] unblank: restore brightness=" << m_savedBrightness;
+        hideClockOverlayIfVisible(false);
         if (MainWindow *main = findMainWindow()) {
             if (main->mediaManager()) {
-                main->mediaManager()->resumePlaybackAfterInterruption();
+                QTimer::singleShot(0, this, [main]() {
+                    qDebug() << "[ScreenBlanker] unblank: executing deferred resumePlaybackAfterInterruption";
+                    main->mediaManager()->resumePlaybackAfterInterruption();
+                });
             }
         }
     }
@@ -123,18 +134,26 @@ public:
     void pauseBackgroundPlayback() {
         if (MainWindow *main = findMainWindow()) {
             if (main->mediaManager()) {
-                main->mediaManager()->pausePlaybackForInterruption();
+                main->mediaManager()->pausePlaybackForOcclusion();
             }
         }
     }
 
-    void hideClock() {
+    void hideClock(bool resume = true) {
         if (isVisible()) {
             hide();
             m_updateTimer.stop();
-            if (MainWindow *main = findMainWindow()) {
-                if (main->mediaManager()) {
-                    main->mediaManager()->resumePlaybackAfterInterruption();
+            if (resume) {
+                if (MainWindow *main = findMainWindow()) {
+                    if (main->mediaManager()) {
+                        qDebug() << "[ScreenClockOverlay] hideClock: scheduling resumePlaybackAfterInterruption";
+                        QTimer::singleShot(0, this, [main]() {
+                            if (main->mediaManager()) {
+                                qDebug() << "[ScreenClockOverlay] hideClock: executing resumePlaybackAfterInterruption";
+                                main->mediaManager()->resumePlaybackAfterInterruption();
+                            }
+                        });
+                    }
                 }
             }
         }
@@ -253,6 +272,16 @@ private:
     QTimer m_updateTimer;
     bool m_digitalMode;
 };
+
+static void hideClockOverlayIfVisible(bool resume)
+{
+    if (ScreenClockOverlay::instance()->isVisible()) {
+        qDebug() << "[ScreenBlanker] hideClockOverlayIfVisible: visible=" << true << " resume=" << resume;
+        ScreenClockOverlay::instance()->hideClock(resume);
+    } else {
+        qDebug() << "[ScreenBlanker] hideClockOverlayIfVisible: overlay not visible";
+    }
+}
 
 // ── 音量浮动指示条 ────────────────────────────────────────────────────────────
 // 按下音量键时显示在屏幕左侧，2 秒无操作后自动隐藏
@@ -945,7 +974,7 @@ int main(int argc, char *argv[]) {
                         continue;
                     case KEY_SLEEP:
                         qDebug() << "[InputNotifier] ev.code=142 KEY_SLEEP => blank screen";
-                        ScreenClockOverlay::instance()->hideClock();
+                        ScreenClockOverlay::instance()->hideClock(false);
                         ScreenBlanker::instance()->blank();
                         break;
                     case KEY_POWER:

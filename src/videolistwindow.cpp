@@ -333,6 +333,15 @@ bool VideoListWindow::tryResumeVideo()
 
 void VideoListWindow::pauseVideoIfPlaying()
 {
+    qDebug() << "VideoListWindow::pauseVideoIfPlaying: playWindow=" << static_cast<void*>(m_playWindow);
+    if (m_playWindow) {
+        m_playWindow->pauseForInterruption();
+    }
+}
+
+void VideoListWindow::pauseVideoForOcclusion()
+{
+    qDebug() << "VideoListWindow::pauseVideoForOcclusion: playWindow=" << static_cast<void*>(m_playWindow);
     if (m_playWindow) {
         m_playWindow->pauseIfPlaying();
     }
@@ -340,10 +349,20 @@ void VideoListWindow::pauseVideoIfPlaying()
 
 bool VideoListWindow::resumeVideoAfterInterruption()
 {
+    qDebug() << "VideoListWindow::resumeVideoAfterInterruption: playWindow=" << static_cast<void*>(m_playWindow)
+             << " visible=" << (m_playWindow ? m_playWindow->isVisible() : false);
     if (m_playWindow) {
+        if (!m_playWindow->isVisible()) {
+            qDebug() << "VideoListWindow::resumeVideoAfterInterruption: showing playWindow";
+            m_playWindow->show();
+            m_playWindow->raise();
+            m_playWindow->activateWindow();
+        }
+        qDebug() << "VideoListWindow::resumeVideoAfterInterruption: calling resumeAfterInterruption";
         m_playWindow->resumeAfterInterruption();
         return true;
     }
+    qWarning() << "VideoListWindow::resumeVideoAfterInterruption: no playWindow to resume";
     return false;
 }
 
