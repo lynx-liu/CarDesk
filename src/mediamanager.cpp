@@ -94,7 +94,7 @@ void MediaManager::prepareForBluetoothMusic() {
         m_radioWindow->forceStopAudio();
     }
     if (m_musicWindow) {
-        m_musicWindow->stopIfPlaying();
+        m_musicWindow->pauseForInterruption();
     }
     if (m_videoListWindow) {
         m_videoListWindow->pauseVideoIfPlaying();
@@ -154,7 +154,7 @@ void MediaManager::pausePlaybackForInterruption() {
             ? AudioSource::BluetoothMusic
             : AudioSource::Media;
         m_resumeAfterInterruption = true;
-        m_musicWindow->pauseIfPlaying();
+        m_musicWindow->pauseForInterruption();
         return;
     }
 

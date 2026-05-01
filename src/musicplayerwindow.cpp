@@ -1301,11 +1301,127 @@ void MusicPlayerWindow::playMusic(int index)
     updateMetadata();
 }
 
+void MusicPlayerWindow::pauseForInterruption()
+{
+    if (!m_isUsbMode && m_bluetoothManager) {
+        if (m_btPlaying) {
+            onPlayPause();
+        }
+        return;
+    }
+
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer && m_sdkPlayer && m_sdkPlaying) {
+        resetSdkPlayerForCall();
+        return;
+    }
+#endif
+
+    if (isPlaying()) {
+        onPlayPause();
+    }
+}
+
+void MusicPlayerWindow::resetSdkPlayerForCall()
+{
+#ifdef CAR_DESK_USE_T507_SDK
+    if (!m_useSdkPlayer || !m_sdkPlayer) {
+        return;
+    }
+
+    int currentPosMs = 0;
+    if (XPlayerGetCurrentPosition(m_sdkPlayer, &currentPosMs) == 0) {
+        m_resumeInterruptionPositionMs = currentPosMs;
+    } else {
+        m_resumeInterruptionPositionMs = 0;
+    }
+    if (m_sdkTimer) {
+        m_sdkTimer->stop();
+    }
+    m_sdkPlaying = false;
+    XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
+    XPlayerReset(m_sdkPlayer);
+    m_sdkPlayer = nullptr;
+    m_sdkSoundCtrl = nullptr;
+    setPlayButtonState(false);
+    updateProgressBar(m_resumeInterruptionPositionMs, m_sdkDurationMs);
+    m_pausedForInterruption = true;
+#endif
+}
+
 void MusicPlayerWindow::pauseIfPlaying()
 {
     if(isPlaying()) {
         onPlayPause();
     }
+}
+
+bool MusicPlayerWindow::restoreSdkPlaybackAfterInterruption()
+{
+#ifdef CAR_DESK_USE_T507_SDK
+    if (!m_useSdkPlayer || m_sdkPlayer || !m_pausedForInterruption || m_currentIndex < 0 || m_currentIndex >= m_musicFiles.count()) {
+        return false;
+    }
+    if (!ensureSdkMusicResourcesCreated()) {
+        return false;
+    }
+
+    m_sdkPlayer    = g_sdkMusicPlayer;
+    m_sdkSoundCtrl = g_sdkMusicSoundCtrl;
+    XPlayerSetNotifyCallback(m_sdkPlayer, sdkMusicNotify, this);
+
+    const QString musicPath = m_musicFiles[m_currentIndex];
+    const QByteArray pb = musicPath.toUtf8();
+    if (XPlayerSetDataSourceUrl(m_sdkPlayer, pb.constData(), nullptr, nullptr) != 0) {
+        qWarning() << "MusicSDK: restoreAfterInterruption XPlayerSetDataSourceUrl failed" << musicPath;
+        XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
+        return false;
+    }
+    if (XPlayerPrepare(m_sdkPlayer) != 0) {
+        qWarning() << "MusicSDK: restoreAfterInterruption XPlayerPrepare failed" << musicPath;
+        XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
+        XPlayerReset(m_sdkPlayer);
+        m_sdkPlayer = nullptr;
+        m_sdkSoundCtrl = nullptr;
+        return false;
+    }
+
+    int durationMs = 0;
+    if (XPlayerGetDuration(m_sdkPlayer, &durationMs) == 0) {
+        m_sdkDurationMs = durationMs;
+    } else {
+        m_sdkDurationMs = 0;
+    }
+    updateProgressBar(0, m_sdkDurationMs);
+
+    if (XPlayerStart(m_sdkPlayer) != 0) {
+        qWarning() << "MusicSDK: restoreAfterInterruption XPlayerStart failed" << musicPath;
+        XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
+        XPlayerReset(m_sdkPlayer);
+        m_sdkPlayer = nullptr;
+        m_sdkSoundCtrl = nullptr;
+        return false;
+    }
+
+    if (m_resumeInterruptionPositionMs > 0 && m_sdkDurationMs > 0) {
+        XPlayerSeekTo(m_sdkPlayer, static_cast<int>(m_resumeInterruptionPositionMs), AW_SEEK_CLOSEST_SYNC);
+        updateProgressBar(m_resumeInterruptionPositionMs, m_sdkDurationMs);
+    }
+
+    if (m_sdkTimer && !m_sdkTimer->isActive()) {
+        m_sdkTimer->start();
+    }
+    m_sdkPlaying = true;
+    setPlayButtonState(true);
+    m_pausedForInterruption = false;
+    m_resumeInterruptionPositionMs = 0;
+    return true;
+#else
+    Q_UNUSED(m_currentIndex)
+    Q_UNUSED(m_resumeInterruptionPositionMs)
+    Q_UNUSED(m_pausedForInterruption)
+    return false;
+#endif
 }
 
 void MusicPlayerWindow::stopIfPlaying()
@@ -1356,6 +1472,13 @@ void MusicPlayerWindow::resumeAfterInterruption()
                     m_sdkTimer->start();
                 }
                 setPlayButtonState(true);
+            }
+            return;
+        }
+
+        if (m_pausedForInterruption) {
+            if (restoreSdkPlaybackAfterInterruption()) {
+                return;
             }
         }
         return;
@@ -1422,6 +1545,11 @@ void MusicPlayerWindow::onPlayPause()
             m_sdkPlaying = true;
             if (m_sdkTimer) m_sdkTimer->start();
             setPlayButtonState(true);
+        } else if (m_pausedForInterruption) {
+            if (restoreSdkPlaybackAfterInterruption()) {
+                return;
+            }
+            playMusic(m_currentIndex >= 0 ? m_currentIndex : 0);
         } else {
             playMusic(m_currentIndex >= 0 ? m_currentIndex : 0);
         }

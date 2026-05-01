@@ -105,6 +105,9 @@ public:
     void processSliderRelease(int value);
     void setBluetoothManager(BluetoothManager *manager);
     void setMediaManager(MediaManager *manager);
+    void pauseForInterruption();
+    void resetSdkPlayerForCall();
+    bool restoreSdkPlaybackAfterInterruption();
     void pauseIfPlaying();
     void resumeAfterInterruption();
     void stopIfPlaying();
