@@ -164,8 +164,9 @@ void MediaManager::pausePlaybackForInterruption() {
 
     if (m_videoListWindow) {
         qDebug() << "MediaManager: interrupting video playback";
-        m_resumeVideoAfterInterruption = true;
-        m_videoListWindow->pauseVideoIfPlaying();
+        if (m_videoListWindow->pauseVideoIfPlaying()) {
+            m_resumeVideoAfterInterruption = true;
+        }
     }
 }
 
@@ -198,8 +199,9 @@ void MediaManager::pausePlaybackForOcclusion() {
 
     if (m_videoListWindow) {
         qDebug() << "MediaManager: occluding video playback";
-        m_resumeVideoAfterInterruption = true;
-        m_videoListWindow->pauseVideoForOcclusion();
+        if (m_videoListWindow->pauseVideoForOcclusion()) {
+            m_resumeVideoAfterInterruption = true;
+        }
     }
 }
 

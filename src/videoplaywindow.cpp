@@ -1347,6 +1347,14 @@ void VideoPlayWindow::keyPressEvent(QKeyEvent *event)
     }
 }
 
+bool VideoPlayWindow::isPlaying() const
+{
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) return m_sdkPlaying;
+#endif
+    return m_mediaPlayer && m_mediaPlayer->state() == QMediaPlayer::PlayingState;
+}
+
 void VideoPlayWindow::pauseIfPlaying()
 {
 #ifdef CAR_DESK_USE_T507_SDK

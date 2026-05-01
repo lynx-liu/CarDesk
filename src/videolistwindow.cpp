@@ -331,20 +331,24 @@ bool VideoListWindow::tryResumeVideo()
     return false;
 }
 
-void VideoListWindow::pauseVideoIfPlaying()
+bool VideoListWindow::pauseVideoIfPlaying()
 {
     qDebug() << "VideoListWindow::pauseVideoIfPlaying: playWindow=" << static_cast<void*>(m_playWindow);
-    if (m_playWindow) {
+    if (m_playWindow && m_playWindow->isPlaying()) {
         m_playWindow->pauseForInterruption();
+        return true;
     }
+    return false;
 }
 
-void VideoListWindow::pauseVideoForOcclusion()
+bool VideoListWindow::pauseVideoForOcclusion()
 {
     qDebug() << "VideoListWindow::pauseVideoForOcclusion: playWindow=" << static_cast<void*>(m_playWindow);
-    if (m_playWindow) {
+    if (m_playWindow && m_playWindow->isPlaying()) {
         m_playWindow->pauseIfPlaying();
+        return true;
     }
+    return false;
 }
 
 bool VideoListWindow::resumeVideoAfterInterruption()
