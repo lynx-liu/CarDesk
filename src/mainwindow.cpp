@@ -327,7 +327,7 @@ void MainWindow::ensurePhoneWindow() {
 void MainWindow::onPhoneClicked() {
     qDebug() << "Phone button clicked";
     if (m_mediaManager) {
-        m_mediaManager->prepareForBluetoothMusic();
+        m_mediaManager->pausePlaybackForInterruption();
     }
     m_restoreStack.clear();
     ensurePhoneWindow();
@@ -372,7 +372,7 @@ void MainWindow::onBluetoothCallStatusChanged(int status) {
     }
 
     if (m_mediaManager) {
-        m_mediaManager->prepareForBluetoothMusic();
+        m_mediaManager->pausePlaybackForInterruption();
     }
 
     QWidget *current = findCurrentVisibleNonPhoneWindow();
