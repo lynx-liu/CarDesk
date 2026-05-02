@@ -43,6 +43,7 @@
 #include <QTime>
 #include <QVector>
 #include <QRegExp>
+#include <QSerialPort>
 
 namespace {
 QString shellQuote(const QString &s)
@@ -107,6 +108,17 @@ SystemSettingWindow::SystemSettingWindow(BluetoothManager *bluetoothManager, QWi
     , m_firmwareStartBtn(nullptr)
     , m_firmwareCancelBtn(nullptr)
     , m_updateTabWidget(nullptr)
+    , m_mcuStateLabel(nullptr)
+    , m_mcuProgressText(nullptr)
+    , m_mcuProgressBar(nullptr)
+    , m_mcuProgressRowWidget(nullptr)
+    , m_mcuStartBtn(nullptr)
+    , m_mcuCancelBtn(nullptr)
+    , m_mcuSerial(nullptr)
+    , m_mcuFileSize(0)
+    , m_mcuBytesSent(0)
+    , m_mcuBlockNum(0)
+    , m_mcuState(0)
     , m_otaManager(new OTAManager(this))
 {
     setWindowTitle(QStringLiteral("系统设置"));
@@ -1974,18 +1986,18 @@ QWidget *SystemSettingWindow::createUpdatePage()
     layout->setSpacing(0);
 
     m_updateTabWidget = new QTabWidget(page);
-    m_updateTabWidget->setFixedWidth(1000);
     m_updateTabWidget->tabBar()->setUsesScrollButtons(false);
+    m_updateTabWidget->tabBar()->setExpanding(false);
     m_updateTabWidget->setStyleSheet(
         "QTabWidget::tab-bar{alignment:center;}"
         "QTabWidget::pane{border:none;background:transparent;}"
-        "QTabBar::tab{width:160px;height:66px;border:none;color:#fff;font-size:28px;padding:0;}"
-        "QTabBar::tab:first{background:url(:/images/butt_tab_left_on.png) no-repeat center center;}"
-        "QTabBar::tab:last{background:url(:/images/butt_tab_right_down.png) no-repeat center center;}"
-        "QTabBar::tab:selected:first{background:url(:/images/butt_tab_left_on.png) no-repeat center center;color:#fff;}"
-        "QTabBar::tab:selected:last{background:url(:/images/butt_tab_right_on.png) no-repeat center center;color:#fff;}"
-        "QTabBar::tab:!selected:first{background:url(:/images/butt_tab_left_down.png) no-repeat center center;}"
-        "QTabBar::tab:!selected:last{background:url(:/images/butt_tab_right_down.png) no-repeat center center;}"
+        "QTabBar::tab{width:160px;height:66px;border:none;color:#fff;font-size:28px;padding:0;margin-right:1px;}"
+        "QTabBar::tab:first{background:url(:/images/butt_tab_left_down.png) no-repeat center center;}"
+        "QTabBar::tab:middle{background:url(:/images/butt_tab_center_down.png) no-repeat center center;}"
+        "QTabBar::tab:last{background:url(:/images/butt_tab_right_down.png) no-repeat center center;margin-right:0;}"
+        "QTabBar::tab:selected:first{background:url(:/images/butt_tab_left_on.png) no-repeat center center;color:#00faff;}"
+        "QTabBar::tab:selected:middle{background:url(:/images/butt_tab_center_on.png) no-repeat center center;color:#00faff;}"
+        "QTabBar::tab:selected:last{background:url(:/images/butt_tab_right_on.png) no-repeat center center;color:#00faff;}"
     );
 
     auto *appUpdateWidget = new QWidget();
@@ -2154,10 +2166,302 @@ QWidget *SystemSettingWindow::createUpdatePage()
     firmwareUpdateLayout->addStretch();
 
     m_updateTabWidget->addTab(appUpdateWidget, QStringLiteral("应用更新"));
+
+    // 单片机更新 Tab
+    auto *mcuWidget = new QWidget();
+    auto *mcuLayout = new QVBoxLayout(mcuWidget);
+    mcuLayout->setContentsMargins(0, 56, 0, 0);
+    mcuLayout->setSpacing(18);
+
+    auto *mcuIntroLabel = new QLabel(
+        QStringLiteral("通过U盘对单片机进行固件升级，\n请将.bin文件复制到U盘根目录后点击启动更新。"), mcuWidget);
+    mcuIntroLabel->setAlignment(Qt::AlignCenter);
+    mcuIntroLabel->setWordWrap(true);
+    mcuIntroLabel->setFixedWidth(1000);
+    mcuIntroLabel->setStyleSheet("QLabel{font-size:32px;line-height:48px;color:#f0f6ff;}");
+
+    m_mcuStateLabel = new QLabel(QStringLiteral(""), mcuWidget);
+    m_mcuStateLabel->setAlignment(Qt::AlignCenter);
+    m_mcuStateLabel->setWordWrap(true);
+    m_mcuStateLabel->setFixedWidth(1000);
+    m_mcuStateLabel->setStyleSheet("QLabel{font-size:32px;line-height:48px;color:#fff;}");
+    m_mcuStateLabel->hide();
+
+    m_mcuProgressBar = new QProgressBar(mcuWidget);
+    m_mcuProgressBar->setRange(0, 100);
+    m_mcuProgressBar->setValue(0);
+    m_mcuProgressBar->setFixedWidth(430);
+    m_mcuProgressBar->setStyleSheet(
+        "QProgressBar{border:none;background:rgba(255,255,255,0.15);height:10px;border-radius:5px;}"
+        "QProgressBar::chunk{background:#00a5ff;border-radius:5px;}");
+
+    m_mcuProgressText = new QLabel(QStringLiteral("0%"), mcuWidget);
+    m_mcuProgressText->setStyleSheet("QLabel{font-size:24px;color:#ffffff;}");
+
+    auto *mcuPrgTitle = new QLabel(QStringLiteral("进度："), mcuWidget);
+    mcuPrgTitle->setStyleSheet("QLabel{font-size:24px;color:#d8e8ff;}");
+
+    m_mcuProgressRowWidget = new QWidget(mcuWidget);
+    auto *mcuPrgRow = new QHBoxLayout(m_mcuProgressRowWidget);
+    mcuPrgRow->setContentsMargins(0, 0, 0, 0);
+    mcuPrgRow->addStretch();
+    mcuPrgRow->addWidget(mcuPrgTitle);
+    mcuPrgRow->addWidget(m_mcuProgressBar);
+    mcuPrgRow->addWidget(m_mcuProgressText);
+    mcuPrgRow->addStretch();
+    m_mcuProgressRowWidget->hide();
+
+    m_mcuStartBtn = new QPushButton(QStringLiteral("启动更新"), mcuWidget);
+    m_mcuStartBtn->setFixedSize(192, 54);
+    m_mcuStartBtn->setStyleSheet(
+        "QPushButton{background:transparent;color:#ffffff;border:2px solid #0068ff;font-size:24px;}"
+        "QPushButton:hover{border-color:#00faff;color:#00faff;}");
+    connect(m_mcuStartBtn, &QPushButton::clicked, this, &SystemSettingWindow::onMcuUpdateStart);
+
+    m_mcuCancelBtn = new QPushButton(QStringLiteral("取消更新"), mcuWidget);
+    m_mcuCancelBtn->setFixedSize(192, 54);
+    m_mcuCancelBtn->setStyleSheet(
+        "QPushButton{background:transparent;color:#ffffff;border:2px solid #0068ff;font-size:24px;}"
+        "QPushButton:hover{border-color:#00faff;color:#00faff;}");
+    connect(m_mcuCancelBtn, &QPushButton::clicked, this, &SystemSettingWindow::onMcuUpdateCancel);
+    m_mcuCancelBtn->hide();
+
+    auto *mcuStartRow = new QHBoxLayout();
+    mcuStartRow->addStretch();
+    mcuStartRow->addWidget(m_mcuStartBtn);
+    mcuStartRow->addStretch();
+
+    auto *mcuCancelRow = new QHBoxLayout();
+    mcuCancelRow->addStretch();
+    mcuCancelRow->addWidget(m_mcuCancelBtn);
+    mcuCancelRow->addStretch();
+
+    mcuLayout->addStretch();
+    mcuLayout->addWidget(mcuIntroLabel);
+    mcuLayout->addWidget(m_mcuStateLabel);
+    mcuLayout->addWidget(m_mcuProgressRowWidget);
+    mcuLayout->addStretch();
+    mcuLayout->addLayout(mcuStartRow);
+    mcuLayout->addLayout(mcuCancelRow);
+    mcuLayout->addStretch();
+
+    m_updateTabWidget->addTab(mcuWidget, QStringLiteral("单片机更新"));
+
     m_updateTabWidget->addTab(firmwareUpdateWidget, QStringLiteral("固件更新"));
 
     layout->addWidget(m_updateTabWidget, 0, Qt::AlignHCenter);
     return page;
+}
+
+// ---- MCU YMODEM 升级实现 ----
+
+static QString mcuFindFirmware()
+{
+    const QStringList roots = {"/mnt/usb", "/mnt/usb0", "/media/usb", "/media/usb0", "/mnt"};
+    for (const QString &root : roots) {
+        QDir d(root);
+        if (!d.exists()) continue;
+        const QStringList bins = d.entryList({"*.bin", "*.BIN"}, QDir::Files);
+        if (!bins.isEmpty())
+            return d.filePath(bins.first());
+    }
+    return QString();
+}
+
+static quint16 mcuCrc16(const QByteArray &data)
+{
+    quint16 crc = 0;
+    for (unsigned char b : data) {
+        crc ^= static_cast<quint16>(b) << 8;
+        for (int i = 0; i < 8; ++i)
+            crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1;
+    }
+    return crc;
+}
+
+static QByteArray mcuMakeBlock(int blockNum, const QByteArray &payload, bool use1k)
+{
+    const int blkSize = use1k ? 1024 : 128;
+    QByteArray data = payload.left(blkSize);
+    while (data.size() < blkSize) data.append('\x1A');
+    quint16 crc = mcuCrc16(data);
+    QByteArray frame;
+    frame.append(use1k ? '\x02' : '\x01'); // STX or SOH
+    frame.append(static_cast<char>(blockNum & 0xFF));
+    frame.append(static_cast<char>(~blockNum & 0xFF));
+    frame.append(data);
+    frame.append(static_cast<char>((crc >> 8) & 0xFF));
+    frame.append(static_cast<char>(crc & 0xFF));
+    return frame;
+}
+
+void SystemSettingWindow::onMcuUpdateStart()
+{
+    const QString path = mcuFindFirmware();
+    if (path.isEmpty()) {
+        m_mcuStateLabel->setText(QStringLiteral("未找到.bin固件，请将文件放入U盘根目录"));
+        m_mcuStateLabel->show();
+        return;
+    }
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly)) {
+        m_mcuStateLabel->setText(QStringLiteral("固件文件读取失败"));
+        m_mcuStateLabel->show();
+        return;
+    }
+    m_mcuFirmwareData = f.readAll();
+    f.close();
+    m_mcuFileSize = m_mcuFirmwareData.size();
+    m_mcuBytesSent = 0;
+    m_mcuBlockNum  = 1;
+    m_mcuRxBuf.clear();
+    m_mcuState = 1; // waitC
+
+    if (!m_mcuSerial) {
+        m_mcuSerial = new QSerialPort(this);
+        connect(m_mcuSerial, &QSerialPort::readyRead, this, &SystemSettingWindow::onMcuSerialReadyRead);
+    }
+    m_mcuSerial->setPortName(QStringLiteral("/dev/ttyS2"));
+    m_mcuSerial->setBaudRate(QSerialPort::Baud115200);
+    m_mcuSerial->setDataBits(QSerialPort::Data8);
+    m_mcuSerial->setParity(QSerialPort::NoParity);
+    m_mcuSerial->setStopBits(QSerialPort::OneStop);
+    m_mcuSerial->setFlowControl(QSerialPort::NoFlowControl);
+    if (!m_mcuSerial->open(QIODevice::ReadWrite)) {
+        m_mcuStateLabel->setText(QStringLiteral("串口打开失败"));
+        m_mcuStateLabel->show();
+        m_mcuState = 0;
+        return;
+    }
+
+    m_mcuStateLabel->setText(QStringLiteral("已发送升级命令，等待单片机响应..."));
+    m_mcuStateLabel->show();
+    m_mcuProgressRowWidget->hide();
+    m_mcuStartBtn->hide();
+    m_mcuCancelBtn->show();
+
+    m_mcuSerial->write(QByteArrayLiteral("OTA_UPGRADE\r\n"));
+}
+
+void SystemSettingWindow::onMcuUpdateCancel()
+{
+    m_mcuState = 0;
+    if (m_mcuSerial && m_mcuSerial->isOpen())
+        m_mcuSerial->close();
+    m_mcuStateLabel->setText(QStringLiteral("已取消"));
+    m_mcuStateLabel->show();
+    m_mcuProgressRowWidget->hide();
+    m_mcuStartBtn->show();
+    m_mcuCancelBtn->hide();
+}
+
+void SystemSettingWindow::onMcuSerialReadyRead()
+{
+    m_mcuRxBuf.append(m_mcuSerial->readAll());
+
+    if (m_mcuState == 1) {
+        // 等待 "[OTA] Entering upgrade mode..." 或 'C'
+        if (m_mcuRxBuf.contains("[OTA] Entering upgrade mode") || m_mcuRxBuf.contains('\x43')) {
+            m_mcuRxBuf.clear();
+            m_mcuState = 2; // 等待 C 准备发送block0
+            m_mcuStateLabel->setText(QStringLiteral("单片机已就绪，准备传输..."));
+        }
+        return;
+    }
+
+    if (m_mcuState == 2) {
+        // 待 'C' 发送block0
+        if (!m_mcuRxBuf.contains('\x43')) return;
+        m_mcuRxBuf.clear();
+
+        QByteArray namePayload;
+        QByteArray name = QFileInfo(mcuFindFirmware()).fileName().toLocal8Bit();
+        QByteArray sz   = QString::number(m_mcuFileSize).toLatin1();
+        namePayload.append(name);
+        namePayload.append('\0');
+        namePayload.append(sz);
+        namePayload.append('\0');
+        while (namePayload.size() < 128) namePayload.append('\0');
+
+        m_mcuSerial->write(mcuMakeBlock(0, namePayload, false));
+        m_mcuState = 3; // 等待 ACK+C 开始发送数据
+        m_mcuStateLabel->setText(QStringLiteral("开始传输固件..."));
+        m_mcuProgressRowWidget->show();
+        return;
+    }
+
+    if (m_mcuState == 3) {
+        // 等 ACK(0x06) + C(0x43) 开始发送数据块
+        if (m_mcuRxBuf.size() < 2) return;
+        if (!m_mcuRxBuf.contains('\x06')) return;
+        m_mcuRxBuf.clear();
+
+        const int offset = (m_mcuBlockNum - 1) * 1024;
+        if (offset >= m_mcuFileSize) {
+            // 无数据，直接EOT
+            m_mcuSerial->write(QByteArrayLiteral("\x04"));
+            m_mcuState = 4;
+            return;
+        }
+        QByteArray chunk = m_mcuFirmwareData.mid(offset, 1024);
+        m_mcuSerial->write(mcuMakeBlock(m_mcuBlockNum, chunk, true));
+        m_mcuBytesSent = qMin(offset + 1024, m_mcuFileSize);
+
+        int pct = m_mcuFileSize > 0 ? (m_mcuBytesSent * 100 / m_mcuFileSize) : 0;
+        m_mcuProgressBar->setValue(pct);
+        m_mcuProgressText->setText(QString::number(pct) + "%");
+        m_mcuStateLabel->setText(QString("传输中... %1 / %2 字节").arg(m_mcuBytesSent).arg(m_mcuFileSize));
+
+        m_mcuBlockNum++;
+        m_mcuState = 31; // 等待单个ACK
+        return;
+    }
+
+    if (m_mcuState == 31) {
+        // 等待ACK
+        if (!m_mcuRxBuf.contains('\x06')) return;
+        m_mcuRxBuf.clear();
+
+        const int offset = (m_mcuBlockNum - 1) * 1024;
+        if (offset >= m_mcuFileSize) {
+            m_mcuSerial->write(QByteArrayLiteral("\x04"));
+            m_mcuState = 4;
+            return;
+        }
+        QByteArray chunk = m_mcuFirmwareData.mid(offset, 1024);
+        m_mcuSerial->write(mcuMakeBlock(m_mcuBlockNum, chunk, true));
+        m_mcuBytesSent = qMin(offset + 1024, m_mcuFileSize);
+
+        int pct = m_mcuFileSize > 0 ? (m_mcuBytesSent * 100 / m_mcuFileSize) : 0;
+        m_mcuProgressBar->setValue(pct);
+        m_mcuProgressText->setText(QString::number(pct) + "%");
+        m_mcuStateLabel->setText(QString("传输中... %1 / %2 字节").arg(m_mcuBytesSent).arg(m_mcuFileSize));
+
+        m_mcuBlockNum++;
+        return;
+    }
+
+    if (m_mcuState == 4) {
+        // EOT已发，等 ACK+C
+        if (!m_mcuRxBuf.contains('\x06') || !m_mcuRxBuf.contains('\x43')) return;
+        m_mcuRxBuf.clear();
+
+        // 发送空结束块
+        QByteArray emptyPayload(128, '\0');
+        m_mcuSerial->write(mcuMakeBlock(0, emptyPayload, false));
+        m_mcuState = 5;
+        return;
+    }
+
+    if (m_mcuState == 5) {
+        m_mcuState = 0;
+        m_mcuSerial->close();
+        m_mcuProgressBar->setValue(100);
+        m_mcuProgressText->setText(QStringLiteral("100%"));
+        m_mcuStateLabel->setText(QStringLiteral("升级完成！"));
+        m_mcuCancelBtn->hide();
+        m_mcuStartBtn->show();
+    }
 }
 
 void SystemSettingWindow::keyPressEvent(QKeyEvent *event)

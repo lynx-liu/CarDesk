@@ -13,6 +13,7 @@ class QTabWidget;
 class QPushButton;
 class QWidget;
 class OTAManager;
+class QSerialPort;
 
 class BluetoothManager;
 
@@ -44,6 +45,9 @@ private slots:
     void onUpdateFailed(const QString &error);
     void onUpdateCancelled();
     void onFirmwareCheckUpdate();
+    void onMcuUpdateStart();
+    void onMcuUpdateCancel();
+    void onMcuSerialReadyRead();
 
 private:
     QString findAppUpdateArchive(QString *usbRoot = nullptr) const;
@@ -88,6 +92,20 @@ private:
     QPushButton *m_firmwareStartBtn;
     QPushButton *m_firmwareCancelBtn;
     QTabWidget *m_updateTabWidget;
+    // MCU串口升级
+    QLabel *m_mcuStateLabel;
+    QLabel *m_mcuProgressText;
+    QProgressBar *m_mcuProgressBar;
+    QWidget *m_mcuProgressRowWidget;
+    QPushButton *m_mcuStartBtn;
+    QPushButton *m_mcuCancelBtn;
+    QSerialPort *m_mcuSerial;
+    QByteArray m_mcuFirmwareData;
+    QByteArray m_mcuRxBuf;
+    int m_mcuFileSize;
+    int m_mcuBytesSent;
+    int m_mcuBlockNum;
+    int m_mcuState; // 0=idle,1=waitC,2=sentBlk0,3=sendData,4=sentEOT,5=done
     QString m_checkedUpdateFile;
     QString m_checkedNewVersion;
     
