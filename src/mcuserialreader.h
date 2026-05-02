@@ -31,6 +31,9 @@ public:
     explicit McuSerialReader(QObject *parent = nullptr);
     ~McuSerialReader() override;
 
+    // 获取/创建全局共享实例（首次调用时以 parent 为父对象）
+    static McuSerialReader *ensureShared(QObject *parent = nullptr);
+
     // 打开串口，默认 /dev/ttyS2；成功返回 true
     bool open(const QString &portName = QStringLiteral("/dev/ttyS2"));
     void close();
@@ -39,13 +42,19 @@ public:
 signals:
     // 每次解析完整 DM1 块后发射（faults 为空表示该控制器无故障）
     void dm1Received(const QString &controller, const QVector<McuFaultInfo> &faults);
+    // LC 灯光指令：右转/左转/倒车 (0=OFF, 1=ON)
+    void lcReceived(int rTurn, int lTurn, int backup);
+    // TD 时间日期：年月日时分（已解码，可直接使用）
+    void tdReceived(int year, int month, int day, int hour, int min);
 
 private slots:
     void onReadyRead();
 
 private:
     void processLine(const QByteArray &line);
+    void parseJsonLine(const QByteArray &line);
 
+    static McuSerialReader *s_shared;
     QSerialPort          *m_port;
     QByteArray            m_buf;
     // 解析状态

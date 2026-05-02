@@ -1,8 +1,20 @@
 #include "mcuserialreader.h"
 
 #include <QDebug>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <QSerialPort>
+
+McuSerialReader *McuSerialReader::s_shared = nullptr;
+
+McuSerialReader *McuSerialReader::ensureShared(QObject *parent)
+{
+    if (!s_shared) {
+        s_shared = new McuSerialReader(parent);
+    }
+    return s_shared;
+}
 
 McuSerialReader::McuSerialReader(QObject *parent)
     : QObject(parent)
@@ -60,8 +72,39 @@ void McuSerialReader::onReadyRead()
     }
 }
 
+void McuSerialReader::parseJsonLine(const QByteArray &raw)
+{
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) return;
+    const QJsonObject obj = doc.object();
+    if (obj.value(QStringLiteral("type")).toString() != QLatin1String("VIST")) return;
+    const QString name = obj.value(QStringLiteral("name")).toString();
+    if (name == QLatin1String("LC")) {
+        const int rTurn  = obj.value(QStringLiteral("r_turn")).toInt();
+        const int lTurn  = obj.value(QStringLiteral("l_turn")).toInt();
+        const int backup = obj.value(QStringLiteral("backup")).toInt();
+        qDebug() << "[TXRX] LC r_turn=" << rTurn << "l_turn=" << lTurn << "backup=" << backup;
+        emit lcReceived(rTurn, lTurn, backup);
+    } else if (name == QLatin1String("TD_VIST") || name == QLatin1String("TD_OTHER")) {
+        const int year  = obj.value(QStringLiteral("year")).toInt();
+        const int month = obj.value(QStringLiteral("month")).toInt();
+        const int day   = obj.value(QStringLiteral("day")).toInt();
+        const int hour  = obj.value(QStringLiteral("hour")).toInt();
+        const int min   = obj.value(QStringLiteral("min")).toInt();
+        qDebug() << "[TXRX] TD" << name << year << month << day << hour << min;
+        emit tdReceived(year, month, day, hour, min);
+    }
+}
+
 void McuSerialReader::processLine(const QByteArray &raw)
 {
+    // JSON 行以 '{' 开头，直接交由 parseJsonLine 处理
+    if (!raw.isEmpty() && raw.at(0) == '{') {
+        parseJsonLine(raw);
+        return;
+    }
+
     // MCU 输出均为 ASCII，从 Latin-1 解码即可
     const QString line = QString::fromLatin1(raw);
 

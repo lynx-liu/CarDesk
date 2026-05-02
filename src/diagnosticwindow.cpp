@@ -36,7 +36,7 @@ DiagnosticWindow::DiagnosticWindow(QWidget *parent)
     , m_pdfTotal(10)
     , m_resultIndex(1)
     , m_resultTotal(8)
-    , m_reader(new McuSerialReader(this))
+    , m_reader(McuSerialReader::ensureShared())
     , m_faultBadgeLabels{}
     , m_faultDetailTitleLabel(nullptr)
     , m_faultDetailScrollArea(nullptr)

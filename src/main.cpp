@@ -34,6 +34,7 @@
 #include "videoplaywindow.h"
 #include "devicedetect.h"
 #include "appsignals.h"
+#include "mcuserialreader.h"
 
 // ── 背光控制（POWER 键关/亮屏，SLEEP 键关机，具体 dispdbg 操作在 backlight.cpp）─
 static MainWindow *findMainWindow();
@@ -1043,6 +1044,51 @@ int main(int argc, char *argv[]) {
 
     MainWindow window;
     window.show();
-    
+
+    // ── TXRX CAN 数据读取（左转/右转/倒车行车摄像 + MCU 时间同步）────────────────
+    if (device.getDeviceType() == DeviceDetect::DEVICE_TYPE_CARUNIT) {
+        McuSerialReader *txrxReader = McuSerialReader::ensureShared(&app);
+        txrxReader->open(QStringLiteral("/dev/ttyS2"));
+
+        // LC 灯光指令 → 对应模式开/关（边沿触发，避免每 35ms 重复调用）
+        QObject::connect(txrxReader, &McuSerialReader::lcReceived,
+                         &app, [](int rTurn, int lTurn, int backup) {
+            static int lastRTurn = 0, lastLTurn = 0, lastBackup = 0;
+            // 倒车优先级最高
+            if (backup != lastBackup) {
+                if (backup) activateDrivingImageMode(270);
+                else        deactivateDrivingImageMode(270);
+                lastBackup = backup;
+            }
+            if (lTurn != lastLTurn) {
+                if (lTurn)  activateDrivingImageMode(271);
+                else        deactivateDrivingImageMode(271);
+                lastLTurn = lTurn;
+            }
+            if (rTurn != lastRTurn) {
+                if (rTurn)  activateDrivingImageMode(272);
+                else        deactivateDrivingImageMode(272);
+                lastRTurn = rTurn;
+            }
+        });
+
+        // TD 时间日期 → 同步系统时钟（至多每分钟同步一次）
+        QObject::connect(txrxReader, &McuSerialReader::tdReceived,
+                         &app, [](int year, int month, int day, int hour, int min) {
+            static int lastSyncMin = -1;
+            if (min == lastSyncMin) return;
+            lastSyncMin = min;
+            const QString dateStr = QString("%1-%2-%3 %4:%5:00")
+                .arg(year)
+                .arg(month, 2, 10, QChar('0'))
+                .arg(day,   2, 10, QChar('0'))
+                .arg(hour,  2, 10, QChar('0'))
+                .arg(min,   2, 10, QChar('0'));
+            qDebug() << "[TXRX] sync system time:" << dateStr;
+            QProcess::startDetached(QStringLiteral("date"),
+                                    {QStringLiteral("-s"), dateStr});
+        });
+    }
+
     return app.exec();
 }
