@@ -2048,10 +2048,10 @@ QWidget *SystemSettingWindow::createUpdatePage()
     m_updateCancelBtn = new QPushButton(QStringLiteral("取消更新"), appUpdateWidget);
     m_updateStartBtn->setFixedSize(192, 54);
     m_updateCancelBtn->setFixedSize(192, 54);
-    m_updateStartBtn->setStyleSheet("QPushButton{background:transparent;color:#ffffff;border:2px solid #0068ff;font-size:24px;}"
+    m_updateStartBtn->setStyleSheet("QPushButton{background:transparent;color:#ffffff;border:2px solid #0068ff;font-size:24px;outline:none;}"
                                     "QPushButton:hover{border-color:#00faff;color:#00faff;}");
-    m_updateCancelBtn->setStyleSheet("QPushButton{background:transparent;color:#ffffff;border:2px solid #0068ff;font-size:24px;}"
-                                     "QPushButton:hover{border-color:#00faff;color:#00faff;}");
+    m_updateCancelBtn->setStyleSheet("QPushButton{background:transparent;color:#ffffff;border:2px solid #0068ff;font-size:24px;outline:none;}"
+                                     "QPushButton:hover{border-color:#00faff;color:#00faff;}");;
     connect(m_updateStartBtn, &QPushButton::clicked, this, &SystemSettingWindow::onStartUpdate);
     connect(m_updateCancelBtn, &QPushButton::clicked, this, &SystemSettingWindow::onCancelUpdate);
 
@@ -2120,7 +2120,7 @@ QWidget *SystemSettingWindow::createUpdatePage()
     auto *fwStartRow = new QHBoxLayout();
     m_firmwareStartBtn = new QPushButton(QStringLiteral("启动更新"), firmwareUpdateWidget);
     m_firmwareStartBtn->setFixedSize(192, 54);
-    m_firmwareStartBtn->setStyleSheet("QPushButton{background:transparent;color:#ffffff;border:2px solid #0068ff;font-size:24px;}"
+    m_firmwareStartBtn->setStyleSheet("QPushButton{background:transparent;color:#ffffff;border:2px solid #0068ff;font-size:24px;outline:none;}"
                                       "QPushButton:hover{border-color:#00faff;color:#00faff;}");
     connect(m_firmwareStartBtn, &QPushButton::clicked, this, [this]() {
         QString updateFile;
@@ -2146,7 +2146,7 @@ QWidget *SystemSettingWindow::createUpdatePage()
     auto *fwCancelRow = new QHBoxLayout();
     m_firmwareCancelBtn = new QPushButton(QStringLiteral("取消更新"), firmwareUpdateWidget);
     m_firmwareCancelBtn->setFixedSize(192, 54);
-    m_firmwareCancelBtn->setStyleSheet("QPushButton{background:transparent;color:#ffffff;border:2px solid #0068ff;font-size:24px;}"
+    m_firmwareCancelBtn->setStyleSheet("QPushButton{background:transparent;color:#ffffff;border:2px solid #0068ff;font-size:24px;outline:none;}"
                                        "QPushButton:hover{border-color:#00faff;color:#00faff;}");
     connect(m_firmwareCancelBtn, &QPushButton::clicked, this, [this]() {
         m_otaManager->cancelUpdate();
@@ -2214,14 +2214,14 @@ QWidget *SystemSettingWindow::createUpdatePage()
     m_mcuStartBtn = new QPushButton(QStringLiteral("启动更新"), mcuWidget);
     m_mcuStartBtn->setFixedSize(192, 54);
     m_mcuStartBtn->setStyleSheet(
-        "QPushButton{background:transparent;color:#ffffff;border:2px solid #0068ff;font-size:24px;}"
-        "QPushButton:hover{border-color:#00faff;color:#00faff;}");
+        "QPushButton{background:transparent;color:#ffffff;border:2px solid #0068ff;font-size:24px;outline:none;}"
+        "QPushButton:hover{border-color:#00faff;color:#00faff;}");;
     connect(m_mcuStartBtn, &QPushButton::clicked, this, &SystemSettingWindow::onMcuUpdateStart);
 
     m_mcuCancelBtn = new QPushButton(QStringLiteral("取消更新"), mcuWidget);
     m_mcuCancelBtn->setFixedSize(192, 54);
     m_mcuCancelBtn->setStyleSheet(
-        "QPushButton{background:transparent;color:#ffffff;border:2px solid #0068ff;font-size:24px;}"
+        "QPushButton{background:transparent;color:#ffffff;border:2px solid #0068ff;font-size:24px;outline:none;}"
         "QPushButton:hover{border-color:#00faff;color:#00faff;}");
     connect(m_mcuCancelBtn, &QPushButton::clicked, this, &SystemSettingWindow::onMcuUpdateCancel);
     m_mcuCancelBtn->hide();
