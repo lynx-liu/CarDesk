@@ -21,6 +21,8 @@
 #include <QSize>
 #include "appsignals.h"
 
+static QString findFirstUsbVideoDirectory();
+
 VideoListWindow::VideoListWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_homeButton(new QPushButton(this))
@@ -46,8 +48,26 @@ VideoListWindow::VideoListWindow(QWidget *parent)
     }
     
     setupUI();
-    loadVideoFiles(m_currentPath);
-    
+
+    connect(AppSignals::instance(), &AppSignals::usbStateChanged, this, [this](bool connected) {
+        if (!connected) {
+            m_currentPath.clear();
+            if (m_videoListWidget) m_videoListWidget->clear();
+            if (m_pathLabel) m_pathLabel->setText(QStringLiteral("请插入U盘"));
+        } else if (isVisible()) {
+            const QString usbPath = findFirstUsbVideoDirectory();
+            if (!usbPath.isEmpty()) loadVideoFiles(usbPath);
+        }
+    });
+
+    const QString initUsb = findFirstUsbVideoDirectory();
+    if (!initUsb.isEmpty()) {
+        m_currentPath = initUsb;
+        loadVideoFiles(initUsb);
+    } else {
+        if (m_pathLabel) m_pathLabel->setText(QStringLiteral("请插入U盘"));
+    }
+
     connect(m_homeButton, &QPushButton::clicked, this, &VideoListWindow::onHomeClicked);
     connect(m_backDirButton, &QPushButton::clicked, this, &VideoListWindow::onBackClicked);
     connect(m_videoListWidget, &QListWidget::itemClicked, this, &VideoListWindow::onItemClicked);
@@ -224,6 +244,18 @@ void VideoListWindow::loadVideoFiles(const QString &directory) {
     dir.setFilter(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot);
     dir.setSorting(QDir::DirsFirst);
     
+    const QString normalizedPath = QDir::cleanPath(directory);
+    if (!dir.exists()) {
+        const bool inUsb = normalizedPath.startsWith(QLatin1String("/mnt/usb"))
+                        || normalizedPath.startsWith(QLatin1String("/media/usb"));
+        if (!inUsb) {
+            m_currentPath.clear();
+            m_videoListWidget->clear();
+            if (m_pathLabel) m_pathLabel->setText(QStringLiteral("请插入U盘"));
+            return;
+        }
+        // USB 路径不存在时继续，下方显示空列表
+    }
     QFileInfoList fileInfos = dir.entryInfoList();
     qDebug() << "Loading directory:" << directory;
     qDebug() << "Found" << fileInfos.count() << "items";
@@ -267,7 +299,37 @@ void VideoListWindow::loadVideoFiles(const QString &directory) {
         }
     }
     
-    updatePath(directory);
+    // USB 路径标签（sda1 为设备根）
+    if (m_pathLabel) {
+        static const QStringList kUsbBases = {
+            QStringLiteral("/mnt/usb0/"),
+            QStringLiteral("/mnt/usb/"),
+            QStringLiteral("/media/usb0/"),
+            QStringLiteral("/media/usb/"),
+        };
+        QString deviceRoot;
+        for (const QString &base : kUsbBases) {
+            if (normalizedPath.startsWith(base)) {
+                int sep = normalizedPath.indexOf('/', base.length());
+                deviceRoot = (sep < 0) ? normalizedPath : normalizedPath.left(sep);
+                break;
+            }
+        }
+        QString displayPath;
+        if (!deviceRoot.isEmpty()) {
+            displayPath = QStringLiteral("U盘");
+            if (normalizedPath != deviceRoot) {
+                QString rel = normalizedPath.mid(deviceRoot.length() + 1);
+                if (!rel.isEmpty())
+                    displayPath += QStringLiteral(" > ") + rel.replace('/', QStringLiteral(" > "));
+            }
+        } else {
+            displayPath = normalizedPath;
+        }
+        if (m_videoListWidget->count() == 0)
+            displayPath = QStringLiteral("无内容");
+        m_pathLabel->setText(displayPath);
+    }
     qDebug() << "Loaded" << m_videoListWidget->count() << "items in total";
 }
 
@@ -285,17 +347,42 @@ void VideoListWindow::onHomeClicked() {
 }
 
 void VideoListWindow::onBackClicked() {
-    if (m_currentPath != m_initialPath) {
-        // 返回上一级目录
-        QDir dir(m_currentPath);
-        if (dir.cdUp()) {
-            loadVideoFiles(dir.absolutePath());
+    static const QStringList kUsbBases = {
+        QStringLiteral("/mnt/usb0/"),
+        QStringLiteral("/mnt/usb/"),
+        QStringLiteral("/media/usb0/"),
+        QStringLiteral("/media/usb/"),
+    };
+    const QString normalizedPath = QDir::cleanPath(m_currentPath);
+    QString deviceRoot;
+    for (const QString &base : kUsbBases) {
+        if (normalizedPath.startsWith(base)) {
+            int sep = normalizedPath.indexOf('/', base.length());
+            deviceRoot = (sep < 0) ? normalizedPath : normalizedPath.left(sep);
+            break;
         }
-    } else {
-        // 在初始目录，回到主界面
+    }
+    if (!deviceRoot.isEmpty()) {
+        if (normalizedPath == deviceRoot) {
+            emit requestReturnToMain();
+            hide();
+            return;
+        }
+        QDir dir(normalizedPath);
+        if (dir.cdUp()) {
+            const QString parent = dir.absolutePath();
+            if (parent == deviceRoot || parent.startsWith(deviceRoot + '/')) {
+                loadVideoFiles(parent);
+                return;
+            }
+        }
         emit requestReturnToMain();
         hide();
+        return;
     }
+    // 非USB，直接返回主界面
+    emit requestReturnToMain();
+    hide();
 }
 
 void VideoListWindow::keyPressEvent(QKeyEvent *event)
@@ -384,6 +471,24 @@ void VideoListWindow::setBluetoothManager(BluetoothManager *manager) {
 
 void VideoListWindow::setMusicWindow(MusicPlayerWindow *musicWindow) {
     m_musicWindow = musicWindow;
+}
+
+static QString findFirstUsbVideoDirectory() {
+    static const QStringList kBases = {
+        QStringLiteral("/mnt/usb/"),
+        QStringLiteral("/mnt/usb0/"),
+        QStringLiteral("/media/usb/"),
+        QStringLiteral("/media/usb0/"),
+    };
+    for (const QString &base : kBases) {
+        const QString basePath = base.left(base.length() - 1);
+        QDir d(basePath);
+        if (!d.exists()) continue;
+        const QStringList subs = d.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        if (!subs.isEmpty())
+            return base + subs.first();
+    }
+    return {};
 }
 
 void VideoListWindow::onItemClicked(QListWidgetItem *item) {
