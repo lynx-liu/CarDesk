@@ -11,6 +11,7 @@
 #include <QPainter>
 #include <QProcess>
 #include <QScreen>
+#include <QFileInfo>
 #include <QTextCodec>
 #include <QTimer>
 #include <QDialog>
@@ -372,6 +373,40 @@ static void scheduleVolumeRead(VolumeOverlay *overlay) {
     overlay->showVolume(qBound(0, level, 10) * 10);
 }
 
+static QString clickSoundPath(int level) {
+    const QString baseDir = QStringLiteral("/usr/share/wav");
+    if (level == 1) {
+        return QDir(baseDir).absoluteFilePath(QStringLiteral("click_soft.wav"));
+    }
+    return QDir(baseDir).absoluteFilePath(QStringLiteral("click_loud.wav"));
+}
+
+static void playTouchClickSound() {
+    const int level = qApp->property("appTouchSoundLevel").toInt();
+    if (level <= 0) {
+        return;
+    }
+    static QProcess *proc = nullptr;
+    if (!proc) {
+        proc = new QProcess(qApp);
+        proc->setProcessChannelMode(QProcess::MergedChannels);
+        QObject::connect(proc, QOverload<int,QProcess::ExitStatus>::of(&QProcess::finished), qApp,
+            [](int code, QProcess::ExitStatus) {
+                qDebug() << "[ClickSound] tinyplay exit code=" << code;
+            });
+    }
+    if (proc->state() != QProcess::NotRunning) {
+        return;
+    }
+    const QString wav = clickSoundPath(level);
+    if (!QFileInfo::exists(wav) || !QFileInfo(wav).isFile()) {
+        qWarning() << "[ClickSound] click sound file not found:" << wav;
+        return;
+    }
+    qDebug() << "[ClickSound] playing level=" << level << "wav=" << wav;
+    proc->start(QStringLiteral("tinyplay"), {wav});
+}
+
 // 挂在 QApplication 上，能拦截所有窗口的 KeyPress，不依赖窗口焦点
 class GlobalKeyFilter : public QObject {
 public:
@@ -382,14 +417,15 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override {
         // 任意按键或触摸 → 完成亮屏
         const QEvent::Type t = event->type();
-        if ((t == QEvent::MouseButtonPress || t == QEvent::TouchBegin) && ScreenClockOverlay::instance()->isVisible()) {
-            ScreenClockOverlay::instance()->hideClock();
-            return true;  // 消耗事件，不让底层界面误操作
-        }
         if (t == QEvent::MouseButtonPress || t == QEvent::TouchBegin) {
             if (ScreenBlanker::instance()->isBlanked()) {
                 ScreenBlanker::instance()->unblank();
                 return true;  // 吸收事件，防止触发底层操作
+            }
+            playTouchClickSound();
+            if (ScreenClockOverlay::instance()->isVisible()) {
+                ScreenClockOverlay::instance()->hideClock();
+                return true;  // 消耗事件，不让底层界面误操作
             }
         }
         if (t == QEvent::KeyPress) {
@@ -860,6 +896,8 @@ int main(int argc, char *argv[]) {
             screenClockMode = QLatin1String("digital");
         }
         app.setProperty("appScreenClockMode", screenClockMode);
+        const int touchClickLevel = qBound(0, settings.value("sound/touchClickLevel", 1).toInt(), 2);
+        app.setProperty("appTouchSoundLevel", touchClickLevel);
     }
     app.setProperty("appSoundMode", QStringLiteral("立体声"));  // 默认声场模式
     T507SdkBridge::setSoundMode(QStringLiteral("立体声"));  // 应用默认声场到 TM2313

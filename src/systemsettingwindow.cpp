@@ -1062,11 +1062,13 @@ QWidget *SystemSettingWindow::createSoundPage()
     const QStringList touchModes = {QStringLiteral("静音"), QStringLiteral("柔和"), QStringLiteral("响亮")};
     auto *touchGroup = new QButtonGroup(page);
     touchGroup->setExclusive(true);
+    const int savedTouchLevel = qBound(0, QSettings().value("sound/touchClickLevel", 1).toInt(), touchModes.size() - 1);
+    qApp->setProperty("appTouchSoundLevel", savedTouchLevel);
     tabLayout->addStretch();
     for (int i = 0; i < touchModes.size(); ++i) {
         auto *btn = new QPushButton(touchModes[i], tabWrap);
         btn->setCheckable(true);
-        btn->setChecked(i == 1);
+        btn->setChecked(i == savedTouchLevel);
         btn->setFixedSize(120, 44);
         btn->setStyleSheet(
             QString("QPushButton{border:none;background:#3f3d52;color:#fff;font-size:24px;%1}"
@@ -1075,9 +1077,13 @@ QWidget *SystemSettingWindow::createSoundPage()
                     "QPushButton:focus, QPushButton:checked:focus, QPushButton:focus-visible {outline:none;border:none;}")
                 .arg(i == 0 ? "border-radius:22px 0 0 22px;" : (i == touchModes.size() - 1 ? "border-radius:0 22px 22px 0;" : "border-radius:0;"))
         );
-        touchGroup->addButton(btn);
+        touchGroup->addButton(btn, i);
         tabLayout->addWidget(btn);
     }
+    connect(touchGroup, QOverload<int>::of(&QButtonGroup::buttonClicked), this, [](int id) {
+        qApp->setProperty("appTouchSoundLevel", id);
+        QSettings().setValue("sound/touchClickLevel", id);
+    });
     touchLayout->addWidget(tabWrap, 1);
 
     auto *touchDivider = new QFrame(page);
