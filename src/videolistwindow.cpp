@@ -229,9 +229,10 @@ void VideoListWindow::setupUI() {
         "padding: 12px 24px;"
     );
     m_pathLabel->setFixedHeight(50);
+    m_pathLabel->setFixedWidth(956);
     m_pathLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     
-    listLayout->addWidget(m_pathLabel);
+    listLayout->addWidget(m_pathLabel, 0, Qt::AlignHCenter);
     
     mainLayout->addWidget(listWidget, 1);
 }
