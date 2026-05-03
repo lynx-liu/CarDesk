@@ -59,6 +59,8 @@ static void performFactoryReset()
     settings.clear();
     settings.sync();
     qDebug() << "SystemSettingWindow: factory reset cleared application settings.";
+    // 清除完毕后立即重启设备
+    QProcess::startDetached(QStringLiteral("/sbin/reboot"), {});
 }
 
 class ClickableSlider : public QSlider {
@@ -1962,11 +1964,10 @@ QWidget *SystemSettingWindow::createFactoryPage()
         root->addWidget(top);
         root->addLayout(row);
 
-        connect(ok, &QPushButton::clicked, &dialog, [this, &dialog]() {
+        connect(ok, &QPushButton::clicked, &dialog, [&dialog]() {
             performFactoryReset();
             dialog.accept();
-            emit requestReturnToMain();
-            this->close();
+            // performFactoryReset 已触发重启，无需再返回主界面
         });
         connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
         dialog.exec();
