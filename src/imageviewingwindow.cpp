@@ -23,6 +23,8 @@
 #include <QShowEvent>
 #include <QTime>
 #include <QStorageInfo>
+#include <QGesture>
+#include <QGestureEvent>
 #include "appsignals.h"
 
 static QString findFirstUsbImageDirectory();
@@ -31,6 +33,7 @@ static QString findUsbImageRoot(const QString &path);
 ImageViewingWindow::ImageViewingWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_modeStack(nullptr)
+    , m_viewPage(nullptr)
     , m_titleLabel(nullptr)
     , m_viewTitleLabel(nullptr)
     , m_previewLabel(nullptr)
@@ -41,6 +44,9 @@ ImageViewingWindow::ImageViewingWindow(QWidget *parent)
     , m_rotateButton(nullptr)
     , m_currentIndex(0)
     , m_rotationAngle(0)
+    , m_zoomFactor(1.0)
+    , m_isPinching(false)
+    , m_cachedRotation(-1)
     , m_currentPath(QStringLiteral("/mnt"))
     , m_initialPath(QStringLiteral("/mnt"))
 {
@@ -112,6 +118,7 @@ void ImageViewingWindow::showEvent(QShowEvent *event)
 void ImageViewingWindow::onPrevImage()
 {
     if (m_imageFiles.isEmpty()) return;
+    m_zoomFactor = 1.0;
     m_currentIndex = (m_currentIndex + m_imageFiles.count() - 1) % m_imageFiles.count();
     updateImageView();
 }
@@ -119,6 +126,7 @@ void ImageViewingWindow::onPrevImage()
 void ImageViewingWindow::onNextImage()
 {
     if (m_imageFiles.isEmpty()) return;
+    m_zoomFactor = 1.0;
     m_currentIndex = (m_currentIndex + 1) % m_imageFiles.count();
     updateImageView();
 }
@@ -127,6 +135,7 @@ void ImageViewingWindow::onOpenCurrentImage()
 {
     if (!m_modeStack || m_imageFiles.isEmpty()) return;
     m_rotationAngle = 0;
+    m_zoomFactor = 1.0;
     m_modeStack->setCurrentIndex(1);
     updateImageView();
 }
@@ -241,6 +250,10 @@ void ImageViewingWindow::setupUI()
 
     auto *viewPage = new QWidget(m_modeStack);
     viewPage->setStyleSheet("QWidget{background:#000;border:none;}");
+    viewPage->setAttribute(Qt::WA_AcceptTouchEvents);
+    viewPage->grabGesture(Qt::PinchGesture);
+    viewPage->installEventFilter(this);
+    m_viewPage = viewPage;
 
     m_previewLabel = new QLabel(viewPage);
     m_previewLabel->setGeometry(0, 0, 1280, 720);
@@ -345,19 +358,52 @@ void ImageViewingWindow::updateImageView()
     if (m_viewTitleLabel)
         m_viewTitleLabel->setText(info.fileName());
 
-    if (m_previewLabel) {
-        QPixmap source(filePath);
-        if (source.isNull())
-            source = QPixmap(QStringLiteral(":/images/image_view.png"));
-        if (!source.isNull()) {
-            if (m_rotationAngle != 0) {
-                QTransform transform;
-                transform.rotate(m_rotationAngle);
-                source = source.transformed(transform, Qt::SmoothTransformation);
-            }
-            m_previewLabel->setPixmap(source.scaled(m_previewLabel->size(),
-                Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    if (!m_previewLabel) return;
+
+    // Re-load from disk only when file or rotation changes (not on every zoom step)
+    if (filePath != m_cachedImagePath || m_rotationAngle != m_cachedRotation) {
+        QPixmap raw(filePath);
+        if (raw.isNull())
+            raw = QPixmap(QStringLiteral(":/images/image_view.png"));
+        if (!raw.isNull() && m_rotationAngle != 0) {
+            QTransform t;
+            t.rotate(m_rotationAngle);
+            raw = raw.transformed(t, Qt::SmoothTransformation);
         }
+        m_cachedSourcePixmap = raw;
+        m_cachedImagePath    = filePath;
+        m_cachedRotation     = m_rotationAngle;
+    }
+
+    if (!m_cachedSourcePixmap.isNull()) {
+        const Qt::TransformationMode mode =
+            m_isPinching ? Qt::FastTransformation : Qt::SmoothTransformation;
+
+        const double sw = m_cachedSourcePixmap.width();
+        const double sh = m_cachedSourcePixmap.height();
+        const double lw = m_previewLabel->width();
+        const double lh = m_previewLabel->height();
+
+        // Scale that fits the source into the label at zoom=1 (letterbox scale)
+        const double fitScale    = qMin(lw / sw, lh / sh);
+        const double displayScale = fitScale * m_zoomFactor;
+
+        // Visible output size in label coords (capped at label dims)
+        const int visW = qMin((int)qRound(sw * displayScale), (int)lw);
+        const int visH = qMin((int)qRound(sh * displayScale), (int)lh);
+
+        // Corresponding source crop region (always <= source size)
+        // visW/displayScale == visH/displayScale maintains the label aspect,
+        // so scaling with IgnoreAspectRatio produces no distortion.
+        const int cropW = qBound(1, (int)qRound(visW / displayScale), (int)sw);
+        const int cropH = qBound(1, (int)qRound(visH / displayScale), (int)sh);
+        const int ox    = ((int)sw - cropW) / 2;
+        const int oy    = ((int)sh - cropH) / 2;
+
+        const QPixmap cropped = m_cachedSourcePixmap.copy(
+            qMax(0, ox), qMax(0, oy), cropW, cropH);
+        m_previewLabel->setPixmap(
+            cropped.scaled(visW, visH, Qt::IgnoreAspectRatio, mode));
     }
 }
 
@@ -373,6 +419,30 @@ void ImageViewingWindow::onItemClicked(QListWidgetItem *item)
         m_currentIndex = (idx >= 0) ? idx : 0;
         onOpenCurrentImage();
     }
+}
+
+bool ImageViewingWindow::eventFilter(QObject *obj, QEvent *event)
+{
+    if (obj == m_viewPage && event->type() == QEvent::Gesture) {
+        auto *ge = static_cast<QGestureEvent *>(event);
+        if (auto *pinch = static_cast<QPinchGesture *>(ge->gesture(Qt::PinchGesture))) {
+            const Qt::GestureState state = pinch->state();
+            if (state == Qt::GestureStarted || state == Qt::GestureUpdated) {
+                m_isPinching = true;
+                m_zoomFactor *= pinch->scaleFactor();
+                m_zoomFactor  = qBound(0.5, m_zoomFactor, 10.0);
+                updateImageView();
+            } else if (state == Qt::GestureFinished) {
+                m_isPinching = false;
+                updateImageView();  // final smooth render
+            } else if (state == Qt::GestureCanceled) {
+                m_isPinching = false;
+            }
+            ge->accept(pinch);
+            return true;
+        }
+    }
+    return QMainWindow::eventFilter(obj, event);
 }
 
 static bool isUsbRootPath(const QString &root)

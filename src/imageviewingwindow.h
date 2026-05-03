@@ -5,6 +5,7 @@
 #include <QStringList>
 #include <QStyledItemDelegate>
 #include <QPainter>
+#include <QGestureEvent>
 
 class ImageListItemDelegate : public QStyledItemDelegate {
 public:
@@ -56,6 +57,7 @@ protected:
     void closeEvent(QCloseEvent *event) override;
     void showEvent(QShowEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
     void onPrevImage();
@@ -72,6 +74,7 @@ private:
     void updateImageView();
 
     QStackedWidget *m_modeStack;
+    QWidget       *m_viewPage;
     QLabel *m_titleLabel;
     QLabel *m_viewTitleLabel;
     QLabel *m_previewLabel;
@@ -82,6 +85,13 @@ private:
     QPushButton *m_rotateButton;
     int m_currentIndex;
     int m_rotationAngle;
+    double m_zoomFactor;
+    bool m_isPinching;
+
+    // cached source for fast zoom (no re-read from disk per gesture frame)
+    QPixmap m_cachedSourcePixmap;
+    QString m_cachedImagePath;
+    int     m_cachedRotation;
 
     QString m_currentPath;
     QString m_initialPath;
