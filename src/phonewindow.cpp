@@ -808,7 +808,7 @@ void PhoneWindow::onBluetoothDeviceDisconnected() {
         m_numberEdit->clear();
         m_numberEdit->setEnabled(false);
         m_numberEdit->setStyleSheet("QLineEdit{color:#FF4D4F;font-size:48px;background:rgba(255,255,255,0.1);border:1px solid #FF4D4F;padding:0 20px;} QLineEdit::placeholderText { color: #FF4D4F; }");
-        m_numberEdit->setPlaceholderText(QStringLiteral("蓝牙未链接"));
+        m_numberEdit->setPlaceholderText(QStringLiteral("蓝牙未连接"));
     }
 }
 

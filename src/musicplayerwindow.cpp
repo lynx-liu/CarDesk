@@ -1661,6 +1661,9 @@ void MusicPlayerWindow::onUsbTabClicked()
     scanFlatPlaylist();
     refreshPlaylistWidget();
     updatePlayModeUI();
+    if (m_nowPlayingLabel) {
+        m_nowPlayingLabel->setStyleSheet("color: #fff; font-size: 48px; background: transparent;");
+    }
     updateNowPlaying();
     if (m_singerLabel) m_singerLabel->setText(QStringLiteral("--"));
     if (m_albumLabel) m_albumLabel->setText(QStringLiteral("--"));
@@ -1685,8 +1688,10 @@ void MusicPlayerWindow::onBtTabClicked()
         "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_on.png); color: #fff; font-size: 28px; }");
     m_musicFiles.clear();
     refreshPlaylistWidget();
-    if (m_nowPlayingLabel) {
-        m_nowPlayingLabel->setText(QStringLiteral("蓝牙音乐"));
+    if (m_bluetoothManager && m_bluetoothManager->isConnected()) {
+        onBluetoothDeviceConnected(m_bluetoothManager->getConnectedDeviceName());
+    } else {
+        onBluetoothDeviceDisconnected();
     }
     if (m_singerLabel) m_singerLabel->setText("--");
     if (m_albumLabel) m_albumLabel->setText("--");
@@ -1829,6 +1834,9 @@ void MusicPlayerWindow::onListFavTabClicked()
 void MusicPlayerWindow::updateNowPlaying()
 {
     if (!m_nowPlayingLabel) return;
+    if (m_isUsbMode) {
+        m_nowPlayingLabel->setStyleSheet("color: #fff; font-size: 48px; background: transparent;");
+    }
     if (m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count()) {
         m_nowPlayingLabel->setText(QFileInfo(m_musicFiles[m_currentIndex]).baseName());
         if (m_singerLabel) m_singerLabel->setText(QStringLiteral("--"));
