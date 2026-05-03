@@ -39,6 +39,9 @@ signals:
     /** 蓝牙连接状态变化：true=已连接，false=已断开 */
     void bluetoothConnectedChanged(bool connected);
 
+    /** USB 设备插拔状态变化：true=已插入，false=已拔出 */
+    void usbStateChanged(bool connected);
+
 private:
     AppSignals() = default;
 };

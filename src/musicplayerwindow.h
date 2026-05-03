@@ -248,7 +248,7 @@ private:
     bool       m_sdkPlaying    = false;
     bool       m_sdkSwitching  = false;
     int        m_sdkDurationMs = 0;
-    bool       m_useSdkPlayer  = false;
+    bool        m_useSdkPlayer  = false;
 #endif
 };
 

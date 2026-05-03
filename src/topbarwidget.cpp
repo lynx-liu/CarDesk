@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QVariant>
 #include <QStorageInfo>
+#include <QDir>
 
 TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     : QWidget(parent)
@@ -162,14 +163,34 @@ void TopBarRightWidget::updateUsbState()
 {
     bool foundUsb = false;
 
+    // 主路：QStorageInfo
     for (const QStorageInfo &storage : QStorageInfo::mountedVolumes()) {
         if (!storage.isValid() || !storage.isReady())
             continue;
-
         const QString root = storage.rootPath();
-        if (root == QStringLiteral("/mnt/usb") || root.startsWith(QStringLiteral("/mnt/usb/"))) {
+        if (root == QStringLiteral("/mnt/usb") || root.startsWith(QStringLiteral("/mnt/usb/"))
+                || root == QStringLiteral("/mnt/usb0") || root.startsWith(QStringLiteral("/mnt/usb0/"))
+                || root == QStringLiteral("/media/usb") || root.startsWith(QStringLiteral("/media/usb/"))
+                || root == QStringLiteral("/media/usb0") || root.startsWith(QStringLiteral("/media/usb0/"))) {
             foundUsb = true;
             break;
+        }
+    }
+
+    // 备用：直接扫文件系统（T507 上 QStorageInfo 可能不可靠）
+    if (!foundUsb) {
+        static const QStringList kBases = {
+            QStringLiteral("/mnt/usb/"),
+            QStringLiteral("/mnt/usb0/"),
+            QStringLiteral("/media/usb/"),
+            QStringLiteral("/media/usb0/"),
+        };
+        for (const QString &base : kBases) {
+            QDir d(base.left(base.length() - 1));
+            if (d.exists() && !d.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty()) {
+                foundUsb = true;
+                break;
+            }
         }
     }
 
@@ -177,6 +198,7 @@ void TopBarRightWidget::updateUsbState()
         return;
 
     m_usbConnected = foundUsb;
+    emit AppSignals::instance()->usbStateChanged(foundUsb);
     if (!m_usbBtn)
         return;
 

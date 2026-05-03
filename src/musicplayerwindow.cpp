@@ -591,6 +591,9 @@ private:
     MusicPlayerWindow *m_owner;
 };
 
+// 前向声明（定义在文件后部）
+static QString findFirstUsbDevicePath();
+
 // ══════════════════════════════════════════════════════════════════════════════
 // 构造 / 析构
 // ══════════════════════════════════════════════════════════════════════════════
@@ -643,6 +646,22 @@ MusicPlayerWindow::MusicPlayerWindow(QWidget *parent)
     refreshPlaylistWidget();
     loadFavoriteSongs();
     updateCollectButtonState();
+
+    // USB 插拔时更新显示
+    connect(AppSignals::instance(), &AppSignals::usbStateChanged, this, [this](bool connected) {
+        if (!connected && m_isUsbMode) {
+            m_currentBrowsePath.clear();
+            if (m_musicListWidget) m_musicListWidget->clear();
+            if (m_listPathLabel) m_listPathLabel->setText(QStringLiteral("请插入U盘"));
+        } else if (connected && m_isUsbMode
+                   && m_stackedWidget && m_stackedWidget->currentIndex() == kPageList
+                   && !m_listFavMode) {
+            // 在列表页且 U 盘模式，插入时自动刷新
+            const QString usbPath = findFirstUsbDevicePath();
+            if (!usbPath.isEmpty())
+                loadDirectory(usbPath);
+        }
+    });
 
     qDebug() << "MusicPlayerWindow created, found" << m_musicFiles.count() << "audio files";
 }
@@ -1127,35 +1146,50 @@ void MusicPlayerWindow::loadDirectory(const QString &path)
 
     QDir dir(normalizedPath);
     if (!dir.exists()) {
-        m_currentBrowsePath.clear();
-        m_musicListWidget->clear();
-        if (m_listPathLabel) {
-            m_listPathLabel->setText(QStringLiteral("请插入U盘"));
+        const bool inUsb = normalizedPath.startsWith(QStringLiteral("/mnt/usb"))
+                || normalizedPath.startsWith(QStringLiteral("/media/usb"));
+        if (!inUsb) {
+            m_currentBrowsePath.clear();
+            m_musicListWidget->clear();
+            if (m_listPathLabel)
+                m_listPathLabel->setText(QStringLiteral("请插入U盘"));
+            return;
         }
-        return;
+        // USB 路径目录不存在：继续走正常流程，扫描结果为空，标签在末尾正确显示
     }
 
     dir.setFilter(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot | QDir::NoSymLinks);
     dir.setSorting(QDir::DirsFirst | QDir::Name);
 
-    // 更新路径标签（以 sda* 为 U 盘根目录）
-    QString displayPath = normalizedPath;
-    const QString deviceRoot = findUsbDeviceRoot(normalizedPath);
-    if (!deviceRoot.isEmpty()) {
-        displayPath = QStringLiteral("U盘");
-        QString relativePath = normalizedPath.mid(deviceRoot.length());
-        if (!relativePath.isEmpty()) {
-            if (relativePath.startsWith('/'))
-                relativePath.remove(0, 1);
-            if (!relativePath.isEmpty())
-                displayPath += QStringLiteral(" > ") + relativePath.replace('/', QStringLiteral(" > "));
+    // 更新路径标签（sda1 才是设备根，取 USB 基础路径下第一级子目录）
+    {
+        static const QStringList kUsbBases = {
+            QStringLiteral("/mnt/usb0/"),
+            QStringLiteral("/mnt/usb/"),
+            QStringLiteral("/media/usb0/"),
+            QStringLiteral("/media/usb/"),
+        };
+        QString deviceRoot;
+        for (const QString &base : kUsbBases) {
+            if (normalizedPath.startsWith(base)) {
+                int sep = normalizedPath.indexOf('/', base.length());
+                deviceRoot = (sep < 0) ? normalizedPath : normalizedPath.left(sep);
+                break;
+            }
         }
-    } else if (displayPath.startsWith("/mnt/usb")) {
-        displayPath = QStringLiteral("U盘") + displayPath.mid(QStringLiteral("/mnt/usb").length()).replace('/', " > ");
-    } else if (displayPath.startsWith("/mnt")) {
-        displayPath = QStringLiteral("U盘") + displayPath.mid(4).replace('/', " > ");
+        QString displayPath;
+        if (!deviceRoot.isEmpty()) {
+            displayPath = QStringLiteral("U盘");
+            if (normalizedPath != deviceRoot) {
+                QString rel = normalizedPath.mid(deviceRoot.length() + 1);
+                if (!rel.isEmpty())
+                    displayPath += QStringLiteral(" > ") + rel.replace('/', QStringLiteral(" > "));
+            }
+        } else {
+            displayPath = normalizedPath;
+        }
+        m_listPathLabel->setText(displayPath);
     }
-    m_listPathLabel->setText(displayPath.isEmpty() ? QStringLiteral("U盘") : displayPath);
 
     for (const QFileInfo &fi : dir.entryInfoList()) {
         bool isDir = fi.isDir();
@@ -1166,12 +1200,6 @@ void MusicPlayerWindow::loadDirectory(const QString &path)
         item->setData(Qt::UserRole,     fi.absoluteFilePath());
         item->setData(Qt::UserRole + 1, isDir);
         m_musicListWidget->addItem(item);
-    }
-
-    if (m_musicListWidget->count() == 0) {
-        if (m_listPathLabel) {
-            m_listPathLabel->setText(QStringLiteral("无内容"));
-        }
     }
 
     qDebug() << "MusicList: loaded" << m_musicListWidget->count() << "items from" << path;
@@ -1276,13 +1304,32 @@ void MusicPlayerWindow::scanFlatPlaylist()
 
 static QString findFirstUsbDevicePath()
 {
+    // 主路：QStorageInfo
     for (const QStorageInfo &storage : QStorageInfo::mountedVolumes()) {
         if (!storage.isValid() || !storage.isReady())
             continue;
         const QString root = storage.rootPath();
-        if (root.startsWith(QStringLiteral("/mnt/usb/")) && root != QStringLiteral("/mnt/usb")) {
+        if (root.startsWith(QStringLiteral("/mnt/usb/")) && root != QStringLiteral("/mnt/usb"))
             return root;
-        }
+        if (root.startsWith(QStringLiteral("/mnt/usb0/")) && root != QStringLiteral("/mnt/usb0"))
+            return root;
+        if (root.startsWith(QStringLiteral("/media/usb/")) && root != QStringLiteral("/media/usb"))
+            return root;
+        if (root.startsWith(QStringLiteral("/media/usb0/")) && root != QStringLiteral("/media/usb0"))
+            return root;
+    }
+    // 备用：直接扫文件系统
+    static const QStringList kBases = {
+        QStringLiteral("/mnt/usb/"),
+        QStringLiteral("/mnt/usb0/"),
+        QStringLiteral("/media/usb/"),
+        QStringLiteral("/media/usb0/"),
+    };
+    for (const QString &base : kBases) {
+        QDir d(base.left(base.length() - 1));
+        if (!d.exists()) continue;
+        const QStringList subs = d.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        if (!subs.isEmpty()) return base + subs.first();
     }
     return {};
 }
@@ -1888,7 +1935,22 @@ void MusicPlayerWindow::onBackFromListPage()
         return;
     }
 
-    const QString deviceRoot = findUsbDeviceRoot(m_currentBrowsePath);
+    // sda1 才是设备根：取 USB 基础路径后第一级子目录
+    static const QStringList kUsbBases = {
+        QStringLiteral("/mnt/usb0/"),
+        QStringLiteral("/mnt/usb/"),
+        QStringLiteral("/media/usb0/"),
+        QStringLiteral("/media/usb/"),
+    };
+    QString deviceRoot;
+    for (const QString &base : kUsbBases) {
+        if (m_currentBrowsePath.startsWith(base)) {
+            int sep = m_currentBrowsePath.indexOf('/', base.length());
+            deviceRoot = (sep < 0) ? m_currentBrowsePath : m_currentBrowsePath.left(sep);
+            break;
+        }
+    }
+
     if (!deviceRoot.isEmpty()) {
         if (m_currentBrowsePath == deviceRoot) {
             m_stackedWidget->setCurrentIndex(kPagePlayer);
@@ -1897,7 +1959,7 @@ void MusicPlayerWindow::onBackFromListPage()
         QDir dir(m_currentBrowsePath);
         if (dir.cdUp()) {
             const QString parent = dir.absolutePath();
-            if (parent != m_currentBrowsePath && (parent == deviceRoot || parent.startsWith(deviceRoot + '/'))) {
+            if (parent == deviceRoot || parent.startsWith(deviceRoot + '/')) {
                 loadDirectory(parent);
                 return;
             }
@@ -1906,7 +1968,7 @@ void MusicPlayerWindow::onBackFromListPage()
         return;
     }
 
-    // Fallback: if current browse path is not a mounted USB device root, just return to player.
+    // 非 USB 路径，直接返回播放页
     m_currentBrowsePath.clear();
     m_stackedWidget->setCurrentIndex(kPagePlayer);
 }
