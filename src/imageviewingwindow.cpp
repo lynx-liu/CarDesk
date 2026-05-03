@@ -583,6 +583,8 @@ void ImageViewingWindow::loadDirectory(const QString &path)
         } else {
             displayPath = normalizedPath;
         }
+        if (m_thumbnailList && m_thumbnailList->count() == 0)
+            displayPath = QStringLiteral("无内容");
         m_detailLabel->setText(displayPath);
     }
 }

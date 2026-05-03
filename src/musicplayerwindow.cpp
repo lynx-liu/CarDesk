@@ -1202,6 +1202,9 @@ void MusicPlayerWindow::loadDirectory(const QString &path)
         m_musicListWidget->addItem(item);
     }
 
+    if (m_musicListWidget->count() == 0 && m_listPathLabel)
+        m_listPathLabel->setText(QStringLiteral("无内容"));
+
     qDebug() << "MusicList: loaded" << m_musicListWidget->count() << "items from" << path;
 }
 
