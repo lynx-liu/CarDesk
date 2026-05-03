@@ -260,23 +260,22 @@ void ImageViewingWindow::setupUI()
     m_previewLabel->setAlignment(Qt::AlignCenter);
     m_previewLabel->setStyleSheet("QLabel{background:#000;}");
 
-    auto *overlayTop = new QWidget(m_previewLabel);
-    overlayTop->setGeometry(0, 0, 1280, 72);
-    overlayTop->setStyleSheet("background:rgba(0,0,0,0.5);");
-
-    auto *viewBack = new QPushButton(overlayTop);
+    // Back button directly on image — no semi-transparent parent
+    auto *viewBack = new QPushButton(m_previewLabel);
     viewBack->setGeometry(12, 12, 48, 48);
     viewBack->setStyleSheet(
-        "QPushButton{border:none;background-image:url(:/images/butt_video_back_up.png);background-repeat:no-repeat;background-position:center;}"
-        "QPushButton:hover{background-image:url(:/images/butt_video_back_down.png);}"
+        "QPushButton{border:none;background:transparent;background-image:url(:/images/butt_video_back_up.png);background-repeat:no-repeat;background-position:center;}"
+        "QPushButton:hover{background:transparent;background-image:url(:/images/butt_video_back_down.png);}"
     );
     viewBack->setFocusPolicy(Qt::NoFocus);
     connect(viewBack, &QPushButton::clicked, this, &ImageViewingWindow::onBackToList);
 
-    m_viewTitleLabel = new QLabel(QStringLiteral("图片"), overlayTop);
-    m_viewTitleLabel->setGeometry(100, 0, 1080, 72);
-    m_viewTitleLabel->setStyleSheet("QLabel{color:#fff;font-size:36px;font-weight:700;background:transparent;}");
+    // Title label carries its own semi-transparent bar background
+    m_viewTitleLabel = new QLabel(QStringLiteral("图片"), m_previewLabel);
+    m_viewTitleLabel->setGeometry(0, 0, 1280, 72);
+    m_viewTitleLabel->setStyleSheet("QLabel{color:#fff;font-size:36px;font-weight:700;background:rgba(0,0,0,0.5);}");
     m_viewTitleLabel->setAlignment(Qt::AlignCenter);
+    m_viewTitleLabel->lower();   // title bar behind the back button
 
     auto *bottomBar = new QWidget(m_previewLabel);
     bottomBar->setGeometry(0, 588, 1280, 132);
