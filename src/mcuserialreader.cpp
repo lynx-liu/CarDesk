@@ -1,4 +1,5 @@
 #include "mcuserialreader.h"
+#include "appsignals.h"
 
 #include <QDebug>
 #include <QJsonDocument>
@@ -86,6 +87,10 @@ void McuSerialReader::parseJsonLine(const QByteArray &raw)
         const int backup = obj.value(QStringLiteral("backup")).toInt();
         qDebug() << "[TXRX] LC r_turn=" << rTurn << "l_turn=" << lTurn << "backup=" << backup;
         emit lcReceived(rTurn, lTurn, backup);
+    } else if (name == QLatin1String("TCO1")) {
+        const float speedKmh = static_cast<float>(obj.value(QStringLiteral("speed_kmh")).toDouble());
+        qDebug() << "[TXRX] TCO1 speed_kmh=" << speedKmh;
+        emit AppSignals::instance()->vehicleSpeedChanged(speedKmh);
     } else if (name == QLatin1String("TD_VIST") || name == QLatin1String("TD_OTHER")) {
         const int year  = obj.value(QStringLiteral("year")).toInt();
         const int month = obj.value(QStringLiteral("month")).toInt();

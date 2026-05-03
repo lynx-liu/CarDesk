@@ -97,6 +97,7 @@ private:
     QWidget *m_progressContainer;
     QWidget *m_topBar;
     QWidget *m_bottomBar;
+    QLabel  *m_speedWarningLabel;
     
     int m_currentIndex;
     QStringList m_videoFiles;

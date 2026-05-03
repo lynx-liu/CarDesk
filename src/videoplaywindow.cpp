@@ -125,6 +125,7 @@ static bool ensureSdkResourcesCreated()
 VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_titleLabel(new QLabel("速度与激情", this))
+    , m_speedWarningLabel(nullptr)
     , m_prevButton(new QPushButton(this))
     , m_playButton(new QPushButton(this))
     , m_nextButton(new QPushButton(this))
@@ -199,6 +200,21 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
         }
     }
     
+    connect(AppSignals::instance(), &AppSignals::vehicleSpeedChanged,
+            this, [this](float speedKmh) {
+        if (!m_speedWarningLabel) return;
+        if (speedKmh >= 10.0f) {
+            if (!m_speedWarningLabel->isVisible()) {
+                m_speedWarningLabel->show();
+                m_speedWarningLabel->raise();
+                pauseIfPlaying();
+            }
+        } else {
+            m_speedWarningLabel->hide();
+            // 不自动恢复播放
+        }
+    });
+
     setupUI();
     loadVideoFiles();
     
@@ -391,8 +407,6 @@ void VideoPlayWindow::setupUI() {
     m_topBar->setGeometry(0, 0, 1280, 72);
     m_topBar->setStyleSheet("background: rgba(0, 0, 0, 0.5);");
     m_topBar->raise();  // 确保在视频上层
-
-    // 返回按钮（HTML: .video_play_top span）
     m_backButton->setParent(m_topBar);
     m_backButton->setFixedSize(48, 48);
     m_backButton->move(12, 12);
@@ -569,6 +583,21 @@ void VideoPlayWindow::setupUI() {
 
     bottomLayout->addWidget(buttonWidget);
     bottomLayout->addWidget(controlWidget, 1);
+
+    // ===== 车速过高提示遮罩（默认隐藏，创建于所有控件之后确保 z-order 最高）=====
+    m_speedWarningLabel = new QLabel(QStringLiteral("车速过高，无法播放视频"), centralWidget);
+    m_speedWarningLabel->setGeometry(0, 0, 1280, 720);
+    m_speedWarningLabel->setAlignment(Qt::AlignCenter);
+    m_speedWarningLabel->setStyleSheet(
+        "QLabel{"
+        "  background:rgba(0,0,0,0.72);"
+        "  color:#fff;"
+        "  font-size:48px;"
+        "  font-weight:bold;"
+        "}"
+    );
+    m_speedWarningLabel->hide();
+    m_speedWarningLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
 }
 
 void VideoPlayWindow::loadVideoFiles() {
