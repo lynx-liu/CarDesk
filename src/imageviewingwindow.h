@@ -6,6 +6,8 @@
 #include <QStyledItemDelegate>
 #include <QPainter>
 #include <QGestureEvent>
+#include <QThread>
+#include <QImage>
 
 class ImageListItemDelegate : public QStyledItemDelegate {
 public:
@@ -19,15 +21,27 @@ public:
                const QModelIndex &index) const override {
         painter->save();
         const bool isDir = index.data(Qt::UserRole + 1).toBool();
-        QPixmap pix;
-        if (isDir) {
-            pix.load(QStringLiteral(":/images/butt_driving_image_playback_folder_up.png"));
-        } else {
-            pix.load(QStringLiteral(":/images/image_imagellist_up.png"));
-        }
         QRect cell(option.rect.x(), option.rect.y(), 160, 160);
-        if (!pix.isNull())
-            painter->drawPixmap(cell, pix);
+
+        if (isDir) {
+            QPixmap pix;
+            pix.load(QStringLiteral(":/images/butt_driving_image_playback_folder_up.png"));
+            if (!pix.isNull()) painter->drawPixmap(cell, pix);
+        } else {
+            const QPixmap thumb = index.data(Qt::UserRole + 2).value<QPixmap>();
+            if (!thumb.isNull()) {
+                // Draw thumbnail in top area, dark strip behind text
+                QRect thumbRect(cell.x(), cell.y(), 160, 117);
+                painter->drawPixmap(thumbRect, thumb);
+                painter->fillRect(QRect(cell.x(), cell.y() + 117, 160, 43),
+                                  QColor(0, 0, 0, 180));
+            } else {
+                QPixmap pix;
+                pix.load(QStringLiteral(":/images/image_imagellist_up.png"));
+                if (!pix.isNull()) painter->drawPixmap(cell, pix);
+            }
+        }
+
         const QString text = index.data(Qt::DisplayRole).toString();
         QRect textRect(cell.x(), cell.y() + 117, 160, 42);
         painter->setPen(Qt::white);
@@ -38,6 +52,45 @@ public:
         painter->restore();
     }
 };
+
+// Async thumbnail worker — lives in a dedicated QThread
+class ThumbnailLoader : public QObject {
+    Q_OBJECT
+public:
+    explicit ThumbnailLoader(QObject *parent = nullptr)
+        : QObject(parent), m_cancel(false) {}
+
+    void cancel() { m_cancel = true; }
+
+public slots:
+    void process(QStringList paths) {
+        m_cancel = false;
+        for (const QString &p : paths) {
+            if (m_cancel) break;
+            QImage img(p);
+            QImage thumb(160, 117, QImage::Format_RGB32);
+            thumb.fill(Qt::black);
+            if (!img.isNull()) {
+                const QImage scaled = img.scaled(
+                    160, 117, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                QPainter painter(&thumb);
+                painter.drawImage(
+                    (160 - scaled.width())  / 2,
+                    (117 - scaled.height()) / 2,
+                    scaled);
+            }
+            if (!m_cancel)
+                emit thumbnailReady(p, thumb);
+        }
+    }
+
+signals:
+    void thumbnailReady(QString path, QImage image);
+
+private:
+    volatile bool m_cancel;
+};
+
 class QLabel;
 class QListWidget;
 class QListWidgetItem;
@@ -67,6 +120,7 @@ private slots:
     void onRotateImage();
     void onItemClicked(QListWidgetItem *item);
     void onBackDirClicked();
+    void onThumbnailReady(const QString &path, const QImage &image);
 
 private:
     void setupUI();
@@ -87,6 +141,9 @@ private:
     int m_rotationAngle;
     double m_zoomFactor;
     bool m_isPinching;
+
+    ThumbnailLoader *m_thumbLoader;
+    QThread         *m_loaderThread;
 
     // cached source for fast zoom (no re-read from disk per gesture frame)
     QPixmap m_cachedSourcePixmap;

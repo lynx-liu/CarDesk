@@ -47,6 +47,8 @@ ImageViewingWindow::ImageViewingWindow(QWidget *parent)
     , m_zoomFactor(1.0)
     , m_isPinching(false)
     , m_cachedRotation(-1)
+    , m_thumbLoader(nullptr)
+    , m_loaderThread(nullptr)
     , m_currentPath(QStringLiteral("/mnt"))
     , m_initialPath(QStringLiteral("/mnt"))
 {
@@ -66,6 +68,16 @@ ImageViewingWindow::ImageViewingWindow(QWidget *parent)
     }
 
     setupUI();
+
+    // Async thumbnail loader
+    m_loaderThread = new QThread(this);
+    m_thumbLoader  = new ThumbnailLoader();
+    m_thumbLoader->moveToThread(m_loaderThread);
+    connect(m_thumbLoader, &ThumbnailLoader::thumbnailReady,
+            this, &ImageViewingWindow::onThumbnailReady);
+    connect(m_loaderThread, &QThread::finished,
+            m_thumbLoader, &QObject::deleteLater);
+    m_loaderThread->start();
 
     const QString usbRoot = findFirstUsbImageDirectory();
     if (!usbRoot.isEmpty()) {
@@ -95,6 +107,8 @@ ImageViewingWindow::ImageViewingWindow(QWidget *parent)
 
 void ImageViewingWindow::closeEvent(QCloseEvent *event)
 {
+    if (m_thumbLoader) m_thumbLoader->cancel();
+    if (m_loaderThread) { m_loaderThread->quit(); m_loaderThread->wait(500); }
     emit requestReturnToMain();
     QMainWindow::closeEvent(event);
 }
@@ -420,6 +434,20 @@ void ImageViewingWindow::onItemClicked(QListWidgetItem *item)
     }
 }
 
+void ImageViewingWindow::onThumbnailReady(const QString &path, const QImage &image)
+{
+    if (!m_thumbnailList) return;
+    const QPixmap pix = QPixmap::fromImage(image);
+    for (int i = 0; i < m_thumbnailList->count(); ++i) {
+        QListWidgetItem *it = m_thumbnailList->item(i);
+        if (it && it->data(Qt::UserRole).toString() == path) {
+            it->setData(Qt::UserRole + 2, pix);
+            m_thumbnailList->viewport()->update();
+            break;
+        }
+    }
+}
+
 bool ImageViewingWindow::eventFilter(QObject *obj, QEvent *event)
 {
     if (obj == m_viewPage && event->type() == QEvent::Gesture) {
@@ -623,6 +651,13 @@ void ImageViewingWindow::loadDirectory(const QString &path)
         it->setData(Qt::UserRole + 1, false);
         it->setSizeHint(QSize(188, 178));
         it->setTextAlignment(Qt::AlignHCenter | Qt::AlignBottom);
+    }
+
+    // Start async thumbnail loading
+    if (m_thumbLoader && !m_imageFiles.isEmpty()) {
+        m_thumbLoader->cancel();
+        QMetaObject::invokeMethod(m_thumbLoader, "process",
+            Qt::QueuedConnection, Q_ARG(QStringList, m_imageFiles));
     }
 
     if (m_detailLabel) {
