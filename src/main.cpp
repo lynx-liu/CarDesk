@@ -1113,15 +1113,15 @@ int main(int argc, char *argv[]) {
         // TD 时间日期 → 同步系统时钟（至多每分钟同步一次）
         QObject::connect(txrxReader, &McuSerialReader::tdReceived,
                          &app, [](int year, int month, int day, int hour, int min) {
-            static int lastSyncMin = -1;
-            if (min == lastSyncMin) return;
-            lastSyncMin = min;
             const QString dateStr = QString("%1-%2-%3 %4:%5:00")
                 .arg(year)
                 .arg(month, 2, 10, QChar('0'))
                 .arg(day,   2, 10, QChar('0'))
                 .arg(hour,  2, 10, QChar('0'))
                 .arg(min,   2, 10, QChar('0'));
+            static QString lastSyncKey;
+            if (dateStr == lastSyncKey) return;
+            lastSyncKey = dateStr;
             qDebug() << "[TXRX] sync system time:" << dateStr;
             QProcess::startDetached(QStringLiteral("date"),
                                     {QStringLiteral("-s"), dateStr});

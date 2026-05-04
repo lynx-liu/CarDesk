@@ -44,6 +44,7 @@
 #include <QVector>
 #include <QRegExp>
 #include <QSerialPort>
+#include "mcuserialreader.h"
 
 namespace {
 QString shellQuote(const QString &s)
@@ -2328,6 +2329,9 @@ void SystemSettingWindow::onMcuUpdateStart()
         m_mcuSerial = new QSerialPort(this);
         connect(m_mcuSerial, &QSerialPort::readyRead, this, &SystemSettingWindow::onMcuSerialReadyRead);
     }
+    // OTA 需独占 ttyS2：先关闭全局共享读取器
+    McuSerialReader::ensureShared()->close();
+
     m_mcuSerial->setPortName(QStringLiteral("/dev/ttyS2"));
     m_mcuSerial->setBaudRate(QSerialPort::Baud115200);
     m_mcuSerial->setDataBits(QSerialPort::Data8);
@@ -2338,6 +2342,8 @@ void SystemSettingWindow::onMcuUpdateStart()
         m_mcuStateLabel->setText(QStringLiteral("串口打开失败"));
         m_mcuStateLabel->show();
         m_mcuState = 0;
+        // 恢复共享读取器
+        McuSerialReader::ensureShared()->open(QStringLiteral("/dev/ttyS2"));
         return;
     }
 
@@ -2355,6 +2361,8 @@ void SystemSettingWindow::onMcuUpdateCancel()
     m_mcuState = 0;
     if (m_mcuSerial && m_mcuSerial->isOpen())
         m_mcuSerial->close();
+    // 恢复全局共享读取器
+    McuSerialReader::ensureShared()->open(QStringLiteral("/dev/ttyS2"));
     m_mcuStateLabel->setText(QStringLiteral("已取消"));
     m_mcuStateLabel->show();
     m_mcuProgressRowWidget->hide();
@@ -2463,6 +2471,8 @@ void SystemSettingWindow::onMcuSerialReadyRead()
     if (m_mcuState == 5) {
         m_mcuState = 0;
         m_mcuSerial->close();
+        // 恢复全局共享读取器
+        McuSerialReader::ensureShared()->open(QStringLiteral("/dev/ttyS2"));
         m_mcuProgressBar->setValue(100);
         m_mcuProgressText->setText(QStringLiteral("100%"));
         m_mcuStateLabel->setText(QStringLiteral("升级完成！"));

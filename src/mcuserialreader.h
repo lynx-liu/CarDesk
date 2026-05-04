@@ -53,14 +53,20 @@ private slots:
 private:
     void processLine(const QByteArray &line);
     void parseJsonLine(const QByteArray &line);
+    // 解析 VIST TEXT 行（[ts][#seq][NAME] key=value ...）
+    void parseVistTextLine(const QString &name, const QString &kv);
 
     static McuSerialReader *s_shared;
     QSerialPort          *m_port;
     QByteArray            m_buf;
-    // 解析状态
+    // DM1 块解析状态
     bool                  m_inBlock;
     QString               m_curController;
     QVector<McuFaultInfo> m_curFaults;
+    // LC/OEL 跨报文状态：OEL 报转向灯，LC 报倒车，需合并后一起 emit
+    int                   m_canRTurn;   // 来自 OEL
+    int                   m_canLTurn;   // 来自 OEL
+    int                   m_canBackup;  // 来自 LC
 };
 
 #endif // MCUSERIALREADER_H
