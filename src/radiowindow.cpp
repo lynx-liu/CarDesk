@@ -37,7 +37,7 @@
 
 // V4L2 频率单位：1/16 kHz。
 // FM: 87.5 MHz = 87500 kHz => 87500*16 = 1400000
-// AM:  522  kHz =   522 kHz =>   522*16 =    8352
+// AM:  531  kHz =   531 kHz =>   531*16 =    8496
 static inline quint32 mhzToV4l2(double mhz) { return static_cast<quint32>(mhz * 1000.0 * 16.0); }
 static inline quint32 khzToV4l2(double khz) { return static_cast<quint32>(khz * 16.0); }
 static inline double  v4l2ToMhz(quint32 v)  { return v / 16000.0; }
@@ -202,7 +202,7 @@ RadioWindow::RadioWindow(QWidget *parent)
     , m_barDragStartX(0)
     , m_barDragStartScroll(0) {
 
-    m_scanTimer->setInterval(200);
+        m_scanTimer->setInterval(120);
     connect(m_scanTimer, &QTimer::timeout, this, &RadioWindow::onScanTick);
     setWindowTitle("收音机");
     setFixedSize(1280, 720);
@@ -216,7 +216,6 @@ RadioWindow::RadioWindow(QWidget *parent)
 
     setupUI();
     
-    // 加载用户收藏（如果有）
     {
         QSettings settings;
         m_fmFavorites = settings.value("radio/fmFavorites").toStringList();
@@ -234,7 +233,7 @@ RadioWindow::RadioWindow(QWidget *parent)
             if (mhz >= 87.0 && mhz <= 108.0) {
                 m_isFM = true;
                 m_frequency = mhz;
-            } else if (khz >= 522.0 && khz <= 1710.0) {
+            } else if (khz >= 531.0 && khz <= 1710.0) {
                 m_isFM = false;
                 m_frequency = khz;
             } else {
@@ -344,8 +343,8 @@ bool RadioWindow::eventFilter(QObject *obj, QEvent *event)
                     findBarScaleBounds(*pix, scaleStart, scaleEnd);
                 const int scaleWidth = qMax(1, scaleEnd - scaleStart);
                 const int maxScroll = scaleWidth;
-                const double minFreq = m_isFM ? 87.0  : 522.0;
-                const double maxFreq = m_isFM ? 108.0 : 1602.0;
+                const double minFreq = m_isFM ? 87.0  : 531.0;
+                const double maxFreq = m_isFM ? 108.0 : 1629.0;
                 const double freq = minFreq + sb->value() / double(maxScroll) * (maxFreq - minFreq);
                 const double clamped = qBound(minFreq, freq, maxFreq);
                 if (m_freqLabel)
@@ -832,9 +831,9 @@ void RadioWindow::updateFrequencyView() {
             const int leftPadding = markerX - scaleStart;
             const int rightPadding = viewportWidth - markerX - (barWidth - 1 - scaleEnd);
             const int totalWidth = leftPadding + barWidth + rightPadding;
-            const int maxScroll = scaleWidth;
-            const double minFreq = m_isFM ? 87.0 : 522.0;
-            const double maxFreq = m_isFM ? 108.0 : 1602.0;
+                const int maxScroll = scaleWidth;
+                const double minFreq = m_isFM ? 87.0 : 531.0;
+                const double maxFreq = m_isFM ? 108.0 : 1629.0;
             const double clamped = qBound(minFreq, m_frequency, maxFreq);
             const double ratio = (clamped - minFreq) / (maxFreq - minFreq);
             const int scrollPos = qRound(ratio * maxScroll);
@@ -900,8 +899,8 @@ void RadioWindow::onPrev() {
     }
     // 无硬件：手动步进（FM 0.1MHz / AM 9kHz）
     const double step = m_isFM ? 0.1 : 9.0;
-    const double minFreq = m_isFM ? 87.0 : 522.0;
-    const double maxFreq = m_isFM ? 108.0 : 1602.0;
+    const double minFreq = m_isFM ? 87.0 : 531.0;
+    const double maxFreq = m_isFM ? 108.0 : 1629.0;
     m_frequency = qBound(minFreq, m_frequency - step, maxFreq);
     updateFrequencyView();
 }
@@ -913,8 +912,8 @@ void RadioWindow::onNext() {
     }
     // 无硬件：手动步进（FM 0.1MHz / AM 9kHz）
     const double step = m_isFM ? 0.1 : 9.0;
-    const double minFreq = m_isFM ? 87.0 : 522.0;
-    const double maxFreq = m_isFM ? 108.0 : 1602.0;
+    const double minFreq = m_isFM ? 87.0 : 531.0;
+    const double maxFreq = m_isFM ? 108.0 : 1629.0;
     m_frequency = qBound(minFreq, m_frequency + step, maxFreq);
     updateFrequencyView();
 }
@@ -950,10 +949,10 @@ void RadioWindow::onToggleScan() {
 
 void RadioWindow::onScanTick() {
     const double step    = m_isFM ? 0.1   : 9.0;
-    const double minFreq = m_isFM ? 87.0  : 522.0;
-    const double maxFreq = m_isFM ? 108.0 : 1602.0;
-    // FM: 21MHz/0.1=210步；AM: 1080kHz/9=120步，各加2余量
-    const int    maxSteps = m_isFM ? 212 : 122;
+    const double minFreq = m_isFM ? 87.0  : 531.0;
+    const double maxFreq = m_isFM ? 108.0 : 1629.0;
+    // 动态计算步数：频带宽度除以步长，再留出少量余量
+    const int maxSteps = int((maxFreq - minFreq) / step) + 2;
 
     // ① 先检测本次频率点的信号强度（设置后已沉待约200ms）
     if (m_seekStepCount > 0 && m_fd >= 0) {
@@ -1086,7 +1085,7 @@ void RadioWindow::onSearch() {
 
     // 输入验证规则：
     //   FM: 整数部分最多3位(87~108)，小数部分最多1位，总计最多5字符，如 "108.0"
-    //   AM: 纯整数，最多4位(531~1602)，不允许小数点
+    //   AM: 纯整数，最多4位(531~1629)，不允许小数点
     auto canInsert = [input, this](const QString &ch) -> bool {
         const QString cur = input->text();
         if (ch == ".") {
@@ -1170,7 +1169,7 @@ void RadioWindow::onSearch() {
         bool ok = false;
         const double v = input->text().toDouble(&ok);
         if (!ok) return;
-        m_frequency = m_isFM ? qBound(87.0, v, 108.0) : qBound(522.0, v, 1602.0);
+        m_frequency = m_isFM ? qBound(87.0, v, 108.0) : qBound(531.0, v, 1629.0);
         quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
         setFrequencyHz(fhz);
         updateFrequencyView();
@@ -1390,8 +1389,8 @@ void RadioWindow::switchBand(bool fm) {
     quint32 v = getFrequencyHz();
     if (v > 0) {
         double freq = m_isFM ? v4l2ToMhz(v) : v4l2ToKhz(v);
-        const double minFreq = m_isFM ? 87.0 : 522.0;
-        const double maxFreq = m_isFM ? 108.0 : 1602.0;
+        const double minFreq = m_isFM ? 87.0 : 531.0;
+        const double maxFreq = m_isFM ? 108.0 : 1629.0;
         if (freq >= minFreq && freq <= maxFreq)
             m_frequency = freq;
     }
