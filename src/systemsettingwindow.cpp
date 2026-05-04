@@ -2263,16 +2263,89 @@ QWidget *SystemSettingWindow::createUpdatePage()
 
 // ---- MCU YMODEM 升级实现 ----
 
+static QString findUSBDevicePathLocal()
+{
+    QStringList possiblePaths = {
+        "/mnt/usb",
+        "/mnt/usb0",
+        "/media/usb",
+        "/media/usb0",
+        "/run/media",
+        "/mnt"
+    };
+
+    for (const QString &path : possiblePaths) {
+        QDir dir(path);
+        if (dir.exists()) {
+            dir.setFilter(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot);
+            QFileInfoList entries = dir.entryInfoList();
+            if (!entries.isEmpty()) {
+                qDebug() << "Found device at:" << path;
+                return path;
+            }
+        }
+    }
+
+    // 尝试从 /sys/block 查找 USB 设备并猜测挂载点
+    QDir sysBlock("/sys/block");
+    if (sysBlock.exists()) {
+        QFileInfoList drives = sysBlock.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QFileInfo &drive : drives) {
+            QString driveName = drive.fileName();
+            if (driveName.startsWith("sd")) {
+                QProcess process;
+                process.start("grep", QStringList() << "-l" << driveName << "/proc/mounts");
+                process.waitForFinished();
+                QString mounts = QString::fromLocal8Bit(process.readAllStandardOutput());
+                if (!mounts.isEmpty()) {
+                    qDebug() << "Found USB device:" << driveName;
+                    return "/mnt/" + driveName;
+                }
+            }
+        }
+    }
+
+    return QString();
+}
+
 static QString mcuFindFirmware()
 {
-    const QStringList roots = {"/mnt/usb", "/mnt/usb0", "/media/usb", "/media/usb0", "/mnt"};
-    for (const QString &root : roots) {
-        QDir d(root);
-        if (!d.exists()) continue;
-        const QStringList bins = d.entryList({"*.bin", "*.BIN"}, QDir::Files);
-        if (!bins.isEmpty())
-            return d.filePath(bins.first());
+    // 首先使用与 OTAManager 相同的挂载点判定逻辑（本地实现）
+    QString usbPath = findUSBDevicePathLocal();
+    const QStringList patterns = {"*.bin", "*.BIN"};
+
+    std::function<QString(const QString&)> findBinRec;
+    findBinRec = [&](const QString &path) -> QString {
+        QDir dir(path);
+        if (!dir.exists()) return QString();
+        QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QFileInfo &entry : entries) {
+            if (entry.isFile()) {
+                const QString suf = entry.suffix().toLower();
+                if (suf == "bin") {
+                    qDebug() << "Found .bin file:" << entry.filePath();
+                    return entry.filePath();
+                }
+            } else if (entry.isDir()) {
+                QString res = findBinRec(entry.filePath());
+                if (!res.isEmpty()) return res;
+            }
+        }
+        return QString();
+    };
+
+    if (!usbPath.isEmpty()) {
+        QString found = findBinRec(usbPath);
+        if (!found.isEmpty()) return found;
     }
+
+    // 回退：尝试常见根路径（兼容旧设备）
+    const QStringList roots = {"/mnt/usb", "/mnt/usb0", "/media/usb", "/media/usb0", "/run/media", "/mnt"};
+    for (const QString &root : roots) {
+        QString found = findBinRec(root);
+        if (!found.isEmpty()) return found;
+    }
+
     return QString();
 }
 
