@@ -178,22 +178,29 @@ void McuSerialReader::processLine(const QByteArray &raw)
 void McuSerialReader::parseVistTextLine(const QString &name, const QString &kv)
 {
     if (name == QLatin1String("OEL")) {
-        // "R-Turn=OFF L-Turn=ON Backup=OFF" 或 turn_sig 形式
-        // TEXT 格式示例: [530][#3][LC] R-Turn=OFF L-Turn=ON Backup=OFF
-        // OEL TEXT 示例: [690][#19][OEL] R-Turn=OFF L-Turn=ON
+        // 支持两种 TEXT 格式：TurnSignal=N(...) 或 R-Turn/L-Turn
+        // 示例: TurnSignal=2(RIGHT)  或  R-Turn=OFF L-Turn=ON
         m_oelReceived = true;
-        const bool lTurnOn = kv.contains(QLatin1String("L-Turn=ON"), Qt::CaseInsensitive);
-        const bool rTurnOn = kv.contains(QLatin1String("R-Turn=ON"), Qt::CaseInsensitive);
-        m_canLTurn = lTurnOn ? 1 : 0;
-        m_canRTurn = rTurnOn ? 1 : 0;
-        qDebug() << "[TXRX TEXT] OEL lTurn=" << m_canLTurn << "rTurn=" << m_canRTurn;
+        static const QRegularExpression tsRe(QStringLiteral("TurnSignal=(\\d+)") );
+        const QRegularExpressionMatch tsm = tsRe.match(kv);
+        if (tsm.hasMatch()) {
+            const int sig = tsm.captured(1).toInt();
+            m_canLTurn = (sig == 1) ? 1 : 0;
+            m_canRTurn = (sig == 2) ? 1 : 0;
+        } else {
+            const bool lTurnOn = kv.contains(QLatin1String("L-Turn=ON"), Qt::CaseInsensitive);
+            const bool rTurnOn = kv.contains(QLatin1String("R-Turn=ON"), Qt::CaseInsensitive);
+            m_canLTurn = lTurnOn ? 1 : 0;
+            m_canRTurn = rTurnOn ? 1 : 0;
+        }
+        qDebug() << "[TXRX TEXT] OEL lTurn=" << m_canLTurn << "rTurn=" << m_canRTurn << " raw=" << kv;
         emit lcReceived(m_canRTurn, m_canLTurn, m_canBackup);
     } else if (name == QLatin1String("LC")) {
         // [530][#3][LC] R-Turn=OFF L-Turn=ON Backup=OFF Marker=ON
         // 转向信号仅由 OEL 提供，这里只取 backup
         const bool backupOn = kv.contains(QLatin1String("Backup=ON"),  Qt::CaseInsensitive);
         m_canBackup = backupOn ? 1 : 0;
-        qDebug() << "[TXRX TEXT] LC backup=" << m_canBackup;
+        qDebug() << "[TXRX TEXT] LC backup=" << m_canBackup << " raw=" << kv;
         emit lcReceived(m_canRTurn, m_canLTurn, m_canBackup);
     } else if (name == QLatin1String("TCO1")) {
         // "Speed=80.50km/h"
@@ -203,6 +210,23 @@ void McuSerialReader::parseVistTextLine(const QString &name, const QString &kv)
             const float speed = m.captured(1).toFloat();
             qDebug() << "[TXRX TEXT] TCO1 speed=" << speed;
             emit AppSignals::instance()->vehicleSpeedChanged(speed);
+        }
+    } else if (name == QLatin1String("TD_VIST")) {
+        // 解析 TEXT 格式时间: 例如 "2025-04-0003 14:53"（容错解析）
+        static const QRegularExpression tr(QStringLiteral("(\\d{4})-(\\d{1,2})-(\\d{1,4})\\s+(\\d{1,2}):(\\d{1,2})"));
+        const QRegularExpressionMatch tm = tr.match(kv);
+        if (tm.hasMatch()) {
+            const int year = tm.captured(1).toInt();
+            const int month = tm.captured(2).toInt();
+            int day = tm.captured(3).toInt();
+            const int hour = tm.captured(4).toInt();
+            const int minute = tm.captured(5).toInt();
+            // 若 day 看起来超出正常范围，尝试截取最低8位
+            if (day > 31) day = day % 100; 
+            qDebug() << "[TXRX TEXT] TD_VIST" << year << month << day << hour << minute << " raw=" << kv;
+            emit tdReceived(year, month, day, hour, minute);
+        } else {
+            qDebug() << "[TXRX TEXT] TD_VIST parse failed raw=" << kv;
         }
     }
     // TD 时间日期在 TEXT 模式下暂未规定，依赖 JSON 模式处理
