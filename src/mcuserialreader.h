@@ -39,6 +39,12 @@ public:
     void close();
     bool isOpen() const;
 
+    // 向串口写数据，同时打印 [MCU TX] 字符串日志
+    void write(const QByteArray &data);
+
+    // 切换升级模式：true=升级中（onReadyRead 将原始数据通过 rawDataReceived 信号转发，不做文本解析）
+    void setUpgradeMode(bool mode);
+
 signals:
     // 每次解析完整 DM1 块后发射（faults 为空表示该控制器无故障）
     void dm1Received(const QString &controller, const QVector<McuFaultInfo> &faults);
@@ -46,6 +52,8 @@ signals:
     void lcReceived(int rTurn, int lTurn, int backup);
     // TD 时间日期：年月日时分（已解码，可直接使用）
     void tdReceived(int year, int month, int day, int hour, int min);
+    // 升级模式下的原始接收数据
+    void rawDataReceived(const QByteArray &data);
 
 private slots:
     void onReadyRead();
@@ -59,6 +67,7 @@ private:
     static McuSerialReader *s_shared;
     QSerialPort          *m_port;
     QByteArray            m_buf;
+    bool                  m_upgradeMode;
     // DM1 块解析状态
     bool                  m_inBlock;
     QString               m_curController;

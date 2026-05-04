@@ -13,7 +13,6 @@ class QTabWidget;
 class QPushButton;
 class QWidget;
 class OTAManager;
-class QSerialPort;
 
 class BluetoothManager;
 
@@ -99,7 +98,6 @@ private:
     QWidget *m_mcuProgressRowWidget;
     QPushButton *m_mcuStartBtn;
     QPushButton *m_mcuCancelBtn;
-    QSerialPort *m_mcuSerial;
     QByteArray m_mcuFirmwareData;
     QByteArray m_mcuRxBuf;
     int m_mcuFileSize;

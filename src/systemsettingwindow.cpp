@@ -43,7 +43,6 @@
 #include <QTime>
 #include <QVector>
 #include <QRegExp>
-#include <QSerialPort>
 #include "mcuserialreader.h"
 
 namespace {
@@ -117,7 +116,6 @@ SystemSettingWindow::SystemSettingWindow(BluetoothManager *bluetoothManager, QWi
     , m_mcuProgressRowWidget(nullptr)
     , m_mcuStartBtn(nullptr)
     , m_mcuCancelBtn(nullptr)
-    , m_mcuSerial(nullptr)
     , m_mcuFileSize(0)
     , m_mcuBytesSent(0)
     , m_mcuBlockNum(0)
@@ -2396,29 +2394,14 @@ void SystemSettingWindow::onMcuUpdateStart()
     m_mcuBytesSent = 0;
     m_mcuBlockNum  = 1;
     m_mcuRxBuf.clear();
-    m_mcuState = 1; // waitC
+    m_mcuState = 1; // waitOTA_OK
 
-    if (!m_mcuSerial) {
-        m_mcuSerial = new QSerialPort(this);
-        connect(m_mcuSerial, &QSerialPort::readyRead, this, &SystemSettingWindow::onMcuSerialReadyRead);
-    }
-    // OTA 需独占 ttyS2：先关闭全局共享读取器
-    McuSerialReader::ensureShared()->close();
-
-    m_mcuSerial->setPortName(QStringLiteral("/dev/ttyS2"));
-    m_mcuSerial->setBaudRate(QSerialPort::Baud115200);
-    m_mcuSerial->setDataBits(QSerialPort::Data8);
-    m_mcuSerial->setParity(QSerialPort::NoParity);
-    m_mcuSerial->setStopBits(QSerialPort::OneStop);
-    m_mcuSerial->setFlowControl(QSerialPort::NoFlowControl);
-    if (!m_mcuSerial->open(QIODevice::ReadWrite)) {
-        m_mcuStateLabel->setText(QStringLiteral("串口打开失败"));
-        m_mcuStateLabel->show();
-        m_mcuState = 0;
-        // 恢复共享读取器
-        McuSerialReader::ensureShared()->open(QStringLiteral("/dev/ttyS2"));
-        return;
-    }
+    McuSerialReader *shared = McuSerialReader::ensureShared();
+    shared->setUpgradeMode(true);
+    connect(shared, &McuSerialReader::rawDataReceived, this, [this](const QByteArray &data) {
+        m_mcuRxBuf.append(data);
+        onMcuSerialReadyRead();
+    });
 
     m_mcuStateLabel->setText(QStringLiteral("已发送升级命令，等待单片机响应..."));
     m_mcuStateLabel->show();
@@ -2426,16 +2409,15 @@ void SystemSettingWindow::onMcuUpdateStart()
     m_mcuStartBtn->hide();
     m_mcuCancelBtn->show();
 
-    m_mcuSerial->write(QByteArrayLiteral("OTA_UPGRADE\r\n"));
+    shared->write(QByteArrayLiteral("OTA_UPGRADE\r\n"));
 }
 
 void SystemSettingWindow::onMcuUpdateCancel()
 {
     m_mcuState = 0;
-    if (m_mcuSerial && m_mcuSerial->isOpen())
-        m_mcuSerial->close();
-    // 恢复全局共享读取器
-    McuSerialReader::ensureShared()->open(QStringLiteral("/dev/ttyS2"));
+    McuSerialReader *shared = McuSerialReader::ensureShared();
+    disconnect(shared, &McuSerialReader::rawDataReceived, this, nullptr);
+    shared->setUpgradeMode(false);
     m_mcuStateLabel->setText(QStringLiteral("已取消"));
     m_mcuStateLabel->show();
     m_mcuProgressRowWidget->hide();
@@ -2445,13 +2427,12 @@ void SystemSettingWindow::onMcuUpdateCancel()
 
 void SystemSettingWindow::onMcuSerialReadyRead()
 {
-    m_mcuRxBuf.append(m_mcuSerial->readAll());
-
+    // 注：m_mcuRxBuf 已由 rawDataReceived 连接的 lambda 写入
     if (m_mcuState == 1) {
-        // 等待 "[OTA] Entering upgrade mode..." 或 'C'
-        if (m_mcuRxBuf.contains("[OTA] Entering upgrade mode") || m_mcuRxBuf.contains('\x43')) {
+        // 等待 OTA_OK 或 "[OTA] Entering upgrade mode..."
+        if (m_mcuRxBuf.contains("OTA_OK") || m_mcuRxBuf.contains("[OTA] Entering upgrade mode")) {
             m_mcuRxBuf.clear();
-            m_mcuState = 2; // 等待 C 准备发送block0
+            m_mcuState = 2; // 等待 Bootloader 发送 'C'
             m_mcuStateLabel->setText(QStringLiteral("单片机已就绪，准备传输..."));
         }
         return;
@@ -2471,7 +2452,7 @@ void SystemSettingWindow::onMcuSerialReadyRead()
         namePayload.append('\0');
         while (namePayload.size() < 128) namePayload.append('\0');
 
-        m_mcuSerial->write(mcuMakeBlock(0, namePayload, false));
+        McuSerialReader::ensureShared()->write(mcuMakeBlock(0, namePayload, false));
         m_mcuState = 3; // 等待 ACK+C 开始发送数据
         m_mcuStateLabel->setText(QStringLiteral("开始传输固件..."));
         m_mcuProgressRowWidget->show();
@@ -2487,12 +2468,12 @@ void SystemSettingWindow::onMcuSerialReadyRead()
         const int offset = (m_mcuBlockNum - 1) * 1024;
         if (offset >= m_mcuFileSize) {
             // 无数据，直接EOT
-            m_mcuSerial->write(QByteArrayLiteral("\x04"));
+            McuSerialReader::ensureShared()->write(QByteArrayLiteral("\x04"));
             m_mcuState = 4;
             return;
         }
         QByteArray chunk = m_mcuFirmwareData.mid(offset, 1024);
-        m_mcuSerial->write(mcuMakeBlock(m_mcuBlockNum, chunk, true));
+        McuSerialReader::ensureShared()->write(mcuMakeBlock(m_mcuBlockNum, chunk, true));
         m_mcuBytesSent = qMin(offset + 1024, m_mcuFileSize);
 
         int pct = m_mcuFileSize > 0 ? (m_mcuBytesSent * 100 / m_mcuFileSize) : 0;
@@ -2512,12 +2493,12 @@ void SystemSettingWindow::onMcuSerialReadyRead()
 
         const int offset = (m_mcuBlockNum - 1) * 1024;
         if (offset >= m_mcuFileSize) {
-            m_mcuSerial->write(QByteArrayLiteral("\x04"));
+            McuSerialReader::ensureShared()->write(QByteArrayLiteral("\x04"));
             m_mcuState = 4;
             return;
         }
         QByteArray chunk = m_mcuFirmwareData.mid(offset, 1024);
-        m_mcuSerial->write(mcuMakeBlock(m_mcuBlockNum, chunk, true));
+        McuSerialReader::ensureShared()->write(mcuMakeBlock(m_mcuBlockNum, chunk, true));
         m_mcuBytesSent = qMin(offset + 1024, m_mcuFileSize);
 
         int pct = m_mcuFileSize > 0 ? (m_mcuBytesSent * 100 / m_mcuFileSize) : 0;
@@ -2536,16 +2517,16 @@ void SystemSettingWindow::onMcuSerialReadyRead()
 
         // 发送空结束块
         QByteArray emptyPayload(128, '\0');
-        m_mcuSerial->write(mcuMakeBlock(0, emptyPayload, false));
+        McuSerialReader::ensureShared()->write(mcuMakeBlock(0, emptyPayload, false));
         m_mcuState = 5;
         return;
     }
 
     if (m_mcuState == 5) {
         m_mcuState = 0;
-        m_mcuSerial->close();
-        // 恢复全局共享读取器
-        McuSerialReader::ensureShared()->open(QStringLiteral("/dev/ttyS2"));
+        McuSerialReader *shared = McuSerialReader::ensureShared();
+        disconnect(shared, &McuSerialReader::rawDataReceived, this, nullptr);
+        shared->setUpgradeMode(false);
         m_mcuProgressBar->setValue(100);
         m_mcuProgressText->setText(QStringLiteral("100%"));
         m_mcuStateLabel->setText(QStringLiteral("升级完成！"));

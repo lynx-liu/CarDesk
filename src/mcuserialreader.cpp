@@ -20,6 +20,7 @@ McuSerialReader *McuSerialReader::ensureShared(QObject *parent)
 McuSerialReader::McuSerialReader(QObject *parent)
     : QObject(parent)
     , m_port(new QSerialPort(this))
+    , m_upgradeMode(false)
     , m_inBlock(false)
     , m_canRTurn(0)
     , m_canLTurn(0)
@@ -42,7 +43,7 @@ bool McuSerialReader::open(const QString &portName)
     m_port->setParity(QSerialPort::NoParity);
     m_port->setStopBits(QSerialPort::OneStop);
     m_port->setFlowControl(QSerialPort::NoFlowControl);
-    const bool ok = m_port->open(QIODevice::ReadOnly);
+    const bool ok = m_port->open(QIODevice::ReadWrite);
     if (ok)
         qDebug() << "[MCU] Serial port opened:" << portName;
     else
@@ -61,9 +62,36 @@ bool McuSerialReader::isOpen() const
     return m_port && m_port->isOpen();
 }
 
+void McuSerialReader::write(const QByteArray &data)
+{
+    qDebug() << "[MCU TX]" << QString::fromLatin1(data);
+    if (m_port && m_port->isOpen())
+        m_port->write(data);
+    else
+        qWarning() << "[MCU] Cannot write to serial port, not open!";
+}
+
+void McuSerialReader::setUpgradeMode(bool mode)
+{
+    m_upgradeMode = mode;
+    if (!mode) {
+        // 恢复正常解析模式，清除残留缓冲
+        m_buf.clear();
+        m_inBlock = false;
+        m_curFaults.clear();
+    }
+    qDebug() << "[MCU] upgradeMode" << (mode ? "ON" : "OFF");
+}
+
 void McuSerialReader::onReadyRead()
 {
-    m_buf += m_port->readAll();
+    const QByteArray incoming = m_port->readAll();
+    if (m_upgradeMode) {
+        qDebug() << "[MCU RX]" << QString::fromLatin1(incoming);
+        emit rawDataReceived(incoming);
+        return;
+    }
+    m_buf += incoming;
     int pos;
     while ((pos = m_buf.indexOf('\n')) != -1) {
         QByteArray line = m_buf.left(pos);
