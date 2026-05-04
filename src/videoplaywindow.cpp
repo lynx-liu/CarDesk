@@ -148,6 +148,7 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     , m_pausedForHome(false)
     , m_pausedForOcclusion(false)
     , m_pausedForInterruption(false)
+    , m_speedHighLocked(false)
     , m_resumePositionMs(0)
     , m_resumeInterruptPositionMs(0)
 #ifdef CAR_DESK_USE_T507_SDK
@@ -204,12 +205,28 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
             this, [this](float speedKmh) {
         if (!m_speedWarningLabel) return;
         if (speedKmh >= 10.0f) {
-            if (!m_speedWarningLabel->isVisible()) {
+            if (!m_speedHighLocked) {
+                m_speedHighLocked = true;
+                m_playButton->setEnabled(false);
+                m_prevButton->setEnabled(false);
+                m_nextButton->setEnabled(false);
+                if (m_progressSlider) {
+                    m_progressSlider->setEnabled(false);
+                }
                 m_speedWarningLabel->show();
                 m_speedWarningLabel->raise();
                 pauseIfPlaying();
             }
         } else {
+            if (m_speedHighLocked) {
+                m_speedHighLocked = false;
+                m_playButton->setEnabled(true);
+                m_prevButton->setEnabled(true);
+                m_nextButton->setEnabled(true);
+                if (m_progressSlider) {
+                    m_progressSlider->setEnabled(true);
+                }
+            }
             m_speedWarningLabel->hide();
             // 不自动恢复播放
         }
@@ -228,6 +245,7 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
         hide();
     });
     connect(m_playButton, &QPushButton::clicked, this, [this]() {
+        if (m_speedHighLocked) return;  // 车速过高，禁止手动播放
 #ifdef CAR_DESK_USE_T507_SDK
         if (m_useSdkPlayer) {
             if (!m_sdkPlayer) {
@@ -636,6 +654,9 @@ void VideoPlayWindow::scanVideoDirectories() {
 }
 
 void VideoPlayWindow::onPlayVideo() {
+    if (m_speedHighLocked) {
+        return;
+    }
     if (m_currentIndex < 0 || m_currentIndex >= m_videoFiles.count()) {
         m_currentIndex = 0;
     }
@@ -713,7 +734,7 @@ void VideoPlayWindow::onPlayVideo() {
 }
 
 void VideoPlayWindow::onNextVideo() {
-    if (m_videoFiles.isEmpty()) {
+    if (m_speedHighLocked || m_videoFiles.isEmpty()) {
         return;
     }
     m_currentIndex = (m_currentIndex + 1) % m_videoFiles.count();
@@ -721,7 +742,7 @@ void VideoPlayWindow::onNextVideo() {
 }
 
 void VideoPlayWindow::onPreviousVideo() {
-    if (m_videoFiles.isEmpty()) {
+    if (m_speedHighLocked || m_videoFiles.isEmpty()) {
         return;
     }
     m_currentIndex = (m_currentIndex - 1 + m_videoFiles.count()) % m_videoFiles.count();

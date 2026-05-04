@@ -113,6 +113,7 @@ private:
     bool m_pausedForHome;      // HOME 键退出时置位，供 tryResumeVideo 判断
     bool m_pausedForOcclusion; // 其他窗口覆盖时暂停，恢复时继续播放
     bool m_pausedForInterruption; // 电话中断时保存播放状态，待恢复
+    bool m_speedHighLocked;    // 车速>=10km/h时封锁播放按鈕
     QString m_resumePath;      // HOME 退出前的视频文件路径
     int m_resumePositionMs;    // HOME 退出前的播放位置（ms）
     int m_resumeInterruptPositionMs; // 其他中断时的视频恢复位置（ms）

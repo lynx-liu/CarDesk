@@ -24,6 +24,7 @@ McuSerialReader::McuSerialReader(QObject *parent)
     , m_canRTurn(0)
     , m_canLTurn(0)
     , m_canBackup(0)
+    , m_oelReceived(false)
 {
     connect(m_port, &QSerialPort::readyRead, this, &McuSerialReader::onReadyRead);
 }
@@ -86,6 +87,7 @@ void McuSerialReader::parseJsonLine(const QByteArray &raw)
     const QString name = obj.value(QStringLiteral("name")).toString();
     if (name == QLatin1String("OEL")) {
         // 0x0CFDCC21: turn_sig 0=无 1=左转 2=右转
+        m_oelReceived = true;
         const int turnSig = obj.value(QStringLiteral("turn_sig")).toInt();
         m_canLTurn = (turnSig == 1) ? 1 : 0;
         m_canRTurn = (turnSig == 2) ? 1 : 0;
@@ -93,17 +95,10 @@ void McuSerialReader::parseJsonLine(const QByteArray &raw)
                  << "lTurn=" << m_canLTurn << "rTurn=" << m_canRTurn;
         emit lcReceived(m_canRTurn, m_canLTurn, m_canBackup);
     } else if (name == QLatin1String("LC")) {
-        // 0x0CFE4121: backup 倒车灯
-        const int rTurn  = obj.value(QStringLiteral("r_turn")).toInt();
-        const int lTurn  = obj.value(QStringLiteral("l_turn")).toInt();
+        // 0x0CFE4121: 只取 backup 字段，转向信号仅由 OEL 提供
         const int backup = obj.value(QStringLiteral("backup")).toInt();
         m_canBackup = backup;
-        // LC 也可能包含转向信息，但以 OEL 为主。若无 OEL 报文时用 LC 的转向字段作备用
-        if (m_canLTurn == 0 && m_canRTurn == 0) {
-            m_canLTurn = lTurn;
-            m_canRTurn = rTurn;
-        }
-        qDebug() << "[TXRX] LC r_turn=" << m_canRTurn << "l_turn=" << m_canLTurn << "backup=" << m_canBackup;
+        qDebug() << "[TXRX] LC backup=" << m_canBackup;
         emit lcReceived(m_canRTurn, m_canLTurn, m_canBackup);
     } else if (name == QLatin1String("TCO1")) {
         const float speedKmh = static_cast<float>(obj.value(QStringLiteral("speed_kmh")).toDouble());
@@ -186,6 +181,7 @@ void McuSerialReader::parseVistTextLine(const QString &name, const QString &kv)
         // "R-Turn=OFF L-Turn=ON Backup=OFF" 或 turn_sig 形式
         // TEXT 格式示例: [530][#3][LC] R-Turn=OFF L-Turn=ON Backup=OFF
         // OEL TEXT 示例: [690][#19][OEL] R-Turn=OFF L-Turn=ON
+        m_oelReceived = true;
         const bool lTurnOn = kv.contains(QLatin1String("L-Turn=ON"), Qt::CaseInsensitive);
         const bool rTurnOn = kv.contains(QLatin1String("R-Turn=ON"), Qt::CaseInsensitive);
         m_canLTurn = lTurnOn ? 1 : 0;
@@ -194,16 +190,10 @@ void McuSerialReader::parseVistTextLine(const QString &name, const QString &kv)
         emit lcReceived(m_canRTurn, m_canLTurn, m_canBackup);
     } else if (name == QLatin1String("LC")) {
         // [530][#3][LC] R-Turn=OFF L-Turn=ON Backup=OFF Marker=ON
-        const bool lTurnOn  = kv.contains(QLatin1String("L-Turn=ON"),  Qt::CaseInsensitive);
-        const bool rTurnOn  = kv.contains(QLatin1String("R-Turn=ON"),  Qt::CaseInsensitive);
+        // 转向信号仅由 OEL 提供，这里只取 backup
         const bool backupOn = kv.contains(QLatin1String("Backup=ON"),  Qt::CaseInsensitive);
         m_canBackup = backupOn ? 1 : 0;
-        if (m_canLTurn == 0 && m_canRTurn == 0) {
-            m_canLTurn = lTurnOn ? 1 : 0;
-            m_canRTurn = rTurnOn ? 1 : 0;
-        }
-        qDebug() << "[TXRX TEXT] LC lTurn=" << m_canLTurn
-                 << "rTurn=" << m_canRTurn << "backup=" << m_canBackup;
+        qDebug() << "[TXRX TEXT] LC backup=" << m_canBackup;
         emit lcReceived(m_canRTurn, m_canLTurn, m_canBackup);
     } else if (name == QLatin1String("TCO1")) {
         // "Speed=80.50km/h"

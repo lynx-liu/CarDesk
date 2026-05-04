@@ -1123,8 +1123,9 @@ int main(int argc, char *argv[]) {
             if (dateStr == lastSyncKey) return;
             lastSyncKey = dateStr;
             qDebug() << "[TXRX] sync system time:" << dateStr;
-            QProcess::startDetached(QStringLiteral("date"),
-                                    {QStringLiteral("-s"), dateStr});
+            // date -s "YYYY-MM-DD HH:mm:00" && hwclock -w
+            const QString cmd = QStringLiteral("date -s \"%1\" && hwclock -w").arg(dateStr);
+            QProcess::startDetached(QStringLiteral("/bin/sh"), {QStringLiteral("-c"), cmd});
         });
     }
 

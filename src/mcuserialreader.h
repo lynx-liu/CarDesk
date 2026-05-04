@@ -64,9 +64,10 @@ private:
     QString               m_curController;
     QVector<McuFaultInfo> m_curFaults;
     // LC/OEL 跨报文状态：OEL 报转向灯，LC 报倒车，需合并后一起 emit
-    int                   m_canRTurn;   // 来自 OEL
-    int                   m_canLTurn;   // 来自 OEL
-    int                   m_canBackup;  // 来自 LC
+    int                   m_canRTurn;     // 来自 OEL（或 OEL 缺失时来自 LC）
+    int                   m_canLTurn;     // 来自 OEL（或 OEL 缺失时来自 LC）
+    int                   m_canBackup;    // 来自 LC
+    bool                  m_oelReceived;  // 曾收到过 OEL 报文，则忽略 LC 转向字段
 };
 
 #endif // MCUSERIALREADER_H
