@@ -92,10 +92,10 @@ bool OTAManager::startUpdate(const QString &swuFilePath, const QString &newVersi
     }
 
     // 统一使用系统内置升级脚本
-    const QString scriptPath = "/etc/ota.sh";
+    const QString scriptPath = "/usr/bin/ota.sh";
     if (!QFile::exists(scriptPath)) {
         qWarning() << "OTA script not found:" << scriptPath;
-        emit updateFailed(QStringLiteral("系统升级脚本不存在: /etc/ota.sh"));
+        emit updateFailed(QStringLiteral("系统升级脚本不存在: /usr/bin/ota.sh"));
         m_isUpdating = false;
         stopProgressMonitor();
         return false;

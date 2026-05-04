@@ -38,7 +38,7 @@ APP_DIR="$OUT_DIR"
 echo "[INFO] 输出目录: $OUT_DIR"
 echo "[INFO] 使用系统自带 so/Qt 插件（不打包 lib/plugins）"
 echo "[INFO] 使用系统字体文件（不打包字体，已集成到SDK）"
-echo "[INFO] 使用系统 /etc/ota.sh（不打包 ota.sh）"
+echo "[INFO] 使用系统 /usr/bin/ota.sh（不打包 ota.sh）"
 
 rm -rf "$OUT_DIR"
 mkdir -p "$APP_DIR"
