@@ -402,7 +402,7 @@ void MainWindow::onRadioClicked() {
         if (m_mediaManager) {
             m_mediaManager->setRadioWindow(m_radioWindow);
         }
-        m_radioWindow->setAttribute(Qt::WA_DeleteOnClose);
+        // 保持窗口常驻，hide/show 复用，避免每次重建子控件
         connect(m_radioWindow, &RadioWindow::requestReturnToMain, this, [this]() {
             this->show();
             this->raise();
@@ -438,7 +438,7 @@ void MainWindow::onDiagnosticClicked() {
 
     if (!m_diagnosticWindow) {
         m_diagnosticWindow = new DiagnosticWindow();
-        m_diagnosticWindow->setAttribute(Qt::WA_DeleteOnClose);
+        // 保持窗口常驻，hide/show 复用，避免每次重建子控件
         connect(m_diagnosticWindow, &DiagnosticWindow::requestReturnToMain, this, [this]() {
             this->show();
             this->raise();
@@ -463,7 +463,7 @@ void MainWindow::onSystemSettingsClicked() {
 
     if (!m_systemSettingWindow) {
         m_systemSettingWindow = new SystemSettingWindow(m_bluetoothManager);
-        m_systemSettingWindow->setAttribute(Qt::WA_DeleteOnClose);
+        // 保持窗口常驻，hide/show 复用，避免每次重建子控件
         connect(m_systemSettingWindow, &SystemSettingWindow::requestReturnToMain, this, [this]() {
             this->show();
             this->raise();

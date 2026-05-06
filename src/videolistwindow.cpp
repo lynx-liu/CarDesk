@@ -1,4 +1,5 @@
 #include "videolistwindow.h"
+#include "pagebgwidget.h"
 #include "videoplaywindow.h"
 #include "musicplayerwindow.h"
 #include "devicedetect.h"
@@ -83,12 +84,7 @@ void VideoListWindow::closeEvent(QCloseEvent *event) {
 }
 
 void VideoListWindow::setupUI() {
-    QWidget *centralWidget = new QWidget(this);
-    centralWidget->setStyleSheet(
-        "background-image: url(:/images/inside_background.png); "
-        "background-repeat: no-repeat; "
-        "background-position: center;"
-    );
+    QWidget *centralWidget = new PageBgWidget(this);
     setCentralWidget(centralWidget);
     
     QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);

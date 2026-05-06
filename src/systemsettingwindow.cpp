@@ -1,4 +1,5 @@
 #include "systemsettingwindow.h"
+#include "pagebgwidget.h"
 #include "bluetoothmanager.h"
 #include "otamanager.h"
 #include "devicedetect.h"
@@ -576,7 +577,7 @@ void SystemSettingWindow::onFirmwareCheckUpdate()
 
 void SystemSettingWindow::setupUI()
 {
-    auto *central = new QWidget(this);
+    auto *central = new PageBgWidget(this);
     central->setObjectName("systemSettingCentral");
     setCentralWidget(central);
 
@@ -587,7 +588,6 @@ void SystemSettingWindow::setupUI()
     central->setStyleSheet(
         "QWidget#systemSettingWindow, QWidget{color:#eaf2ff;}"
         "QMainWindow{background:#0a1326;}"
-        "QWidget#systemSettingCentral{background-image:url(:/images/inside_background.png);background-position:center;background-repeat:no-repeat;}"
     );
 
     QWidget *topBar = new QWidget(central);
@@ -1123,7 +1123,11 @@ QWidget *SystemSettingWindow::createSoundPage()
         QDialog dialog(this);
         dialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
         dialog.setFixedSize(1280, 720);
-        dialog.setStyleSheet("QDialog{background-image:url(:/images/inside_background.png);}");
+
+        // 背景：与主界面统一使用 background.png
+        auto *dlgBg = new PageBgWidget(&dialog);
+        dlgBg->setGeometry(0, 0, 1280, 720);
+        dlgBg->lower();
 
         // 顶部栏（同主界面：topbar.png + HOME 按钮 + TopBarRightWidget）
         auto *topBar = new QWidget(&dialog);

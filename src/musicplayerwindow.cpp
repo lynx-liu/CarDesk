@@ -1,4 +1,5 @@
 #include "musicplayerwindow.h"
+#include "pagebgwidget.h"
 #include "bluetoothmanager.h"
 #include "devicedetect.h"
 #include "topbarwidget.h"
@@ -774,12 +775,12 @@ void MusicPlayerWindow::setupUI()
     m_stackedWidget->setGeometry(0, 0, 1280, 720);
     setCentralWidget(m_stackedWidget);
 
-    QWidget *playerPage = new QWidget();
+    QWidget *playerPage = new PageBgWidget();
     playerPage->setFixedSize(1280, 720);
     setupPlayerPage(playerPage);
     m_stackedWidget->addWidget(playerPage);   // index 0
 
-    QWidget *listPage = new QWidget();
+    QWidget *listPage = new PageBgWidget();
     listPage->setFixedSize(1280, 720);
     setupListPage(listPage);
     m_stackedWidget->addWidget(listPage);     // index 1
@@ -793,7 +794,6 @@ void MusicPlayerWindow::setupUI()
 
 void MusicPlayerWindow::setupPlayerPage(QWidget *page)
 {
-    page->setStyleSheet("background-image: url(:/images/inside_background.png);");
 
     // ── 顶部栏 (0,0,1280,82 topbar.png) ──────────────────────────────────
     QWidget *topBar = new QWidget(page);
@@ -1027,7 +1027,6 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
 
 void MusicPlayerWindow::setupListPage(QWidget *page)
 {
-    page->setStyleSheet("background-image: url(:/images/inside_background.png);");
 
     // ── 顶部栏（与播放页完全相同）────────────────────────────────────────
     QWidget *topBar = new QWidget(page);

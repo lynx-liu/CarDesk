@@ -1,4 +1,5 @@
 #include "imageviewingwindow.h"
+#include "pagebgwidget.h"
 #include "devicedetect.h"
 #include "topbarwidget.h"
 
@@ -170,9 +171,9 @@ void ImageViewingWindow::onRotateImage()
 
 void ImageViewingWindow::setupUI()
 {
-    auto *central = new QWidget(this);
+    auto *central = new PageBgWidget(this);
     setCentralWidget(central);
-    central->setStyleSheet("QWidget{background: url(:/images/inside_background.png) no-repeat center center;color:#eaf2ff;}");
+    central->setStyleSheet("QWidget{color:#eaf2ff;}");
 
     auto *root = new QVBoxLayout(central);
     root->setContentsMargins(0, 0, 0, 0);

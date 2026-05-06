@@ -6,6 +6,7 @@
 
 #include <QApplication>
 #include <QCloseEvent>
+#include "pagebgwidget.h"
 #include <QKeyEvent>
 #include <QProcess>
 #include <QDateTime>
@@ -556,8 +557,7 @@ void RadioWindow::stopScan()
 }
 
 void RadioWindow::setupUI() {
-    QWidget *central = new QWidget(this);
-    central->setStyleSheet("background-image:url(:/images/inside_background.png);background-repeat:no-repeat;");
+    QWidget *central = new PageBgWidget(this);
     setCentralWidget(central);
 
     // ── 顶部栏 (0,0,1280,82) ──────────────────────────────────────────
@@ -1019,7 +1019,10 @@ void RadioWindow::onSearch() {
     QDialog dialog(this);
     dialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     dialog.setFixedSize(1280, 720);
-    dialog.setStyleSheet("QDialog{background-image:url(:/images/inside_background.png);}");
+
+    auto *dlgBg = new PageBgWidget(&dialog);
+    dlgBg->setGeometry(0, 0, 1280, 720);
+    dlgBg->lower();
 
     // 顶部栏
     QWidget *topBar = new QWidget(&dialog);
@@ -1180,7 +1183,10 @@ void RadioWindow::onOpenListDialog() {
     QDialog dialog(this);
     dialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
     dialog.setFixedSize(1280, 720);
-    dialog.setStyleSheet("QDialog{background-image:url(:/images/inside_background.png);}");
+
+    auto *dlgBg = new PageBgWidget(&dialog);
+    dlgBg->setGeometry(0, 0, 1280, 720);
+    dlgBg->lower();
 
     // 顶部栏
     QWidget *topBar = new QWidget(&dialog);

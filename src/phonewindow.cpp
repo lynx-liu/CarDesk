@@ -1,4 +1,5 @@
 #include "phonewindow.h"
+#include "pagebgwidget.h"
 #include "bluetoothmanager.h"
 #include "mediamanager.h"
 #include "musicplayerwindow.h"
@@ -72,8 +73,7 @@ void PhoneWindow::closeEvent(QCloseEvent *event) {
 }
 
 void PhoneWindow::setupUI() {
-    QWidget *central = new QWidget(this);
-    central->setStyleSheet("background-image:url(:/images/inside_background.png); background-repeat:no-repeat;");
+    QWidget *central = new PageBgWidget(this);
     setCentralWidget(central);
 
     QVBoxLayout *main = new QVBoxLayout(central);
