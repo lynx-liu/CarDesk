@@ -13,11 +13,19 @@ class PageBgWidget : public QWidget
 public:
     explicit PageBgWidget(QWidget *parent = nullptr) : QWidget(parent) {}
 
+    // 在 QApplication 启动后（资源系统就绪）调用一次，提前解码背景图到内存。
+    static void prewarm() { (void)bgPixmap(); }
+
 protected:
     void paintEvent(QPaintEvent *event) override {
-        static const QPixmap sBg(QStringLiteral(":/images/background.png"));
         QPainter p(this);
-        p.drawPixmap(rect(), sBg);
+        p.drawPixmap(rect(), bgPixmap());
         QWidget::paintEvent(event);
+    }
+
+private:
+    static const QPixmap &bgPixmap() {
+        static const QPixmap s(QStringLiteral(":/images/background.png"));
+        return s;
     }
 };

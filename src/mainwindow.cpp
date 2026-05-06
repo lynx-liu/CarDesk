@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "pagebgwidget.h"
 #include "devicedetect.h"
 #include "appsignals.h"
 #include "bluetoothmanager.h"
@@ -51,13 +52,20 @@ MainWindow::MainWindow(QWidget *parent)
     setupConnections();
     setupSystemInfo();
 
-    // 启动即后台预热行车影像摄像头，减少首次进入延迟。
+    // 启动即后台预热：解码背景图 + 预创建所有子页面窗口，
+    // 确保用户首次点击时无需等待构建控件树。
     m_drivingImageWindow = new DrivingImageWindow();
     m_drivingImageWindow->setAttribute(Qt::WA_DeleteOnClose);
     QTimer::singleShot(0, this, [this]() {
+        PageBgWidget::prewarm();
         if (m_drivingImageWindow) {
             m_drivingImageWindow->warmupCamera();
         }
+        ensurePhoneWindow();
+        // RadioWindow 构造函数会打开硬件设备并切换声道，不能后台预创建
+        ensureDiagnosticWindow();
+        ensureSystemSettingWindow();
+        ensureImageViewingWindow();
     });
 }
 
@@ -394,14 +402,9 @@ void MainWindow::onBluetoothCallStatusChanged(int status) {
     m_phoneWindow->activateWindow();
 }
 
-void MainWindow::onRadioClicked() {
-    qDebug() << "Radio button clicked";
-
+void MainWindow::ensureRadioWindow() {
     if (!m_radioWindow) {
         m_radioWindow = new RadioWindow();
-        if (m_mediaManager) {
-            m_mediaManager->setRadioWindow(m_radioWindow);
-        }
         // 保持窗口常驻，hide/show 复用，避免每次重建子控件
         connect(m_radioWindow, &RadioWindow::requestReturnToMain, this, [this]() {
             this->show();
@@ -417,9 +420,16 @@ void MainWindow::onRadioClicked() {
             this->raise();
             this->activateWindow();
         }, Qt::UniqueConnection);
-    } else if (m_mediaManager) {
+    }
+    if (m_mediaManager) {
         m_mediaManager->setRadioWindow(m_radioWindow);
     }
+}
+
+void MainWindow::onRadioClicked() {
+    qDebug() << "Radio button clicked";
+
+    ensureRadioWindow();
 
     if (m_mediaManager) {
         m_mediaManager->prepareForRadioAudio();
@@ -433,9 +443,7 @@ void MainWindow::onRadioClicked() {
     m_radioWindow->activateWindow();
 }
 
-void MainWindow::onDiagnosticClicked() {
-    qDebug() << "Diagnostic button clicked";
-
+void MainWindow::ensureDiagnosticWindow() {
     if (!m_diagnosticWindow) {
         m_diagnosticWindow = new DiagnosticWindow();
         // 保持窗口常驻，hide/show 复用，避免每次重建子控件
@@ -451,6 +459,12 @@ void MainWindow::onDiagnosticClicked() {
             this->activateWindow();
         }, Qt::UniqueConnection);
     }
+}
+
+void MainWindow::onDiagnosticClicked() {
+    qDebug() << "Diagnostic button clicked";
+
+    ensureDiagnosticWindow();
 
     this->hide();
     m_diagnosticWindow->show();
@@ -458,9 +472,7 @@ void MainWindow::onDiagnosticClicked() {
     m_diagnosticWindow->activateWindow();
 }
 
-void MainWindow::onSystemSettingsClicked() {
-    qDebug() << "System settings button clicked";
-
+void MainWindow::ensureSystemSettingWindow() {
     if (!m_systemSettingWindow) {
         m_systemSettingWindow = new SystemSettingWindow(m_bluetoothManager);
         // 保持窗口常驻，hide/show 复用，避免每次重建子控件
@@ -476,6 +488,12 @@ void MainWindow::onSystemSettingsClicked() {
             this->activateWindow();
         }, Qt::UniqueConnection);
     }
+}
+
+void MainWindow::onSystemSettingsClicked() {
+    qDebug() << "System settings button clicked";
+
+    ensureSystemSettingWindow();
 
     this->hide();
     m_systemSettingWindow->show();
@@ -627,12 +645,10 @@ void MainWindow::resizeEvent(QResizeEvent *event)
     }
 }
 
-void MainWindow::onImageViewingClicked() {
-    qDebug() << "Image viewing button clicked";
-
+void MainWindow::ensureImageViewingWindow() {
     if (!m_imageViewingWindow) {
         m_imageViewingWindow = new ImageViewingWindow();
-        m_imageViewingWindow->setAttribute(Qt::WA_DeleteOnClose);
+        // 保持窗口常驻，hide/show 复用，避免每次重建子控件
         connect(m_imageViewingWindow, &ImageViewingWindow::requestReturnToMain, this, [this]() {
             this->show();
             this->raise();
@@ -645,6 +661,12 @@ void MainWindow::onImageViewingClicked() {
             this->activateWindow();
         }, Qt::UniqueConnection);
     }
+}
+
+void MainWindow::onImageViewingClicked() {
+    qDebug() << "Image viewing button clicked";
+
+    ensureImageViewingWindow();
 
     this->hide();
     m_imageViewingWindow->show();

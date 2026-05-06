@@ -63,6 +63,10 @@ private:
     void showTransitionOverlay();
     void hideTransitionOverlay();
     void ensurePhoneWindow();
+    void ensureRadioWindow();
+    void ensureDiagnosticWindow();
+    void ensureSystemSettingWindow();
+    void ensureImageViewingWindow();
     QWidget *findCurrentVisibleNonPhoneWindow() const;
     void restorePreviousWindow();
 

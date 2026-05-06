@@ -37,6 +37,8 @@ McuSerialReader::~McuSerialReader()
 
 bool McuSerialReader::open(const QString &portName)
 {
+    if (m_port->isOpen())
+        return true;   // 已打开，幂等返回成功
     m_port->setPortName(portName);
     m_port->setBaudRate(QSerialPort::Baud115200);
     m_port->setDataBits(QSerialPort::Data8);
