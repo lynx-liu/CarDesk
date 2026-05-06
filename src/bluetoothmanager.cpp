@@ -83,7 +83,7 @@ void BluetoothManager::clearPairedDevice(const QString &address) {
         disconnectDevice();
     }
     m_clearingAddress = addr;
-    sendAtCommand(QStringLiteral("CV[%1]").arg(addr));
+    sendAtCommand(QStringLiteral("CV%1").arg(addr));
 }
 
 void BluetoothManager::connectDevice(const QString &deviceAddress) {
@@ -99,7 +99,7 @@ void BluetoothManager::connectDevice(const QString &deviceAddress) {
             emit error(QStringLiteral("蓝牙地址格式错误"));
             return;
         }
-        sendAtCommand(QStringLiteral("CC[%1]").arg(addr));
+        sendAtCommand(QStringLiteral("CC%1").arg(addr));
     } else {
         sendAtCommand(QStringLiteral("CC"));
     }
@@ -186,7 +186,7 @@ void BluetoothManager::dialNumber(const QString &number) {
         emit error(QStringLiteral("拨号号码不能为空"));
         return;
     }
-    sendAtCommand(QStringLiteral("CW[%1]").arg(digits));
+    sendAtCommand(QStringLiteral("CW%1").arg(digits));
 }
 
 bool BluetoothManager::sendDtmfDigit(const QString &digit) {
@@ -206,7 +206,7 @@ bool BluetoothManager::setCallMute(bool mute) {
         emit error(QStringLiteral("无法初始化蓝牙串口"));
         return false;
     }
-    return sendAtCommand(QStringLiteral("CM[%1]").arg(mute ? 1 : 0));
+    return sendAtCommand(QStringLiteral("CM%1").arg(mute ? 1 : 0));
 }
 
 void BluetoothManager::answerCall() {
@@ -314,7 +314,7 @@ void BluetoothManager::setDeviceName(const QString &name) {
     }
     m_deviceName = safeName;
     emit bluetoothNameChanged(m_deviceName);
-    sendAtCommand(QStringLiteral("MM[%1]").arg(safeName));
+    sendAtCommand(QStringLiteral("MM%1").arg(safeName));
 }
 
 void BluetoothManager::setPin(const QString &pin) {
@@ -329,7 +329,7 @@ void BluetoothManager::setPin(const QString &pin) {
     }
     m_pinCode = safePin;
     emit bluetoothPinChanged(m_pinCode);
-    sendAtCommand(QStringLiteral("MN[%1]").arg(safePin));
+    sendAtCommand(QStringLiteral("MN%1").arg(safePin));
 }
 
 void BluetoothManager::onSerialReadyRead() {
