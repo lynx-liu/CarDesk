@@ -5,6 +5,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QTimer>
+#include <QFileSystemWatcher>
 
 /**
  * TopBarRightWidget — 顶部栏右侧状态图标组件
@@ -43,8 +44,9 @@ private:
     QPushButton *m_volBtn    = nullptr;
     QLabel      *m_volLabel  = nullptr;
     QLabel      *m_timeLabel = nullptr;
-    QTimer      *m_usbTimer = nullptr;
-    QTimer      *m_clockTimer = nullptr;
+    QTimer             *m_usbTimer = nullptr;
+    QTimer             *m_clockTimer = nullptr;
+    QFileSystemWatcher *m_mountsWatcher = nullptr;
     bool         m_usbConnected = false;
     bool         m_isMuted   = false;
 };

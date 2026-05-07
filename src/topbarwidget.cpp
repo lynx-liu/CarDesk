@@ -6,8 +6,7 @@
 #include <QDateTime>
 #include <QApplication>
 #include <QVariant>
-#include <QStorageInfo>
-#include <QDir>
+#include <QFile>
 
 TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     : QWidget(parent)
@@ -89,9 +88,20 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
             this, [this](bool) { onClockTick(); });
     // ── USB 插拔检测定时器 ─────────────────────────────────────────────────────
     m_usbTimer = new QTimer(this);
-    m_usbTimer->setInterval(1000);
+    m_usbTimer->setInterval(5000); // 兜底轮询，主要靠 QFileSystemWatcher 即时触发
     connect(m_usbTimer, &QTimer::timeout, this, &TopBarRightWidget::updateUsbState);
     m_usbTimer->start();
+
+    // 监听 /proc/mounts 变化，USB 挂载/卸载时立即响应，避免 statfs 阻塞
+    m_mountsWatcher = new QFileSystemWatcher(this);
+    m_mountsWatcher->addPath(QStringLiteral("/proc/mounts"));
+    connect(m_mountsWatcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &path) {
+        updateUsbState();
+        // /proc/mounts 变化后 inotify watch 可能失效，重新添加
+        if (!m_mountsWatcher->files().contains(path))
+            m_mountsWatcher->addPath(path);
+    });
+
     updateUsbState();
     // ── 时钟定时器 ────────────────────────────────────────────────────────────
     m_clockTimer = new QTimer(this);
@@ -163,35 +173,26 @@ void TopBarRightWidget::updateUsbState()
 {
     bool foundUsb = false;
 
-    // 主路：QStorageInfo
-    for (const QStorageInfo &storage : QStorageInfo::mountedVolumes()) {
-        if (!storage.isValid() || !storage.isReady())
-            continue;
-        const QString root = storage.rootPath();
-        if (root == QStringLiteral("/mnt/usb") || root.startsWith(QStringLiteral("/mnt/usb/"))
-                || root == QStringLiteral("/mnt/usb0") || root.startsWith(QStringLiteral("/mnt/usb0/"))
-                || root == QStringLiteral("/media/usb") || root.startsWith(QStringLiteral("/media/usb/"))
-                || root == QStringLiteral("/media/usb0") || root.startsWith(QStringLiteral("/media/usb0/"))) {
-            foundUsb = true;
-            break;
-        }
-    }
-
-    // 备用：直接扫文件系统（T507 上 QStorageInfo 可能不可靠）
-    if (!foundUsb) {
-        static const QStringList kBases = {
-            QStringLiteral("/mnt/usb/"),
-            QStringLiteral("/mnt/usb0/"),
-            QStringLiteral("/media/usb/"),
-            QStringLiteral("/media/usb0/"),
-        };
-        for (const QString &base : kBases) {
-            QDir d(base.left(base.length() - 1));
-            if (d.exists() && !d.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty()) {
+    // 直接读 /proc/mounts，避免 QStorageInfo::mountedVolumes() 的 statfs 阻塞主线程
+    QFile mounts(QStringLiteral("/proc/mounts"));
+    if (mounts.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        while (!mounts.atEnd()) {
+            const QByteArray raw = mounts.readLine();
+            const int sp1 = raw.indexOf(' ');
+            if (sp1 < 0) continue;
+            const int sp2 = raw.indexOf(' ', sp1 + 1);
+            const QString mnt = (sp2 > sp1)
+                ? QString::fromLatin1(raw.mid(sp1 + 1, sp2 - sp1 - 1))
+                : QString::fromLatin1(raw.mid(sp1 + 1)).trimmed();
+            if (mnt == QStringLiteral("/mnt/usb")   || mnt.startsWith(QStringLiteral("/mnt/usb/"))
+             || mnt == QStringLiteral("/mnt/usb0")  || mnt.startsWith(QStringLiteral("/mnt/usb0/"))
+             || mnt == QStringLiteral("/media/usb")  || mnt.startsWith(QStringLiteral("/media/usb/"))
+             || mnt == QStringLiteral("/media/usb0") || mnt.startsWith(QStringLiteral("/media/usb0/"))) {
                 foundUsb = true;
                 break;
             }
         }
+        mounts.close();
     }
 
     if (foundUsb == m_usbConnected)
