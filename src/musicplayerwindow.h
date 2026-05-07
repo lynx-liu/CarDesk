@@ -171,6 +171,8 @@ private:
     void updateLoopButtonIcon();
     void updateProgressBar(qint64 posMs, qint64 durMs);
     void setPlayButtonState(bool playing);
+    void applyUsbMissingState();
+    void refreshUsbContent();
     void refreshPlaylistWidget();
     void updateCollectButtonState();
     void tryConnectLastA2dpDevice();

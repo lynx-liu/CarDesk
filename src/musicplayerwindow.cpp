@@ -645,22 +645,18 @@ MusicPlayerWindow::MusicPlayerWindow(QWidget *parent)
     // 初始扫描文件
     scanFlatPlaylist();
     refreshPlaylistWidget();
+    if (m_isUsbMode && findFirstUsbDevicePath().isEmpty()) {
+        applyUsbMissingState();
+    }
     loadFavoriteSongs();
     updateCollectButtonState();
 
     // USB 插拔时更新显示
     connect(AppSignals::instance(), &AppSignals::usbStateChanged, this, [this](bool connected) {
         if (!connected && m_isUsbMode) {
-            m_currentBrowsePath.clear();
-            if (m_musicListWidget) m_musicListWidget->clear();
-            if (m_listPathLabel) m_listPathLabel->setText(QStringLiteral("请插入U盘"));
-        } else if (connected && m_isUsbMode
-                   && m_stackedWidget && m_stackedWidget->currentIndex() == kPageList
-                   && !m_listFavMode) {
-            // 在列表页且 U 盘模式，插入时自动刷新
-            const QString usbPath = findFirstUsbDevicePath();
-            if (!usbPath.isEmpty())
-                loadDirectory(usbPath);
+            applyUsbMissingState();
+        } else if (connected && m_isUsbMode) {
+            refreshUsbContent();
         }
     });
 
@@ -721,6 +717,13 @@ void MusicPlayerWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
     tryConnectLastA2dpDevice();
+    if (m_pausedForInterruption) {
+        QTimer::singleShot(0, this, [this]() {
+            if (isVisible() && m_pausedForInterruption) {
+                resumeAfterInterruption();
+            }
+        });
+    }
 }
 
 void MusicPlayerWindow::hideEvent(QHideEvent *event)
@@ -1234,6 +1237,52 @@ void MusicPlayerWindow::updateCollectButtonState()
         "QPushButton:checked:pressed { background-image: url(:/images/butt_music_collection_down.png); }");
 }
 
+void MusicPlayerWindow::applyUsbMissingState()
+{
+    m_currentBrowsePath.clear();
+    m_musicFiles.clear();
+    m_currentIndex = -1;
+    refreshPlaylistWidget();
+
+    if (m_musicListWidget) m_musicListWidget->clear();
+    if (m_listPathLabel) m_listPathLabel->setText(QStringLiteral("请插入U盘"));
+    if (m_nowPlayingLabel) {
+        m_nowPlayingLabel->setText(QStringLiteral("请插入U盘"));
+        m_nowPlayingLabel->setStyleSheet("color: #FF4D4F; font-size: 48px; background: transparent;");
+    }
+    if (m_singerLabel) m_singerLabel->setText(QStringLiteral("--"));
+    if (m_albumLabel) m_albumLabel->setText(QStringLiteral("--"));
+    updateProgressBar(0, 0);
+    setPlayButtonState(false);
+}
+
+void MusicPlayerWindow::refreshUsbContent()
+{
+    const QString usbPath = findFirstUsbDevicePath();
+    if (usbPath.isEmpty()) {
+        applyUsbMissingState();
+        return;
+    }
+
+    scanFlatPlaylist();
+    if (m_currentIndex >= m_musicFiles.count()) {
+        m_currentIndex = -1;
+    }
+    if (m_currentIndex < 0 && !m_musicFiles.isEmpty()) {
+        m_currentIndex = 0;
+    }
+    refreshPlaylistWidget();
+
+    if (m_stackedWidget && m_stackedWidget->currentIndex() == kPageList && !m_listFavMode) {
+        loadDirectory(usbPath);
+    }
+
+    if (m_nowPlayingLabel) {
+        m_nowPlayingLabel->setStyleSheet("color: #fff; font-size: 48px; background: transparent;");
+    }
+    updateNowPlaying();
+}
+
 void MusicPlayerWindow::refreshFavoriteList()
 {
     if (!m_musicListWidget) return;
@@ -1435,7 +1484,11 @@ void MusicPlayerWindow::pauseForInterruption()
 {
     if (!m_isUsbMode && m_bluetoothManager) {
         if (m_btPlaying) {
+            m_pausedForInterruption = true;
+            qDebug() << "MusicPlayer: pauseForInterruption BT currentIndex=" << m_currentIndex;
             onPlayPause();
+        } else {
+            m_pausedForInterruption = false;
         }
         return;
     }
@@ -1447,9 +1500,17 @@ void MusicPlayerWindow::pauseForInterruption()
     }
 #endif
 
-    if (isPlaying()) {
-        onPlayPause();
+    if (m_mediaPlayer && m_mediaPlayer->state() == QMediaPlayer::PlayingState) {
+        m_resumeInterruptionPositionMs = m_mediaPlayer->position();
+        qDebug() << "MusicPlayer: pauseForInterruption USB index=" << m_currentIndex
+                 << "positionMs=" << m_resumeInterruptionPositionMs;
+        m_mediaPlayer->pause();
+        setPlayButtonState(false);
+        m_pausedForInterruption = true;
+        return;
     }
+
+    m_pausedForInterruption = false;
 }
 
 void MusicPlayerWindow::resetSdkPlayerForCall()
@@ -1585,6 +1646,7 @@ void MusicPlayerWindow::resumeAfterInterruption()
 {
     if (!m_isUsbMode && m_bluetoothManager) {
         if (!m_btPlaying) {
+            qDebug() << "MusicPlayer: resumeAfterInterruption BT currentIndex=" << m_currentIndex;
             if (m_bluetoothManager->playPauseMusic()) {
                 m_btPlaying = true;
                 setPlayButtonState(true);
@@ -1616,6 +1678,11 @@ void MusicPlayerWindow::resumeAfterInterruption()
 #endif
 
     if (m_mediaPlayer) {
+        qDebug() << "MusicPlayer: resumeAfterInterruption USB index=" << m_currentIndex
+                 << "positionMs=" << m_resumeInterruptionPositionMs;
+        if (m_resumeInterruptionPositionMs > 0 && m_mediaPlayer->duration() > 0) {
+            m_mediaPlayer->setPosition(m_resumeInterruptionPositionMs);
+        }
         m_mediaPlayer->play();
         setPlayButtonState(true);
     }
@@ -1788,16 +1855,9 @@ void MusicPlayerWindow::onUsbTabClicked()
     m_btTab->setStyleSheet(
         "QPushButton { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }"
         "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }");
-    scanFlatPlaylist();
-    refreshPlaylistWidget();
+
     updatePlayModeUI();
-    if (m_nowPlayingLabel) {
-        m_nowPlayingLabel->setStyleSheet("color: #fff; font-size: 48px; background: transparent;");
-    }
-    updateNowPlaying();
-    if (m_singerLabel) m_singerLabel->setText(QStringLiteral("--"));
-    if (m_albumLabel) m_albumLabel->setText(QStringLiteral("--"));
-    setPlayButtonState(false);
+    refreshUsbContent();
 }
 
 void MusicPlayerWindow::onBtTabClicked()

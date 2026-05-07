@@ -1126,9 +1126,9 @@ void PhoneWindow::showCallOverlay(int status) {
     if (m_mediaManager) {
         m_mediaManager->pausePlaybackForInterruption();
     }
-    if (m_bluetoothManager) {
-        m_bluetoothManager->setPlaybackMode(1);
-    }
+    // 注意：此处不发送 PM1 (setPlaybackMode(1))。
+    // PM1 是 A2DP 音乐播放命令，在来电/通话时发送会抢占 HFP 音频通道导致无声。
+    // HFP 通话音频由蓝牙模块自动路由，无需额外操控 playback mode。
     if (m_tabStack && m_callOverlay && m_tabStack->currentWidget() != m_callOverlay) {
         m_previousTabIndex = m_tabStack->currentIndex();
     }

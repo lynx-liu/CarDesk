@@ -20,6 +20,7 @@ public:
 public slots:
     bool isAudioActive() const;
     void forceStopAudio();
+    void restoreBackgroundAudio();
 
 signals:
     void requestReturnToMain();

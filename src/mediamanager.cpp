@@ -122,7 +122,7 @@ void MediaManager::prepareForNonBluetoothAudio() {
 void MediaManager::prepareForRadioAudio() {
     qDebug() << "MediaManager: prepareForRadioAudio";
     if (m_musicWindow) {
-        m_musicWindow->pauseIfPlaying();
+        m_musicWindow->pauseForInterruption();
     }
     if (m_videoListWindow) {
         m_videoListWindow->pauseVideoIfPlaying();
@@ -212,7 +212,7 @@ void MediaManager::resumePlaybackAfterInterruption() {
         switch (m_interruptedAudioSource) {
     case AudioSource::Radio:
         if (m_radioWindow) {
-            T507SdkBridge::setAudioSource(true);
+            m_radioWindow->restoreBackgroundAudio();
         }
         break;
     case AudioSource::Media:

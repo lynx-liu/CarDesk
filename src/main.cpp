@@ -381,12 +381,69 @@ static QString clickSoundPath(int level) {
     return QDir(baseDir).absoluteFilePath(QStringLiteral("click_loud.wav"));
 }
 
+static bool shouldSuppressTouchClickSound()
+{
+    auto isAudioWindow = [](QWidget *w) {
+        return w && (qobject_cast<MusicPlayerWindow *>(w)
+                     || qobject_cast<RadioWindow *>(w)
+                     || qobject_cast<VideoPlayWindow *>(w)
+                     || qobject_cast<PhoneWindow *>(w));
+    };
+
+    QWidget *activeWindow = QApplication::activeWindow();
+    if (!activeWindow) {
+        for (QWidget *tw : QApplication::topLevelWidgets()) {
+            if (tw->isVisible() && tw->isWindow()) {
+                activeWindow = tw;
+                break;
+            }
+        }
+    }
+    if (isAudioWindow(activeWindow)) {
+        return true;
+    }
+
+    for (QWidget *widget : QApplication::topLevelWidgets()) {
+        if (!widget->isVisible()) {
+            continue;
+        }
+        if (isAudioWindow(widget)) {
+            return true;
+        }
+    }
+
+    for (QWidget *widget : QApplication::topLevelWidgets()) {
+        if (auto *music = qobject_cast<MusicPlayerWindow *>(widget)) {
+            if (music->isPlaying()) {
+                return true;
+            }
+        }
+        if (auto *radio = qobject_cast<RadioWindow *>(widget)) {
+            if (radio->isAudioActive()) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 static void playTouchClickSound() {
     const int level = qApp->property("appTouchSoundLevel").toInt();
     if (level <= 0) {
         return;
     }
+    if (shouldSuppressTouchClickSound()) {
+        return;
+    }
     static QProcess *proc = nullptr;
+    static bool clickSoundDisabled = false;
+    static bool missingLogged = false;
+
+    if (clickSoundDisabled) {
+        return;
+    }
+
     if (!proc) {
         proc = new QProcess(qApp);
         proc->setProcessChannelMode(QProcess::MergedChannels);
@@ -400,7 +457,11 @@ static void playTouchClickSound() {
     }
     const QString wav = clickSoundPath(level);
     if (!QFileInfo::exists(wav) || !QFileInfo(wav).isFile()) {
-        qWarning() << "[ClickSound] click sound file not found:" << wav;
+        if (!missingLogged) {
+            qWarning() << "[ClickSound] click sound file not found:" << wav;
+            missingLogged = true;
+        }
+        clickSoundDisabled = true;
         return;
     }
     qDebug() << "[ClickSound] playing level=" << level << "wav=" << wav;
@@ -838,6 +899,11 @@ static bool routeMediaKeyToBackground(int qtKey)
 
 static void activateDrivingImageMode(int mode)
 {
+    MainWindow *main = findMainWindow();
+    if (main && main->mediaManager()) {
+        main->mediaManager()->pausePlaybackForOcclusion();
+    }
+
     if (DrivingImageWindow *drive = findDrivingImageWindow()) {
         drive->setDrivingMode(mode);
         if (!drive->isVisible()) {
@@ -848,7 +914,7 @@ static void activateDrivingImageMode(int mode)
         return;
     }
 
-    if (MainWindow *main = findMainWindow()) {
+    if (main) {
         QMetaObject::invokeMethod(main, "onDrivingImageClicked", Qt::DirectConnection);
         if (DrivingImageWindow *drive = findDrivingImageWindow()) {
             drive->setDrivingMode(mode);
@@ -858,9 +924,18 @@ static void activateDrivingImageMode(int mode)
 
 static void deactivateDrivingImageMode(int mode)
 {
+    bool closedDrivingImage = false;
     if (DrivingImageWindow *drive = findDrivingImageWindow()) {
         if (drive->isVisible() && drive->drivingMode() == mode) {
             drive->close();
+            closedDrivingImage = true;
+        }
+    }
+
+    if (closedDrivingImage) {
+        MainWindow *main = findMainWindow();
+        if (main && main->mediaManager()) {
+            main->mediaManager()->resumePlaybackAfterInterruption();
         }
     }
 }

@@ -276,6 +276,10 @@ void RadioWindow::closeEvent(QCloseEvent *event) {
 void RadioWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
+    if (m_fd < 0 && openDevice()) {
+        setFrequencyHz(m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency));
+        updateFrequencyView();
+    }
     // 进入收音机界面时切回收音机声道
     T507SdkBridge::setAudioSource(true);
     setMute(false);
@@ -311,6 +315,14 @@ void RadioWindow::forceStopAudio()
         m_audioPreserved = false;
     }
     T507SdkBridge::setAudioSource(false);
+}
+
+void RadioWindow::restoreBackgroundAudio()
+{
+    T507SdkBridge::setAudioSource(true);
+    if (!isVisible()) {
+        m_audioPreserved = true;
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

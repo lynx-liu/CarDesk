@@ -272,6 +272,9 @@ void MainWindow::onUSBClicked() {
 
 void MainWindow::onVideoListClicked() {
     qDebug() << "Video List button clicked";
+    if (m_mediaManager && m_mediaManager->musicWindow()) {
+        m_mediaManager->musicWindow()->pauseForInterruption();
+    }
     if (m_mediaManager) {
         m_mediaManager->prepareForNonBluetoothAudio();
     }
@@ -434,9 +437,6 @@ void MainWindow::onRadioClicked() {
     if (m_mediaManager) {
         m_mediaManager->prepareForRadioAudio();
     }
-    if (m_mediaManager && m_mediaManager->musicWindow()) {
-        m_mediaManager->musicWindow()->pauseIfPlaying();
-    }
     this->hide();
     m_radioWindow->show();
     m_radioWindow->raise();
@@ -510,16 +510,26 @@ void MainWindow::onDrivingImageClicked() {
     }
 
     connect(m_drivingImageWindow, &DrivingImageWindow::requestReturnToMain, this, [this]() {
+        if (m_mediaManager) {
+            m_mediaManager->resumePlaybackAfterInterruption();
+        }
         this->show();
         this->raise();
         this->activateWindow();
     }, Qt::UniqueConnection);
     connect(m_drivingImageWindow, &QObject::destroyed, this, [this]() {
         m_drivingImageWindow = nullptr;
+        if (m_mediaManager) {
+            m_mediaManager->resumePlaybackAfterInterruption();
+        }
         this->show();
         this->raise();
         this->activateWindow();
     }, Qt::UniqueConnection);
+
+    if (m_mediaManager) {
+        m_mediaManager->pausePlaybackForOcclusion();
+    }
 
     // 现在行车影像改为 Qt 内部自己绘制，不再依赖外部视频硬件层。
     m_drivingImageWindow->show();

@@ -83,6 +83,29 @@ void VideoListWindow::closeEvent(QCloseEvent *event) {
     QMainWindow::closeEvent(event);
 }
 
+void VideoListWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+
+    const QString usbPath = findFirstUsbVideoDirectory();
+    if (usbPath.isEmpty()) {
+        m_currentPath.clear();
+        if (m_videoListWidget) m_videoListWidget->clear();
+        if (m_pathLabel) m_pathLabel->setText(QStringLiteral("请插入U盘"));
+        return;
+    }
+
+    const QString normalizedCurrentPath = QDir::cleanPath(m_currentPath);
+    if (!normalizedCurrentPath.isEmpty()
+            && (normalizedCurrentPath == usbPath || normalizedCurrentPath.startsWith(usbPath + '/'))
+            && QFileInfo::exists(normalizedCurrentPath)) {
+        loadVideoFiles(normalizedCurrentPath);
+        return;
+    }
+
+    loadVideoFiles(usbPath);
+}
+
 void VideoListWindow::setupUI() {
     QWidget *centralWidget = new PageBgWidget(this);
     setCentralWidget(centralWidget);
