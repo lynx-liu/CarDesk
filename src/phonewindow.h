@@ -4,6 +4,7 @@
 #include <QList>
 #include <QMainWindow>
 #include <QString>
+#include <QHash>
 
 class QLineEdit;
 class QListWidget;
@@ -74,6 +75,8 @@ private:
     void insertHistoryWidget(int index, const CallLogEntry &entry);
     void addCallLogEntry(int type, const QString &name, const QString &number, const QString &timeText = QString());
     void addContactEntry(const QString &name, const QString &number);
+    void scheduleRebuildContactList();
+    void rebuildContactListChunk();
     int findContactEntryIndex(const QString &number) const;
     QString findContactNameForNumber(const QString &number) const;
 
@@ -92,6 +95,10 @@ private:
     QList<QPair<QString, QString>> m_contactEntries;
     QList<CallLogEntry> m_callEntries;
     QString m_lastSyncedDeviceAddress;
+    bool m_phonebookSyncInProgress = false;
+    QHash<QString, QString> m_phonebookPendingByNumber;
+    int m_contactRebuildCursor = 0;
+    bool m_contactRebuildScheduled = false;
     QString m_liveCallNumber;
     int m_liveCallStartStatus = 0;
     bool m_liveCallReachedActive = false;

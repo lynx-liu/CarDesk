@@ -745,6 +745,18 @@ void PhoneWindow::onBluetoothCallNumberUpdated(const QString &number, const QStr
 }
 
 void PhoneWindow::onBluetoothPhonebookEntryReceived(const QString &name, const QString &number) {
+    if (m_phonebookSyncInProgress) {
+        const QString trimmed = number.trimmed();
+        if (trimmed.isEmpty()) {
+            return;
+        }
+        QString finalName = name.trimmed();
+        if (finalName.isEmpty()) {
+            finalName = trimmed;
+        }
+        m_phonebookPendingByNumber.insert(trimmed, finalName);
+        return;
+    }
     addContactEntry(name, number);
 }
 
@@ -759,11 +771,18 @@ void PhoneWindow::onBluetoothPhonebookDownloadFinished() {
             m_lastSyncedDeviceAddress = address;
         }
     }
-    if (m_bluetoothManager) {
-        const QString address = m_bluetoothManager->getConnectedDeviceAddress().trimmed().toUpper();
-        if (!address.isEmpty()) {
-            m_lastSyncedDeviceAddress = address;
+    if (m_phonebookSyncInProgress) {
+        m_contactEntries.clear();
+        m_contactEntries.reserve(m_phonebookPendingByNumber.size());
+        for (auto it = m_phonebookPendingByNumber.constBegin(); it != m_phonebookPendingByNumber.constEnd(); ++it) {
+            m_contactEntries.append(qMakePair(it.value(), it.key()));
         }
+        std::sort(m_contactEntries.begin(), m_contactEntries.end(), [](const QPair<QString, QString> &a, const QPair<QString, QString> &b) {
+            return a.first.toLower() < b.first.toLower();
+        });
+        s_cachedContactEntries = m_contactEntries;
+        m_phonebookPendingByNumber.clear();
+        m_phonebookSyncInProgress = false;
     }
     if (m_contactList) {
         rebuildContactList();
@@ -774,7 +793,10 @@ void PhoneWindow::startPhonebookSync() {
     if (!m_bluetoothManager) {
         return;
     }
+    m_phonebookSyncInProgress = true;
+    m_phonebookPendingByNumber.clear();
     m_contactEntries.clear();
+    s_cachedContactEntries.clear();
     if (m_contactList) {
         m_contactList->clear();
     }
@@ -847,19 +869,49 @@ void PhoneWindow::rebuildHistoryList() {
 }
 
 void PhoneWindow::rebuildContactList() {
+    scheduleRebuildContactList();
+}
+
+void PhoneWindow::scheduleRebuildContactList() {
     if (!m_contactList) {
         return;
     }
+
+    m_contactRebuildCursor = 0;
     m_contactList->setUpdatesEnabled(false);
     m_contactList->clear();
-    for (const QPair<QString, QString> &contact : qAsConst(m_contactEntries)) {
+
+    if (!m_contactRebuildScheduled) {
+        m_contactRebuildScheduled = true;
+        QTimer::singleShot(0, this, &PhoneWindow::rebuildContactListChunk);
+    }
+}
+
+void PhoneWindow::rebuildContactListChunk() {
+    if (!m_contactList) {
+        m_contactRebuildScheduled = false;
+        return;
+    }
+
+    static const int kChunkSize = 30;
+    const int end = qMin(m_contactRebuildCursor + kChunkSize, m_contactEntries.size());
+    for (int i = m_contactRebuildCursor; i < end; ++i) {
+        const QPair<QString, QString> &contact = m_contactEntries.at(i);
         auto *item = new QListWidgetItem(m_contactList);
         item->setData(Qt::UserRole, contact.second);
         item->setSizeHint(QSize(0, 68));
         m_contactList->addItem(item);
         m_contactList->setItemWidget(item, createContactRow(contact.first, contact.second));
     }
+
+    m_contactRebuildCursor = end;
+    if (m_contactRebuildCursor < m_contactEntries.size()) {
+        QTimer::singleShot(0, this, &PhoneWindow::rebuildContactListChunk);
+        return;
+    }
+
     m_contactList->setUpdatesEnabled(true);
+    m_contactRebuildScheduled = false;
 }
 
 int PhoneWindow::findContactEntryIndex(const QString &number) const {
