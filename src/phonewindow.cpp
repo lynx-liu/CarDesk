@@ -631,6 +631,9 @@ void PhoneWindow::onDialTab() {
 
 void PhoneWindow::onHistoryTab() {
     activateTab(1);
+    if (m_historyList) {
+        m_historyList->scrollToTop();
+    }
 }
 
 void PhoneWindow::onContactsTab() {
@@ -840,6 +843,7 @@ void PhoneWindow::rebuildHistoryList() {
         m_historyList->addItem(item);
         m_historyList->setItemWidget(item, createHistoryRow(displayName, entry.number, entry.timeText, stateIcon));
     }
+    m_historyList->scrollToTop();
 }
 
 void PhoneWindow::rebuildContactList() {
@@ -998,25 +1002,17 @@ void PhoneWindow::addCallLogEntry(int type, const QString &name, const QString &
         ? resolvedName
         : (name.trimmed().isEmpty() ? trimmed : name.trimmed());
 
-    // 倒序展示：旧记录在前，新记录追加到末尾
-    m_callEntries.append({type, finalName, trimmed, recordTime});
+    // 最近记录显示在最上面
+    m_callEntries.prepend({type, finalName, trimmed, recordTime});
 
     const bool trimmedOld = m_callEntries.size() > 50;
     if (trimmedOld) {
-        m_callEntries.removeFirst();
+        m_callEntries.removeLast();
     }
 
     if (m_historyList) {
-        insertHistoryWidget(m_historyList->count(), m_callEntries.last());
-        if (trimmedOld || m_historyList->count() > m_callEntries.size()) {
-            QListWidgetItem *firstItem = m_historyList->takeItem(0);
-            if (firstItem) {
-                if (QWidget *oldWidget = m_historyList->itemWidget(firstItem)) {
-                    oldWidget->deleteLater();
-                }
-                delete firstItem;
-            }
-        }
+        // 直接整表重建，避免在页面切换/可见状态变化后出现插入位置漂移
+        rebuildHistoryList();
     }
 }
 
