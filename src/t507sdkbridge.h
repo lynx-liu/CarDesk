@@ -25,6 +25,8 @@ public:
     static void setAudioSource(bool radioMode);
     // 设置 TM2313 输出音量增益。level 0..10 对应最小到最大系统音量。
     static void setVolumeLevel(int level);
+
+    static void setMute(bool mute);
 };
 
 #endif // T507SDKBRIDGE_H

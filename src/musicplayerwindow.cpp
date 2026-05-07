@@ -1428,7 +1428,7 @@ void MusicPlayerWindow::playMusic(int index)
     m_currentIndex = index;
 
     if (m_bluetoothManager) {
-        m_bluetoothManager->setPlaybackMode(0);
+        m_bluetoothManager->stopMusic();
     }
     // 音乐播放前先切回媒体声道，防止收音机音频抢占播放输出
     T507SdkBridge::setAudioSource(false);

@@ -251,7 +251,6 @@ RadioWindow::RadioWindow(QWidget *parent)
 
     // 进入收音机界面时自动切到收音机声道
     T507SdkBridge::setAudioSource(true);
-    setMute(false);
     // 开始播放后延迟300ms读取立体声状态
     QTimer::singleShot(300, this, [this]() { updateTunerStatus(); });
 }
@@ -282,7 +281,6 @@ void RadioWindow::showEvent(QShowEvent *event)
     }
     // 进入收音机界面时切回收音机声道
     T507SdkBridge::setAudioSource(true);
-    setMute(false);
     m_preserveAudioOnHide = false;
     m_audioPreserved = false;
 }
@@ -512,9 +510,11 @@ quint32 RadioWindow::getFrequencyHz() const
     return m_tunerCapLow ? vf.frequency : (vf.frequency * 1000u);
 }
 
-bool RadioWindow::setMute(bool mute)
+bool RadioWindow::setRadioMute(bool mute)
 {
     if (m_fd < 0) return false;
+    qDebug() << "RadioWindow: setting mute to" << mute;
+
     struct v4l2_control ctrl;
     ctrl.id    = V4L2_CID_AUDIO_MUTE;
     ctrl.value = mute ? 1 : 0;
@@ -544,7 +544,7 @@ void RadioWindow::updateTunerStatus()
 bool RadioWindow::startAutoSeek(bool upward)
 {
     if (m_fd < 0) return false;
-    setMute(true);           // 开始搜台时静音
+    setRadioMute(true);           // 开始搜台时静音
     m_scanTimer->stop();      // 停止旧的搜台（如果有）
     m_seekUpward    = upward;
     m_seekStartFreq = m_frequency;
@@ -564,7 +564,7 @@ void RadioWindow::stopScan()
         m_scanBtn->setDown(false);
     }
     m_seekStepCount = 0;
-    setMute(false);
+    setRadioMute(false);
     updateFrequencyView();
 }
 
@@ -983,7 +983,7 @@ void RadioWindow::onScanTick() {
             if (static_cast<quint32>(tuner.signal) > threshold) {
                 // 找到电台！
                 m_scanTimer->stop();
-                setMute(false);  // 扫到台了先取消静音
+                setRadioMute(false);  // 扫到台了先取消静音
                 updateFrequencyView();
                 if (m_scanMode) {
                     // 连续扫台：停留1.5s后继续
@@ -992,7 +992,7 @@ void RadioWindow::onScanTick() {
                             m_seekStepCount = 0;
                             m_seekStartFreq = m_frequency;
                             m_scanTimer->start();
-                            setMute(true); // 继续搜台时再次静音
+                            setRadioMute(true); // 继续搜台时再次静音
                         }
                     });
                 }

@@ -669,7 +669,6 @@ void VideoPlayWindow::onPlayVideo() {
     qDebug() << "Playing video:" << videoPath;
     if (m_bluetoothManager) {
         m_bluetoothManager->stopMusic();
-        m_bluetoothManager->setPlaybackMode(0);
     }
     T507SdkBridge::setAudioSource(false);
     updateTitle();

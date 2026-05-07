@@ -99,10 +99,6 @@ void MediaManager::prepareForBluetoothMusic() {
     if (m_videoListWindow) {
         m_videoListWindow->pauseVideoIfPlaying();
     }
-    if (m_bluetoothManager) {
-        m_bluetoothManager->setPlaybackMode(1);
-    }
-    T507SdkBridge::setAudioSource(false);
     setCurrentAudioSource(AudioSource::BluetoothMusic);
 }
 
@@ -111,11 +107,9 @@ void MediaManager::prepareForNonBluetoothAudio() {
     if (m_radioWindow) {
         m_radioWindow->forceStopAudio();
     }
-    if (m_bluetoothManager) {
-        m_bluetoothManager->setPlaybackMode(0);
+    if (m_bluetoothManager) {;
         m_bluetoothManager->stopMusic();
     }
-    T507SdkBridge::setAudioSource(false);
     setCurrentAudioSource(AudioSource::Media);
 }
 
@@ -128,10 +122,8 @@ void MediaManager::prepareForRadioAudio() {
         m_videoListWindow->pauseVideoIfPlaying();
     }
     if (m_bluetoothManager) {
-        m_bluetoothManager->setPlaybackMode(0);
         m_bluetoothManager->stopMusic();
     }
-    T507SdkBridge::setAudioSource(true);
     setCurrentAudioSource(AudioSource::Radio);
 }
 

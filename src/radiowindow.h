@@ -55,7 +55,7 @@ private:
     void closeDevice();
     bool setFrequencyHz(quint32 freqHz);   // 单位：1/16 kHz（V4L2 标准）
     quint32 getFrequencyHz() const;
-    bool setMute(bool mute);
+    bool setRadioMute(bool mute);
     bool startAutoSeek(bool upward);       // 用户空间逐频点 seek
     void stopScan();
     void updateTunerStatus();              // 从硬件读信号/立体声状态

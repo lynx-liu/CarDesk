@@ -17,16 +17,8 @@ static const int TM2313_MUTE_ENABLE            = 10008; // arg: 1=取消静音, 
 static const int TM2313_INPUT_SWITCH_STEREO_1  = 10011; // 切换到 IN1（收音机 / TEA685x 模拟输出）
 static const int TM2313_INPUT_SWITCH_STEREO_2  = 10012; // 切换到 IN2（媒体声道 / SoC DAC，默认）
 
-static int volumeGainFromLevel(int level)
-{
-    const int clamped = qBound(0, level, 10);
-    if (clamped == 0) {
-        return 0; // level0 直接静音，不使用 gain 表
-    }
-    // 使用旧音量等级映射：level1..level10 对应 gain 值
-    static const int gainTable[10] = {0x29, 0x20, 0x15, 0x10, 0x0D, 0x0A, 0x09, 0x06, 0x04, 0x02};
-    return gainTable[clamped - 1];
-}
+static int currentVolumeLevel = -1;
+static const int gainTable[10] = {0x29, 0x20, 0x15, 0x10, 0x0D, 0x0A, 0x09, 0x06, 0x04, 0x02};
 
 // 声场预设表：{treble(0-15), bass(0-15), loudness(0/1)}
 // 编码参考 TDA7313 兼容规范：0=+14dB, 1=+12dB ... 7=0dB(flat), 8=-2dB ... 15=-14dB
@@ -78,16 +70,13 @@ void T507SdkBridge::setSoundMode(const QString &modeName)
     ::ioctl(fd, TM2313_BASS,     (unsigned long)p.bass);
     ::ioctl(fd, TM2313_LOUDNESS, (unsigned long)p.loudness);
     ::close(fd);
-#else
-    Q_UNUSED(TM2313_LOUDNESS)
-    Q_UNUSED(TM2313_TREBLE)
-    Q_UNUSED(TM2313_BASS)
 #endif
 }
 
+// 切换 TM2313 音频输入源，radioMode=true 选择收音机输入（IN1），false 选择媒体输入（IN2）。
 void T507SdkBridge::setAudioSource(bool radioMode)
 {
-    qDebug() << "[TM2313] setAudioSource:" << (radioMode ? "radio(STEREO_1/IN1)" : "media(STEREO_2/IN2)");
+    qDebug() << "[TM2313] setAudioSource:" << (radioMode ? "radio" : "media");
 #ifdef CAR_DESK_DEVICE_CARUNIT
     int fd = ::open("/dev/tm2313", O_RDWR);
     if (fd < 0) {
@@ -97,41 +86,48 @@ void T507SdkBridge::setAudioSource(bool radioMode)
     // radioMode=true  → STEREO_1 (0x40, IN1): TEA685x FM/AM 模拟输出
     // radioMode=false → STEREO_2 (0x41, IN2): SoC DAC 媒体声道（默认）
     ::ioctl(fd, radioMode ? TM2313_INPUT_SWITCH_STEREO_1 : TM2313_INPUT_SWITCH_STEREO_2, 0);
-    ::ioctl(fd, TM2313_MUTE_ENABLE, 1); // 取消静音，确保切换后有声音
     ::close(fd);
-#else
-    Q_UNUSED(radioMode)
-    Q_UNUSED(TM2313_INPUT_SWITCH_STEREO_1)
-    Q_UNUSED(TM2313_INPUT_SWITCH_STEREO_2)
-    Q_UNUSED(TM2313_MUTE_ENABLE)
+
+    if(radioMode) {//播放音乐之后会导致收音机静音,切换回收音机输入时如果不是静音状态需要取消静音
+        if(currentVolumeLevel>0) setMute(false);
+    }
 #endif
 }
 
 void T507SdkBridge::setVolumeLevel(int level)
 {
-    const int clampedLevel = qBound(0, level, 10);
-    const int gainValue = volumeGainFromLevel(clampedLevel);
-    qDebug() << "[TM2313] setVolumeLevel:" << clampedLevel << "gainValue:" << gainValue;
+    currentVolumeLevel = level;
 #ifdef CAR_DESK_DEVICE_CARUNIT
     int fd = ::open("/dev/tm2313", O_RDWR);
     if (fd < 0) {
         qWarning() << "[TM2313] Cannot open /dev/tm2313";
         return;
     }
-    if (clampedLevel == 0) {
+    if (level == 0) {
         qDebug() << "[TM2313] mute";
         ::ioctl(fd, TM2313_MUTE_ENABLE, 0);
     } else {
         qDebug() << "[TM2313] unmute";
         ::ioctl(fd, TM2313_MUTE_ENABLE, 1);
+
+        const int gainValue = gainTable[level-1];
+        qDebug() << "[TM2313] volumeLevel:" << level << "gainValue:" << gainValue;
         ::ioctl(fd, TM2313_VOLUME_OUT_GAIN, (unsigned long)gainValue);
     }
     ::close(fd);
-#else
-    Q_UNUSED(clampedLevel)
-    Q_UNUSED(gainValue)
-    Q_UNUSED(TM2313_VOLUME_OUT_GAIN)
-    Q_UNUSED(TM2313_MUTE_ENABLE)
+#endif
+}
+
+void T507SdkBridge::setMute(bool mute)
+{
+#ifdef CAR_DESK_DEVICE_CARUNIT
+    int fd = ::open("/dev/tm2313", O_RDWR);
+    if (fd < 0) {
+        qWarning() << "[TM2313] Cannot open /dev/tm2313";
+        return;
+    }
+    ::ioctl(fd, TM2313_MUTE_ENABLE, mute ? 0 : 1);
+    ::close(fd);
 #endif
 }
 

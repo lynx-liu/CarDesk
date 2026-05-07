@@ -339,7 +339,12 @@ void MainWindow::ensurePhoneWindow() {
 void MainWindow::onPhoneClicked() {
     qDebug() << "Phone button clicked";
     if (m_mediaManager) {
-        m_mediaManager->pausePlaybackForInterruption();
+        const bool radioActive = (m_radioWindow && m_radioWindow->isAudioActive());
+        // 手动切到拨号界面时，收音机允许后台继续播放；
+        // 真正来电/通话中断仍由 onBluetoothCallStatusChanged() 处理。
+        if (!radioActive) {
+            m_mediaManager->pausePlaybackForInterruption();
+        }
     }
     m_restoreStack.clear();
     ensurePhoneWindow();
@@ -362,9 +367,6 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
 void MainWindow::onBluetoothCallStatusChanged(int status) {
     if (status == 1) {
         // 通话结束
-        if (m_bluetoothManager) {
-            m_bluetoothManager->setPlaybackMode(0);
-        }
         if (!m_restoreStack.isEmpty()) {
             // 如果我们之前为通话推入了恢复目标，隐藏 PhoneWindow 并恢复栈顶
             if (m_phoneWindow && m_phoneWindow->isVisible()) {
@@ -382,12 +384,6 @@ void MainWindow::onBluetoothCallStatusChanged(int status) {
     if (status != 4 && status != 5 && status != 6) {
         return;
     }
-
-    // 通话开始前确保退出 A2DP 模式，并切换到媒体声道（IN2）供 HFP 使用
-    if (m_bluetoothManager) {
-        m_bluetoothManager->setPlaybackMode(0);
-    }
-    T507SdkBridge::setAudioSource(false);
 
     if (m_mediaManager) {
         m_mediaManager->pausePlaybackForInterruption();
@@ -410,12 +406,6 @@ void MainWindow::onBluetoothCallStatusChanged(int status) {
     m_phoneWindow->show();
     m_phoneWindow->raise();
     m_phoneWindow->activateWindow();
-
-    // 窗口切换可能触发 RadioWindow::showEvent（setAudioSource(true)），
-    // 延迟再次确保切回媒体声道（IN2），保障 HFP 双向通话音频正常
-    QTimer::singleShot(150, this, []() {
-        T507SdkBridge::setAudioSource(false);
-    });
 }
 
 void MainWindow::ensureRadioWindow() {
