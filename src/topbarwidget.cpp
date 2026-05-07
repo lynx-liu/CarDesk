@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QVariant>
 #include <QFile>
+#include <QDir>
 
 TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     : QWidget(parent)
@@ -92,14 +93,23 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     connect(m_usbTimer, &QTimer::timeout, this, &TopBarRightWidget::updateUsbState);
     m_usbTimer->start();
 
-    // 监听 /proc/mounts 变化，USB 挂载/卸载时立即响应，避免 statfs 阻塞
+    // 监听 /proc/mounts 和 /mnt/usb 目录变化，USB 插拔时立即响应
     m_mountsWatcher = new QFileSystemWatcher(this);
     m_mountsWatcher->addPath(QStringLiteral("/proc/mounts"));
+    if (QDir(QStringLiteral("/mnt")).exists()) {
+        m_mountsWatcher->addPath(QStringLiteral("/mnt"));
+    }
+    if (QDir(QStringLiteral("/mnt/usb")).exists()) {
+        m_mountsWatcher->addPath(QStringLiteral("/mnt/usb"));
+    }
     connect(m_mountsWatcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &path) {
         updateUsbState();
         // /proc/mounts 变化后 inotify watch 可能失效，重新添加
         if (!m_mountsWatcher->files().contains(path))
             m_mountsWatcher->addPath(path);
+    });
+    connect(m_mountsWatcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString &) {
+        updateUsbState();
     });
 
     updateUsbState();
@@ -173,7 +183,7 @@ void TopBarRightWidget::updateUsbState()
 {
     bool foundUsb = false;
 
-    // 直接读 /proc/mounts，避免 QStorageInfo::mountedVolumes() 的 statfs 阻塞主线程
+    // 直接读 /proc/mounts，挂载点只认 /mnt/usb/xxxx
     QFile mounts(QStringLiteral("/proc/mounts"));
     if (mounts.open(QIODevice::ReadOnly | QIODevice::Text)) {
         while (!mounts.atEnd()) {
@@ -184,15 +194,28 @@ void TopBarRightWidget::updateUsbState()
             const QString mnt = (sp2 > sp1)
                 ? QString::fromLatin1(raw.mid(sp1 + 1, sp2 - sp1 - 1))
                 : QString::fromLatin1(raw.mid(sp1 + 1)).trimmed();
-            if (mnt == QStringLiteral("/mnt/usb")   || mnt.startsWith(QStringLiteral("/mnt/usb/"))
-             || mnt == QStringLiteral("/mnt/usb0")  || mnt.startsWith(QStringLiteral("/mnt/usb0/"))
-             || mnt == QStringLiteral("/media/usb")  || mnt.startsWith(QStringLiteral("/media/usb/"))
-             || mnt == QStringLiteral("/media/usb0") || mnt.startsWith(QStringLiteral("/media/usb0/"))) {
+            if (mnt.startsWith(QStringLiteral("/mnt/usb/"))) {
                 foundUsb = true;
                 break;
             }
         }
         mounts.close();
+    }
+
+    // 兜底：扫描 /mnt/usb 下是否存在设备目录（例如 /mnt/usb/sda1）
+    if (!foundUsb) {
+        QDir usbRoot(QStringLiteral("/mnt/usb"));
+        if (usbRoot.exists()) {
+            const QFileInfoList entries = usbRoot.entryInfoList(
+                QDir::NoDotAndDotDot | QDir::Dirs,
+                QDir::Name);
+            for (const QFileInfo &entry : entries) {
+                if (entry.isDir()) {
+                    foundUsb = true;
+                    break;
+                }
+            }
+        }
     }
 
     if (foundUsb == m_usbConnected)
