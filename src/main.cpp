@@ -392,6 +392,7 @@ static bool shouldSuppressTouchClickSound()
     auto isAudioWindow = [](QWidget *w) {
         return w && (qobject_cast<MusicPlayerWindow *>(w)
                      || qobject_cast<RadioWindow *>(w)
+                     || qobject_cast<VideoListWindow *>(w)
                      || qobject_cast<VideoPlayWindow *>(w)
                      || qobject_cast<PhoneWindow *>(w));
     };
