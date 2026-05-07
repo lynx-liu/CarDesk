@@ -14,6 +14,7 @@
 #include "videolistwindow.h"
 #include "musicplayerwindow.h"
 #include "topbarwidget.h"
+#include "t507sdkbridge.h"
 
 #include <QApplication>
 #include <QKeyEvent>
@@ -382,6 +383,12 @@ void MainWindow::onBluetoothCallStatusChanged(int status) {
         return;
     }
 
+    // 通话开始前确保退出 A2DP 模式，并切换到媒体声道（IN2）供 HFP 使用
+    if (m_bluetoothManager) {
+        m_bluetoothManager->setPlaybackMode(0);
+    }
+    T507SdkBridge::setAudioSource(false);
+
     if (m_mediaManager) {
         m_mediaManager->pausePlaybackForInterruption();
     }
@@ -403,6 +410,12 @@ void MainWindow::onBluetoothCallStatusChanged(int status) {
     m_phoneWindow->show();
     m_phoneWindow->raise();
     m_phoneWindow->activateWindow();
+
+    // 窗口切换可能触发 RadioWindow::showEvent（setAudioSource(true)），
+    // 延迟再次确保切回媒体声道（IN2），保障 HFP 双向通话音频正常
+    QTimer::singleShot(150, this, []() {
+        T507SdkBridge::setAudioSource(false);
+    });
 }
 
 void MainWindow::ensureRadioWindow() {
