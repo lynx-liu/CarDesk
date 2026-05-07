@@ -92,6 +92,10 @@ private:
     QList<QPair<QString, QString>> m_contactEntries;
     QList<CallLogEntry> m_callEntries;
     QString m_lastSyncedDeviceAddress;
+    QString m_liveCallNumber;
+    int m_liveCallStartStatus = 0;
+    bool m_liveCallReachedActive = false;
+    bool m_liveCallPending = false;
 
     QLineEdit *m_numberEdit;
     QLabel *m_callNumber;

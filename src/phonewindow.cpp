@@ -585,6 +585,7 @@ void PhoneWindow::onDial() {
     if (m_bluetoothManager && m_numberEdit) {
         const QString number = m_numberEdit->text().trimmed();
         if (!number.isEmpty()) {
+            m_liveCallNumber = number;
             if (m_callNumber) {
                 const QString name = findContactNameForNumber(number);
                 m_callNumber->setText(!name.isEmpty() ? name : number);
@@ -619,8 +620,6 @@ void PhoneWindow::onHangup() {
         m_numberEdit->show();
     }
     if (m_callNumber) {
-        const QString currentTime = QDateTime::currentDateTime().toString(QStringLiteral("yyyy.MM.dd  ") + AppSignals::timeFormat());
-        addCallLogEntry(3, QStringLiteral("拨出"), m_callNumber->text(), currentTime);
         m_callNumber->clear();
     }
     s_cachedDialNumber.clear();
@@ -649,6 +648,27 @@ void PhoneWindow::onBluetoothCallStatusChanged(int status) {
     }
     switch (status) {
     case 1:
+        if (m_liveCallPending) {
+            const QString number = m_liveCallNumber.trimmed();
+            if (!number.isEmpty()) {
+                int type = 3;
+                if (m_liveCallStartStatus == 5) {
+                    if (m_liveCallReachedActive) {
+                        type = 4;
+                    } else {
+                        type = 5;
+                    }
+                }
+                const QString currentTime = QDateTime::currentDateTime().toString(
+                    QStringLiteral("yyyy.MM.dd  ") + AppSignals::timeFormat());
+                addCallLogEntry(type, QString(), number, currentTime);
+            }
+        }
+        m_liveCallPending = false;
+        m_liveCallReachedActive = false;
+        m_liveCallStartStatus = 0;
+        m_liveCallNumber.clear();
+
         if (m_tabWrap) {
             m_tabWrap->show();
         }
@@ -672,12 +692,28 @@ void PhoneWindow::onBluetoothCallStatusChanged(int status) {
         m_callStateLabel->setText(QStringLiteral("已连接"));
         break;
     case 4:
+        m_liveCallStartStatus = 4;
+        m_liveCallReachedActive = false;
+        m_liveCallPending = true;
+        if (m_liveCallNumber.isEmpty() && m_numberEdit) {
+            m_liveCallNumber = m_numberEdit->text().trimmed();
+        }
         showCallOverlay(4);
         break;
     case 5:
+        m_liveCallStartStatus = 5;
+        m_liveCallReachedActive = false;
+        m_liveCallPending = true;
         showCallOverlay(5);
         break;
     case 6:
+        if (!m_liveCallPending) {
+            m_liveCallPending = true;
+        }
+        if (m_liveCallStartStatus == 0) {
+            m_liveCallStartStatus = 5;
+        }
+        m_liveCallReachedActive = true;
         showCallOverlay(6);
         break;
     default:
@@ -693,6 +729,8 @@ void PhoneWindow::onBluetoothCallNumberUpdated(const QString &number, const QStr
     if (trimmed.isEmpty()) {
         return;
     }
+
+    m_liveCallNumber = trimmed;
 
     if ((source == QLatin1String("IE") || source == QLatin1String("IN") || source == QLatin1String("CL"))
             && (m_currentCallStatus == 4 || m_currentCallStatus == 6)) {
@@ -789,6 +827,10 @@ void PhoneWindow::rebuildHistoryList() {
     }
     m_historyList->clear();
     for (const CallLogEntry &entry : qAsConst(m_callEntries)) {
+        const QString resolvedName = findContactNameForNumber(entry.number);
+        const QString displayName = !resolvedName.isEmpty()
+            ? resolvedName
+            : (entry.name.trimmed().isEmpty() ? entry.number : entry.name);
         const QString stateIcon = entry.type == 4 ? QStringLiteral(":/images/pict_callinglist_state_2.png")
                                 : entry.type == 5 ? QStringLiteral(":/images/pict_callinglist_state_3.png")
                                 : QStringLiteral(":/images/pict_callinglist_state_1.png");
@@ -796,7 +838,7 @@ void PhoneWindow::rebuildHistoryList() {
         item->setData(Qt::UserRole, entry.number);
         item->setSizeHint(QSize(0, 68));
         m_historyList->addItem(item);
-        m_historyList->setItemWidget(item, createHistoryRow(entry.name, entry.number, entry.timeText, stateIcon));
+        m_historyList->setItemWidget(item, createHistoryRow(displayName, entry.number, entry.timeText, stateIcon));
     }
 }
 
@@ -914,12 +956,21 @@ void PhoneWindow::addContactEntry(const QString &name, const QString &number) {
     if (m_contactList) {
         insertContactWidget(index, finalName, trimmed);
     }
+
+    if (m_historyList) {
+        rebuildHistoryList();
+    }
 }
 
 void PhoneWindow::insertHistoryWidget(int index, const CallLogEntry &entry) {
     if (!m_historyList) {
         return;
     }
+
+    const QString resolvedName = findContactNameForNumber(entry.number);
+    const QString displayName = !resolvedName.isEmpty()
+        ? resolvedName
+        : (entry.name.trimmed().isEmpty() ? entry.number : entry.name);
 
     const QString stateIcon = entry.type == 4 ? QStringLiteral(":/images/pict_callinglist_state_2.png")
                             : entry.type == 5 ? QStringLiteral(":/images/pict_callinglist_state_3.png")
@@ -933,7 +984,7 @@ void PhoneWindow::insertHistoryWidget(int index, const CallLogEntry &entry) {
     } else {
         m_historyList->addItem(item);
     }
-    m_historyList->setItemWidget(item, createHistoryRow(entry.name, entry.number, entry.timeText, stateIcon));
+    m_historyList->setItemWidget(item, createHistoryRow(displayName, entry.number, entry.timeText, stateIcon));
 }
 
 void PhoneWindow::addCallLogEntry(int type, const QString &name, const QString &number, const QString &timeText) {
@@ -942,22 +993,28 @@ void PhoneWindow::addCallLogEntry(int type, const QString &name, const QString &
         return;
     }
     const QString recordTime = timeText;
-    m_callEntries.prepend({type, name.isEmpty() ? trimmed : name, trimmed, recordTime});
+    const QString resolvedName = findContactNameForNumber(trimmed);
+    const QString finalName = !resolvedName.isEmpty()
+        ? resolvedName
+        : (name.trimmed().isEmpty() ? trimmed : name.trimmed());
+
+    // 倒序展示：旧记录在前，新记录追加到末尾
+    m_callEntries.append({type, finalName, trimmed, recordTime});
 
     const bool trimmedOld = m_callEntries.size() > 50;
     if (trimmedOld) {
-        m_callEntries.removeLast();
+        m_callEntries.removeFirst();
     }
 
     if (m_historyList) {
-        insertHistoryWidget(0, m_callEntries.first());
+        insertHistoryWidget(m_historyList->count(), m_callEntries.last());
         if (trimmedOld || m_historyList->count() > m_callEntries.size()) {
-            QListWidgetItem *lastItem = m_historyList->takeItem(m_historyList->count() - 1);
-            if (lastItem) {
-                if (QWidget *oldWidget = m_historyList->itemWidget(lastItem)) {
+            QListWidgetItem *firstItem = m_historyList->takeItem(0);
+            if (firstItem) {
+                if (QWidget *oldWidget = m_historyList->itemWidget(firstItem)) {
                     oldWidget->deleteLater();
                 }
-                delete lastItem;
+                delete firstItem;
             }
         }
     }
