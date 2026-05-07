@@ -30,6 +30,7 @@ public:
     void setCurrentVideo(const QString &filePath);
     void setBluetoothManager(BluetoothManager *manager);
     bool isPausedForHome() const { return m_pausedForHome; }
+    bool hasPendingResume() const { return m_pausedForHome || m_pausedForOcclusion || m_pausedForInterruption; }
     bool isPlaying() const;
     void pauseIfPlaying();
     void pauseForInterruption();

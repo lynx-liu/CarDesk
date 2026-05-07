@@ -75,6 +75,10 @@ VideoListWindow::VideoListWindow(QWidget *parent)
 }
 
 VideoListWindow::~VideoListWindow() {
+    if (m_playWindow) {
+        m_playWindow->deleteLater();
+        m_playWindow = nullptr;
+    }
 }
 
 void VideoListWindow::closeEvent(QCloseEvent *event) {
@@ -428,11 +432,14 @@ void VideoListWindow::keyPressEvent(QKeyEvent *event)
 
 bool VideoListWindow::tryResumeVideo()
 {
-    if (m_playWindow && m_playWindow->isPausedForHome()) {
+    if (m_playWindow && m_playWindow->hasPendingResume()) {
         if (m_musicWindow) {
             m_musicWindow->stopIfPlaying();
         }
+        this->hide();
         m_playWindow->show();
+        m_playWindow->raise();
+        m_playWindow->activateWindow();
         return true;
     }
     return false;
@@ -542,7 +549,7 @@ void VideoListWindow::onItemClicked(QListWidgetItem *item) {
         }
         
         if (!m_playWindow) {
-            m_playWindow = new VideoPlayWindow(this);
+            m_playWindow = new VideoPlayWindow();
             if (m_bluetoothManager) {
                 m_playWindow->setBluetoothManager(m_bluetoothManager);
             }
@@ -550,6 +557,9 @@ void VideoListWindow::onItemClicked(QListWidgetItem *item) {
                 this->show();
             });
             connect(m_playWindow, &VideoPlayWindow::requestReturnToMain, this, [this]() {
+                if (m_playWindow) {
+                    m_playWindow->hide();
+                }
                 emit requestReturnToMain();
                 this->hide();
             });
@@ -560,5 +570,7 @@ void VideoListWindow::onItemClicked(QListWidgetItem *item) {
         m_playWindow->setVideoFiles(videoList, currentIdx);
         this->hide();
         m_playWindow->show();
+        m_playWindow->raise();
+        m_playWindow->activateWindow();
     }
 }
