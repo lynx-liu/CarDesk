@@ -1856,6 +1856,7 @@ void MusicPlayerWindow::onUsbTabClicked()
         "QPushButton { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }"
         "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }");
 
+    setPlayButtonState(false);
     updatePlayModeUI();
     refreshUsbContent();
 }
