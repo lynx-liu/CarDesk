@@ -139,7 +139,6 @@ void PhoneWindow::setupUI() {
         connect(m_bluetoothManager, &BluetoothManager::phonebookEntryReceived, this, &PhoneWindow::onBluetoothPhonebookEntryReceived);
         connect(m_bluetoothManager, &BluetoothManager::callLogEntryReceived, this, &PhoneWindow::onBluetoothCallLogEntryReceived);
         connect(m_bluetoothManager, &BluetoothManager::phonebookDownloadFinished, this, &PhoneWindow::onBluetoothPhonebookDownloadFinished);
-        connect(m_bluetoothManager, &BluetoothManager::callLogDownloadFinished, this, &PhoneWindow::onBluetoothCallLogDownloadFinished);
         connect(m_bluetoothManager, &BluetoothManager::deviceConnected, this, &PhoneWindow::onBluetoothDeviceConnected);
         connect(m_bluetoothManager, &BluetoothManager::deviceDisconnected, this, &PhoneWindow::onBluetoothDeviceDisconnected);
     }
@@ -632,10 +631,6 @@ void PhoneWindow::onDialTab() {
 }
 
 void PhoneWindow::onHistoryTab() {
-    if (m_callEntries.isEmpty() && m_bluetoothManager) {
-        m_historyList->clear();
-        startCallLogSync();
-    }
     activateTab(1);
 }
 
@@ -734,18 +729,6 @@ void PhoneWindow::onBluetoothPhonebookDownloadFinished() {
     }
 }
 
-void PhoneWindow::onBluetoothCallLogDownloadFinished() {
-    if (m_bluetoothManager) {
-        const QString address = m_bluetoothManager->getConnectedDeviceAddress().trimmed().toUpper();
-        if (!address.isEmpty()) {
-            m_lastSyncedCallLogDeviceAddress = address;
-        }
-    }
-    if (m_historyList) {
-        rebuildHistoryList();
-    }
-}
-
 void PhoneWindow::startPhonebookSync() {
     if (!m_bluetoothManager) {
         return;
@@ -755,17 +738,6 @@ void PhoneWindow::startPhonebookSync() {
         m_contactList->clear();
     }
     m_bluetoothManager->requestPhonebookDownload();
-}
-
-void PhoneWindow::startCallLogSync() {
-    if (!m_bluetoothManager) {
-        return;
-    }
-    m_callEntries.clear();
-    if (m_historyList) {
-        m_historyList->clear();
-    }
-    m_bluetoothManager->requestCallLogDownload();
 }
 
 void PhoneWindow::onBluetoothDeviceConnected(const QString &name) {
@@ -782,23 +754,14 @@ void PhoneWindow::onBluetoothDeviceConnected(const QString &name) {
 
     const QString connectedAddress = m_bluetoothManager->getConnectedDeviceAddress().trimmed().toUpper();
     const bool samePhonebookDevice = !connectedAddress.isEmpty() && connectedAddress == m_lastSyncedDeviceAddress;
-    const bool sameCallLogDevice = !connectedAddress.isEmpty() && connectedAddress == m_lastSyncedCallLogDeviceAddress;
-
     const int currentTab = m_tabStack ? m_tabStack->currentIndex() : -1;
     if (currentTab == 2) {
         if (!samePhonebookDevice) {
             startPhonebookSync();
         }
-    } else if (currentTab == 1) {
-        if (!sameCallLogDevice) {
-            startCallLogSync();
-        }
     } else {
         if (!samePhonebookDevice) {
             startPhonebookSync();
-        }
-        if (!sameCallLogDevice) {
-            startCallLogSync();
         }
     }
 }

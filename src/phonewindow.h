@@ -44,7 +44,6 @@ private slots:
     void onBluetoothPhonebookEntryReceived(const QString &name, const QString &number);
     void onBluetoothCallLogEntryReceived(int type, const QString &name, const QString &number, const QString &timeText);
     void onBluetoothPhonebookDownloadFinished();
-    void onBluetoothCallLogDownloadFinished();
     void onBluetoothDeviceConnected(const QString &name);
     void onBluetoothDeviceDisconnected();
 
@@ -54,7 +53,6 @@ private:
     void cacheDialNumber(const QString &number);
     void activateTab(int index);
     void startPhonebookSync();
-    void startCallLogSync();
     void insertContactWidget(int index, const QString &name, const QString &number);
     void updateContactWidget(int index, const QString &name, const QString &number);
     QWidget *createHistoryRow(const QString &name, const QString &number, const QString &timeText, const QString &stateIcon);
@@ -94,7 +92,6 @@ private:
     QList<QPair<QString, QString>> m_contactEntries;
     QList<CallLogEntry> m_callEntries;
     QString m_lastSyncedDeviceAddress;
-    QString m_lastSyncedCallLogDeviceAddress;
 
     QLineEdit *m_numberEdit;
     QLabel *m_callNumber;
