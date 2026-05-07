@@ -145,13 +145,19 @@ public:
         if (isVisible()) {
             hide();
             m_updateTimer.stop();
+            // eglfs 平台 hide() 后底层窗口不会自动重绘，补发 update() 触发刷新
+            QTimer::singleShot(0, this, []() {
+                for (QWidget *tw : QApplication::topLevelWidgets()) {
+                    if (tw->isVisible() && tw->isWindow()) {
+                        tw->update();
+                    }
+                }
+            });
             if (resume) {
                 if (MainWindow *main = findMainWindow()) {
                     if (main->mediaManager()) {
-                        qDebug() << "[ScreenClockOverlay] hideClock: scheduling resumePlaybackAfterInterruption";
                         QTimer::singleShot(0, this, [main]() {
                             if (main->mediaManager()) {
-                                qDebug() << "[ScreenClockOverlay] hideClock: executing resumePlaybackAfterInterruption";
                                 main->mediaManager()->resumePlaybackAfterInterruption();
                             }
                         });
