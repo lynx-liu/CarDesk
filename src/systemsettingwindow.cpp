@@ -45,6 +45,9 @@ static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
 #include <QSettings>
 #include <QScreen>
 #include <QTime>
+#include <QSet>
+#include <functional>
+#include <memory>
 #include <QVector>
 #include <QRegExp>
 #include "mcuserialreader.h"
@@ -57,14 +60,157 @@ QString shellQuote(const QString &s)
     return "'" + out + "'";
 }
 
-static void performFactoryReset()
+static void performFactoryReset(BluetoothManager *bluetoothManager)
 {
     QSettings settings;
     settings.clear();
     settings.sync();
     qDebug() << "SystemSettingWindow: factory reset cleared application settings.";
-    // 清除完毕后立即重启设备
-    QProcess::startDetached(QStringLiteral("/sbin/reboot"), {});
+
+    auto rebootNow = []() {
+        QProcess::startDetached(QStringLiteral("/sbin/reboot"), {});
+    };
+
+    if (!bluetoothManager) {
+        rebootNow();
+        return;
+    }
+
+    // 先断开当前连接，再按“删除设备页”同一路径逐条清空配对记录。
+    if (!bluetoothManager->isBluetoothEnabled()) {
+        bluetoothManager->setBluetoothOn(true);
+    }
+    bluetoothManager->disconnectA2dp();
+    bluetoothManager->disconnectDevice();
+
+    auto *ctx = new QObject(qApp);
+    auto *queuedSet = new QSet<QString>();
+    auto *querySet = new QSet<QString>();
+    auto *currentAddr = new QString();
+    auto *queryClosed = new bool(false);
+    auto *clearInProgress = new bool(false);
+    auto *verifyPassDone = new bool(false);
+    auto *finished = new bool(false);
+
+    std::function<void()> finishReset;
+    auto clearNext = std::make_shared<std::function<void()>>();
+    auto startQuery = std::make_shared<std::function<void()>>();
+
+    finishReset = [ctx, queuedSet, querySet, currentAddr, queryClosed, clearInProgress, verifyPassDone, finished, rebootNow]() {
+        if (*finished) {
+            return;
+        }
+        *finished = true;
+        rebootNow();
+        delete queuedSet;
+        delete querySet;
+        delete currentAddr;
+        delete queryClosed;
+        delete clearInProgress;
+        delete verifyPassDone;
+        delete finished;
+        ctx->deleteLater();
+    };
+
+    *clearNext = [bluetoothManager, ctx, queuedSet, querySet, currentAddr, queryClosed,
+                  clearInProgress, verifyPassDone, finished, finishReset, clearNext, startQuery]() {
+        if (*finished || *clearInProgress) {
+            return;
+        }
+
+        QStringList queue = querySet->values();
+
+        if (queue.isEmpty()) {
+            if (!*queryClosed) {
+                return;
+            }
+            // 第一轮删完后再查询一次，确保效果与“删除设备页”一致且可验证。
+            if (!*verifyPassDone) {
+                *verifyPassDone = true;
+                queuedSet->clear();
+                querySet->clear();
+                *queryClosed = false;
+                QTimer::singleShot(0, ctx, *startQuery);
+                return;
+            }
+            QTimer::singleShot(300, ctx, finishReset);
+            return;
+        }
+
+        const QString addr = queue.takeFirst().trimmed();
+        if (addr.isEmpty()) {
+            QTimer::singleShot(0, ctx, *clearNext);
+            return;
+        }
+
+        *clearInProgress = true;
+        *currentAddr = addr;
+        bluetoothManager->clearPairedDevice(addr);
+
+        // 单条删除超时后继续下一条，避免卡死。
+        QTimer::singleShot(1200, ctx, [ctx, currentAddr, querySet, clearInProgress, finished, clearNext]() {
+            if (*finished || !*clearInProgress) {
+                return;
+            }
+            if (!currentAddr->isEmpty()) {
+                querySet->remove(*currentAddr);
+                currentAddr->clear();
+            }
+            *clearInProgress = false;
+            QTimer::singleShot(0, ctx, *clearNext);
+        });
+    };
+
+    QObject::connect(bluetoothManager, &BluetoothManager::pairedDeviceFound, ctx,
+                     [queuedSet, querySet](const QString &, const QString &address) {
+        const QString addr = address.trimmed();
+        if (!addr.isEmpty()) {
+            querySet->insert(addr);
+            queuedSet->insert(addr);
+        }
+    });
+
+    QObject::connect(bluetoothManager, &BluetoothManager::pairedDeviceCleared, ctx,
+                     [ctx, currentAddr, querySet, clearInProgress, finished, clearNext](const QString &) {
+        if (*finished || !*clearInProgress) {
+            return;
+        }
+        if (!currentAddr->isEmpty()) {
+            querySet->remove(*currentAddr);
+            currentAddr->clear();
+        }
+        *clearInProgress = false;
+        QTimer::singleShot(0, ctx, *clearNext);
+    });
+
+    QObject::connect(bluetoothManager, &BluetoothManager::pairedQueryFinished, ctx,
+                     [ctx, queryClosed, finished, clearNext]() {
+        if (*finished) {
+            return;
+        }
+        *queryClosed = true;
+        QTimer::singleShot(0, ctx, *clearNext);
+    });
+
+    *startQuery = [bluetoothManager, ctx, queryClosed, finished, clearNext]() {
+        if (*finished) {
+            return;
+        }
+        *queryClosed = false;
+        bluetoothManager->queryPairedDevices();
+        // 某些固件不回 pairedQueryFinished，使用窗口超时收口。
+        QTimer::singleShot(1500, ctx, [ctx, queryClosed, finished, clearNext]() {
+            if (*finished || *queryClosed) {
+                return;
+            }
+            *queryClosed = true;
+            QTimer::singleShot(0, ctx, *clearNext);
+        });
+    };
+
+    // 全局兜底，确保恢复出厂最终一定会重启。
+    QTimer::singleShot(12000, ctx, finishReset);
+    QTimer::singleShot(250, ctx, *startQuery);
 }
 
 class ClickableSlider : public QSlider {
@@ -1932,8 +2078,8 @@ QWidget *SystemSettingWindow::createFactoryPage()
         root->addWidget(top);
         root->addLayout(row);
 
-        connect(ok, &QPushButton::clicked, &dialog, [&dialog]() {
-            performFactoryReset();
+        connect(ok, &QPushButton::clicked, &dialog, [this, &dialog]() {
+            performFactoryReset(m_bluetoothManager);
             dialog.accept();
             // performFactoryReset 已触发重启，无需再返回主界面
         });
