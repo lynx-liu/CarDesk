@@ -101,8 +101,6 @@ void McuSerialReader::onReadyRead()
         // 去掉末尾 \r
         if (!line.isEmpty() && line.back() == '\r')
             line.chop(1);
-        if (!line.isEmpty())
-            qDebug() << "[MCU] RAW:" << line;
         processLine(line);
     }
 }
