@@ -2267,39 +2267,42 @@ static QString findUSBDevicePathLocal()
 
 static QString mcuFindFirmware()
 {
-    // 首先使用与 OTAManager 相同的挂载点判定逻辑（本地实现）
-    QString usbPath = findUSBDevicePathLocal();
-    const QStringList patterns = {"*.bin", "*.BIN"};
-
-    std::function<QString(const QString&)> findBinRec;
-    findBinRec = [&](const QString &path) -> QString {
+    // 仅接受 /mnt/usb/xxxx/xxx.bin：先枚举设备目录，再在设备目录内一层搜索 .bin
+    auto findBinFlat = [](const QString &path) -> QString {
         QDir dir(path);
         if (!dir.exists()) return QString();
-        QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
+        const QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot);
         for (const QFileInfo &entry : entries) {
-            if (entry.isFile()) {
-                const QString suf = entry.suffix().toLower();
-                if (suf == "bin") {
-                    qDebug() << "Found .bin file:" << entry.filePath();
-                    return entry.filePath();
-                }
-            } else if (entry.isDir()) {
-                QString res = findBinRec(entry.filePath());
-                if (!res.isEmpty()) return res;
+            if (entry.suffix().toLower() == QLatin1String("bin")) {
+                qDebug() << "Found .bin file:" << entry.filePath();
+                return entry.filePath();
             }
         }
         return QString();
     };
 
+    auto findBinUnderDeviceDirs = [&](const QString &mountRoot) -> QString {
+        QDir rootDir(mountRoot);
+        if (!rootDir.exists()) return QString();
+
+        const QFileInfoList deviceDirs = rootDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QFileInfo &deviceDir : deviceDirs) {
+            const QString found = findBinFlat(deviceDir.filePath());
+            if (!found.isEmpty()) return found;
+        }
+        return QString();
+    };
+
+    const QString usbPath = findUSBDevicePathLocal();
     if (!usbPath.isEmpty()) {
-        QString found = findBinRec(usbPath);
+        const QString found = findBinUnderDeviceDirs(usbPath);
         if (!found.isEmpty()) return found;
     }
 
     // 回退：尝试常见根路径（兼容旧设备）
     const QStringList roots = {kUsbMountDir, QStringLiteral("/mnt")};
     for (const QString &root : roots) {
-        QString found = findBinRec(root);
+        const QString found = findBinUnderDeviceDirs(root);
         if (!found.isEmpty()) return found;
     }
 
@@ -2419,9 +2422,9 @@ void SystemSettingWindow::onMcuSerialReadyRead()
     }
 
     if (m_mcuState == 3) {
-        // 等 ACK(0x06) + C(0x43) 开始发送数据块
-        if (m_mcuRxBuf.size() < 2) return;
-        if (!m_mcuRxBuf.contains('\x06')) return;
+        // 等待 bootloader 就绪信号：标准 YMODEM 应答为 ACK(0x06)+C(0x43)，
+        // 但部分简单 bootloader 对文件名包直接回 C(0x43)（无 ACK），兼容两种情况
+        if (!m_mcuRxBuf.contains('\x43')) return; // 至少要有 'C'
         m_mcuRxBuf.clear();
 
         const int offset = (m_mcuBlockNum - 1) * 1024;
