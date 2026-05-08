@@ -526,6 +526,9 @@ void MainWindow::onDrivingImageClicked() {
         m_mediaManager->pausePlaybackForOcclusion();
     }
 
+    // 手动从主界面进入行车影像时，统一恢复到默认四分屏模式。
+    m_drivingImageWindow->setDrivingMode(360);
+
     // 现在行车影像改为 Qt 内部自己绘制，不再依赖外部视频硬件层。
     m_drivingImageWindow->show();
     m_drivingImageWindow->raise();
