@@ -96,6 +96,13 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     connect(m_usbTimer, &QTimer::timeout, this, &TopBarRightWidget::updateUsbState);
     m_usbTimer->start();
 
+    // USB 挂载防抖定时器：/proc/mounts 变化后等待文件系统真正就绪再检测状态。
+    // NTFS/exFAT 在 ARM 上挂载可能需要 3-8 秒，若立即 entryInfoList() 会阻塞 UI 线程。
+    m_usbDebounceTimer = new QTimer(this);
+    m_usbDebounceTimer->setSingleShot(true);
+    m_usbDebounceTimer->setInterval(1500); // 等待 1.5 秒让内核完成挂载
+    connect(m_usbDebounceTimer, &QTimer::timeout, this, &TopBarRightWidget::updateUsbState);
+
     // 监听u盘目录变化，USB 插拔时立即响应
     m_mountsWatcher = new QFileSystemWatcher(this);
     m_mountsWatcher->addPath(QStringLiteral("/proc/mounts"));
@@ -106,13 +113,14 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
         m_mountsWatcher->addPath(kUsbMountDir);
     }
     connect(m_mountsWatcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &path) {
-        updateUsbState();
+        // 重置防抖计时器——多次触发合并为一次延迟检测，等文件系统真正就绪
+        m_usbDebounceTimer->start();
         // /proc/mounts 变化后 inotify watch 可能失效，重新添加
         if (!m_mountsWatcher->files().contains(path))
             m_mountsWatcher->addPath(path);
     });
     connect(m_mountsWatcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString &) {
-        updateUsbState();
+        m_usbDebounceTimer->start();
     });
 
     updateUsbState();
@@ -206,18 +214,13 @@ void TopBarRightWidget::updateUsbState()
     }
 
     // 兜底：扫描 /mnt/usb 下是否存在设备目录（例如 /mnt/usb/sda1）
+    // 使用 entryList(QDir::Dirs) 仅取名字列表，不调用 stat/lstat，比 entryInfoList 快
     if (!foundUsb) {
         QDir usbRoot(kUsbMountDir);
         if (usbRoot.exists()) {
-            const QFileInfoList entries = usbRoot.entryInfoList(
-                QDir::NoDotAndDotDot | QDir::Dirs,
-                QDir::Name);
-            for (const QFileInfo &entry : entries) {
-                if (entry.isDir()) {
-                    foundUsb = true;
-                    break;
-                }
-            }
+            const QStringList subs = usbRoot.entryList(
+                QDir::NoDotAndDotDot | QDir::Dirs, QDir::Name);
+            foundUsb = !subs.isEmpty();
         }
     }
 

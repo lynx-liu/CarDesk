@@ -46,6 +46,7 @@ private:
     QLabel      *m_timeLabel = nullptr;
     QTimer             *m_usbTimer = nullptr;
     QTimer             *m_clockTimer = nullptr;
+    QTimer             *m_usbDebounceTimer = nullptr;  // /proc/mounts 变化后防抖延迟
     QFileSystemWatcher *m_mountsWatcher = nullptr;
     bool         m_usbConnected = false;
     bool         m_isMuted   = false;
