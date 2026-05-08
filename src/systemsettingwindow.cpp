@@ -1448,18 +1448,94 @@ QWidget *SystemSettingWindow::createBluetoothPage()
         if (link != QStringLiteral("rename")) return;
         QDialog dialog(this);
         dialog.setWindowTitle(QStringLiteral("蓝牙名称"));
-        dialog.setFixedSize(680, 220);
+        dialog.setFixedSize(680, 560);
         dialog.setStyleSheet("QDialog{background:#0d1f3f;color:#fff;border:1px solid #0068ff;}");
         auto *dLayout = new QVBoxLayout(&dialog);
+        dLayout->setContentsMargins(24, 20, 24, 20);
+        dLayout->setSpacing(14);
+
         auto *line = new QLineEdit(m_bluetoothDeviceName, &dialog);
-        line->setStyleSheet("QLineEdit{height:54px;background:rgba(255,255,255,0.08);border:1px solid #0068ff;color:#fff;font-size:28px;padding-left:16px;}");
+        line->setReadOnly(true);
+        line->setMaxLength(16);
+        line->setAlignment(Qt::AlignCenter);
+        line->setStyleSheet("QLineEdit{height:58px;background:rgba(255,255,255,0.08);border:1px solid #0068ff;color:#fff;font-size:30px;}");
+
+        auto *keypadWrap = new QWidget(&dialog);
+        auto *keypad = new QGridLayout(keypadWrap);
+        keypad->setContentsMargins(0, 0, 0, 0);
+        keypad->setHorizontalSpacing(12);
+        keypad->setVerticalSpacing(10);
+
+        auto makeKey = [](const QString &text, QWidget *parent) {
+            auto *btn = new QPushButton(text, parent);
+            btn->setFixedSize(190, 66);
+            btn->setStyleSheet(
+                "QPushButton{background:rgba(0,104,255,0.22);border:1px solid #0068ff;color:#fff;font-size:30px;}"
+                "QPushButton:hover{border:2px solid #00faff;color:#00faff;}"
+            );
+            return btn;
+        };
+
+        auto appendDigit = [line](const QString &digit) {
+            QString text = line->text();
+            if (text.size() >= line->maxLength()) {
+                return;
+            }
+            text.append(digit);
+            line->setText(text);
+        };
+
+        int keyNum = 1;
+        for (int row = 0; row < 3; ++row) {
+            for (int col = 0; col < 3; ++col) {
+                const QString keyText = QString::number(keyNum++);
+                auto *btn = makeKey(keyText, keypadWrap);
+                keypad->addWidget(btn, row, col);
+                connect(btn, &QPushButton::clicked, &dialog, [appendDigit, keyText]() {
+                    appendDigit(keyText);
+                });
+            }
+        }
+
+        auto *clearBtn = makeKey(QStringLiteral("清空"), keypadWrap);
+        auto *zeroBtn = makeKey(QStringLiteral("0"), keypadWrap);
+        auto *backspaceBtn = makeKey(QStringLiteral("删除"), keypadWrap);
+        keypad->addWidget(clearBtn, 3, 0);
+        keypad->addWidget(zeroBtn, 3, 1);
+        keypad->addWidget(backspaceBtn, 3, 2);
+
+        connect(zeroBtn, &QPushButton::clicked, &dialog, [appendDigit]() {
+            appendDigit(QStringLiteral("0"));
+        });
+        connect(clearBtn, &QPushButton::clicked, &dialog, [line]() {
+            line->clear();
+        });
+        connect(backspaceBtn, &QPushButton::clicked, &dialog, [line]() {
+            QString text = line->text();
+            if (!text.isEmpty()) {
+                text.chop(1);
+                line->setText(text);
+            }
+        });
+
         auto *ok = new QPushButton(QStringLiteral("确认"), &dialog);
+        auto *cancel = new QPushButton(QStringLiteral("取消"), &dialog);
         ok->setFixedSize(168, 54);
+        cancel->setFixedSize(168, 54);
         ok->setStyleSheet("QPushButton{background:#0068ff;color:#fff;border:none;font-size:26px;}QPushButton:hover{background:#00a5ff;}");
+        cancel->setStyleSheet("QPushButton{background:none;border:2px solid #999;color:#fff;font-size:26px;}QPushButton:hover{border-color:#ccc;}");
+
         dLayout->addWidget(line);
-        auto *r = new QHBoxLayout(); r->addStretch(); r->addWidget(ok); r->addStretch();
+        dLayout->addWidget(keypadWrap, 0, Qt::AlignHCenter);
+        auto *r = new QHBoxLayout();
+        r->addStretch();
+        r->addWidget(ok);
+        r->addSpacing(40);
+        r->addWidget(cancel);
+        r->addStretch();
         dLayout->addLayout(r);
         connect(ok, &QPushButton::clicked, &dialog, &QDialog::accept);
+        connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
         if (dialog.exec() == QDialog::Accepted && !line->text().trimmed().isEmpty()) {
             m_bluetoothDeviceName = line->text().trimmed();
             if (m_bluetoothManager) {
