@@ -10,6 +10,7 @@
 #include <QTimer>
 #include <QMediaPlayer>
 #include <QCloseEvent>
+#include <QFutureWatcher>
 #include <QStyledItemDelegate>
 #include <QPainter>
 
@@ -162,7 +163,7 @@ private:
     void loadFavoriteSongs();
     void saveFavoriteSongs();
     void refreshFavoriteList();
-    void scanFlatPlaylist();
+    void scanFlatPlaylist();  // 异步执行，完成后自动刷新播放列表
     void playMusic(int index);
     void releaseAudioPlayer();
     void updateNowPlaying();
@@ -239,6 +240,7 @@ private:
     bool        m_isUsbMode          = true;
     bool        m_preservePlaybackOnHide = false;
     PlayMode    m_playMode           = PlayMode::RepeatAll;
+    QFutureWatcher<QStringList> *m_scanWatcher = nullptr;  // 后台扫描 watcher
     const QStringList m_audioExtensions = {
         "mp3","flac","wav","aac","ogg","wma","opus","m4a","ape","ac3"
     };

@@ -8,6 +8,9 @@
 #include "appsignals.h"
 #include "t507sdkbridge.h"
 
+static const QString kUsbMountDir    = QStringLiteral("/mnt/usb");
+static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
+
 #include <QButtonGroup>
 #include <QKeyEvent>
 #include <QCheckBox>
@@ -301,11 +304,7 @@ void SystemSettingWindow::onTickUpdate()
 QString SystemSettingWindow::findAppUpdateArchive(QString *usbRoot) const
 {
     const QStringList usbPaths = {
-        QStringLiteral("/mnt/usb"),
-        QStringLiteral("/mnt/usb0"),
-        QStringLiteral("/media/usb"),
-        QStringLiteral("/media/usb0"),
-        QStringLiteral("/run/media"),
+        kUsbMountDir,
         QStringLiteral("/mnt")
     };
 
@@ -2268,12 +2267,8 @@ QWidget *SystemSettingWindow::createUpdatePage()
 static QString findUSBDevicePathLocal()
 {
     QStringList possiblePaths = {
-        "/mnt/usb",
-        "/mnt/usb0",
-        "/media/usb",
-        "/media/usb0",
-        "/run/media",
-        "/mnt"
+        kUsbMountDir,
+        QStringLiteral("/mnt")
     };
 
     for (const QString &path : possiblePaths) {
@@ -2342,7 +2337,7 @@ static QString mcuFindFirmware()
     }
 
     // 回退：尝试常见根路径（兼容旧设备）
-    const QStringList roots = {"/mnt/usb", "/mnt/usb0", "/media/usb", "/media/usb0", "/run/media", "/mnt"};
+    const QStringList roots = {kUsbMountDir, QStringLiteral("/mnt")};
     for (const QString &root : roots) {
         QString found = findBinRec(root);
         if (!found.isEmpty()) return found;

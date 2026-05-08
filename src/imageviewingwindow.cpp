@@ -28,8 +28,10 @@
 #include <QGestureEvent>
 #include "appsignals.h"
 
+static const QString kUsbMountDir    = QStringLiteral("/mnt/usb");
+static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
+
 static QString findFirstUsbImageDirectory();
-static QString findUsbImageRoot(const QString &path);
 
 ImageViewingWindow::ImageViewingWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -118,10 +120,7 @@ void ImageViewingWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
     if (m_currentPath.isEmpty() || m_currentPath == QStringLiteral("/mnt")
-            || m_currentPath == QStringLiteral("/mnt/usb")
-            || m_currentPath == QStringLiteral("/mnt/usb0")
-            || m_currentPath == QStringLiteral("/media/usb")
-            || m_currentPath == QStringLiteral("/media/usb0")) {
+            || m_currentPath == kUsbMountDir) {
         const QString usbRoot = findFirstUsbImageDirectory();
         if (!usbRoot.isEmpty()) {
             m_initialPath = usbRoot;
@@ -475,14 +474,7 @@ bool ImageViewingWindow::eventFilter(QObject *obj, QEvent *event)
 
 static bool isUsbRootPath(const QString &root)
 {
-    return root == QStringLiteral("/mnt/usb")
-        || root == QStringLiteral("/mnt/usb0")
-        || root == QStringLiteral("/media/usb")
-        || root == QStringLiteral("/media/usb0")
-        || root.startsWith(QStringLiteral("/mnt/usb/"))
-        || root.startsWith(QStringLiteral("/mnt/usb0/"))
-        || root.startsWith(QStringLiteral("/media/usb/"))
-        || root.startsWith(QStringLiteral("/media/usb0/"));
+    return root.startsWith(kUsbMountPrefix);
 }
 
 static QString findFirstUsbImageDirectory()
@@ -496,38 +488,10 @@ static QString findFirstUsbImageDirectory()
             return root;
     }
     // 备用：直接扫文件系统
-    static const QStringList kBases = {
-        QStringLiteral("/mnt/usb/"),
-        QStringLiteral("/mnt/usb0/"),
-        QStringLiteral("/media/usb/"),
-        QStringLiteral("/media/usb0/"),
-    };
-    for (const QString &base : kBases) {
-        QDir d(base.left(base.length() - 1));
-        if (!d.exists()) continue;
+    QDir d(kUsbMountDir);
+    if (d.exists()) {
         const QStringList subs = d.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-        if (!subs.isEmpty()) return base + subs.first();
-    }
-    return {};
-}
-
-static QString findUsbImageRoot(const QString &path)
-{
-    if (!path.startsWith(QStringLiteral("/mnt/usb"))
-            && !path.startsWith(QStringLiteral("/mnt/usb0"))
-            && !path.startsWith(QStringLiteral("/media/usb"))
-            && !path.startsWith(QStringLiteral("/media/usb0"))) {
-        return {};
-    }
-    for (const QStorageInfo &storage : QStorageInfo::mountedVolumes()) {
-        if (!storage.isValid() || !storage.isReady())
-            continue;
-        const QString root = storage.rootPath();
-        if (isUsbRootPath(root)) {
-            if (path == root || path.startsWith(root + '/')) {
-                return root;
-            }
-        }
+        if (!subs.isEmpty()) return kUsbMountPrefix + subs.first();
     }
     return {};
 }
@@ -540,19 +504,10 @@ void ImageViewingWindow::onBackDirClicked()
     }
 
     // 前缀匹配确定 USB 根目录（sda1 才是设备根）
-    static const QStringList kUsbBases = {
-        QStringLiteral("/mnt/usb0/"),
-        QStringLiteral("/mnt/usb/"),
-        QStringLiteral("/media/usb0/"),
-        QStringLiteral("/media/usb/"),
-    };
     QString deviceRoot;
-    for (const QString &base : kUsbBases) {
-        if (m_currentPath.startsWith(base)) {
-            int sep = m_currentPath.indexOf('/', base.length());
-            deviceRoot = (sep < 0) ? m_currentPath : m_currentPath.left(sep);
-            break;
-        }
+    if (m_currentPath.startsWith(kUsbMountPrefix)) {
+        int sep = m_currentPath.indexOf('/', 9);
+        deviceRoot = (sep < 0) ? m_currentPath : m_currentPath.left(sep);
     }
 
     if (!deviceRoot.isEmpty()) {
@@ -583,10 +538,7 @@ void ImageViewingWindow::loadDirectory(const QString &path)
 {
     QString normalizedPath = path;
     if (normalizedPath.isEmpty()
-            || normalizedPath == QStringLiteral("/mnt/usb")
-            || normalizedPath == QStringLiteral("/mnt/usb0")
-            || normalizedPath == QStringLiteral("/media/usb")
-            || normalizedPath == QStringLiteral("/media/usb0")
+            || normalizedPath == kUsbMountDir
             || normalizedPath == QStringLiteral("/mnt")) {
         const QString usbPath = findFirstUsbImageDirectory();
         if (!usbPath.isEmpty()) {
@@ -612,9 +564,7 @@ void ImageViewingWindow::loadDirectory(const QString &path)
 
     QDir imgDir(normalizedPath);
     if (!imgDir.exists()) {
-        const bool inUsb = normalizedPath.startsWith(QStringLiteral("/mnt/usb"))
-                || normalizedPath.startsWith(QStringLiteral("/media/usb"));
-        if (!inUsb) {
+        if (!normalizedPath.startsWith(kUsbMountPrefix)) {
             m_currentPath.clear();
             if (m_detailLabel)
                 m_detailLabel->setText(QStringLiteral("请插入U盘"));
@@ -663,19 +613,10 @@ void ImageViewingWindow::loadDirectory(const QString &path)
 
     if (m_detailLabel) {
         // sda1 才是设备根：取 USB 基础路径后第一级子目录
-        static const QStringList kUsbBases = {
-            QStringLiteral("/mnt/usb0/"),
-            QStringLiteral("/mnt/usb/"),
-            QStringLiteral("/media/usb0/"),
-            QStringLiteral("/media/usb/"),
-        };
         QString deviceRoot;
-        for (const QString &base : kUsbBases) {
-            if (normalizedPath.startsWith(base)) {
-                int sep = normalizedPath.indexOf('/', base.length());
-                deviceRoot = (sep < 0) ? normalizedPath : normalizedPath.left(sep);
-                break;
-            }
+        if (normalizedPath.startsWith(kUsbMountPrefix)) {
+            int sep = normalizedPath.indexOf('/', 9);
+            deviceRoot = (sep < 0) ? normalizedPath : normalizedPath.left(sep);
         }
         QString displayPath;
         if (!deviceRoot.isEmpty()) {

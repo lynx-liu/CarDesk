@@ -1,7 +1,7 @@
 TEMPLATE = app
 TARGET = CarDesk
 
-QT += core gui widgets multimedia multimediawidgets serialport
+QT += core gui widgets multimedia multimediawidgets serialport concurrent
 
 CONFIG += c++11
 
@@ -104,7 +104,6 @@ HEADERS += \
     src/devicedetect.h \
     src/bluetoothmanager.h \
     src/mediamanager.h \
-    src/usbmanager.h \
     src/videolistwindow.h \
     src/videoplaywindow.h \
     src/musicplayerwindow.h \
@@ -130,7 +129,6 @@ SOURCES += \
     src/devicedetect.cpp \
     src/bluetoothmanager.cpp \
     src/mediamanager.cpp \
-    src/usbmanager.cpp \
     src/videolistwindow.cpp \
     src/videoplaywindow.cpp \
     src/musicplayerwindow.cpp \

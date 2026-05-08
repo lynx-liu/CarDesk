@@ -2,6 +2,8 @@
 #include "progressmonitor.h"
 
 #include <QProcess>
+
+static const QLatin1String kUsbMountDir("/mnt/usb");
 #include <QDate>
 #include <QDir>
 #include <QFile>
@@ -203,12 +205,8 @@ QString OTAManager::findUSBDevicePath()
 {
     // 尝试查找常见的USB挂载点
     QStringList possiblePaths = {
-        "/mnt/usb",
-        "/mnt/usb0",
-        "/media/usb",
-        "/media/usb0",
-        "/run/media",
-        "/mnt"
+        kUsbMountDir,
+        QStringLiteral("/mnt")
     };
 
     for (const QString &path : possiblePaths) {

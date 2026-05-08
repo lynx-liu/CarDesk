@@ -20,7 +20,6 @@ class DiagnosticWindow;
 class SystemSettingWindow;
 class DrivingImageWindow;
 class ImageViewingWindow;
-class USBManager;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -32,7 +31,6 @@ public:
 
 private slots:
     void onBluetoothClicked();
-    void onUSBClicked();
     void onVideoListClicked();
     void onMusicUSBClicked();
     void onPhoneClicked();
@@ -86,7 +84,6 @@ private:
     SystemSettingWindow *m_systemSettingWindow;
     DrivingImageWindow *m_drivingImageWindow;
     ImageViewingWindow *m_imageViewingWindow;
-    USBManager *m_usbManager;
     struct RestoreState {
         QPointer<QWidget> widget;
     };

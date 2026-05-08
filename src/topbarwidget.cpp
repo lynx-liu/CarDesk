@@ -5,6 +5,9 @@
 #include <QHBoxLayout>
 #include <QDateTime>
 #include <QApplication>
+
+static const QString kUsbMountDir    = QStringLiteral("/mnt/usb");
+static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
 #include <QVariant>
 #include <QFile>
 #include <QDir>
@@ -93,14 +96,14 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     connect(m_usbTimer, &QTimer::timeout, this, &TopBarRightWidget::updateUsbState);
     m_usbTimer->start();
 
-    // 监听 /proc/mounts 和 /mnt/usb 目录变化，USB 插拔时立即响应
+    // 监听u盘目录变化，USB 插拔时立即响应
     m_mountsWatcher = new QFileSystemWatcher(this);
     m_mountsWatcher->addPath(QStringLiteral("/proc/mounts"));
     if (QDir(QStringLiteral("/mnt")).exists()) {
         m_mountsWatcher->addPath(QStringLiteral("/mnt"));
     }
-    if (QDir(QStringLiteral("/mnt/usb")).exists()) {
-        m_mountsWatcher->addPath(QStringLiteral("/mnt/usb"));
+    if (QDir(kUsbMountDir).exists()) {
+        m_mountsWatcher->addPath(kUsbMountDir);
     }
     connect(m_mountsWatcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &path) {
         updateUsbState();
@@ -194,7 +197,7 @@ void TopBarRightWidget::updateUsbState()
             const QString mnt = (sp2 > sp1)
                 ? QString::fromLatin1(raw.mid(sp1 + 1, sp2 - sp1 - 1))
                 : QString::fromLatin1(raw.mid(sp1 + 1)).trimmed();
-            if (mnt.startsWith(QStringLiteral("/mnt/usb/"))) {
+            if (mnt.startsWith(kUsbMountPrefix)) {
                 foundUsb = true;
                 break;
             }
@@ -204,7 +207,7 @@ void TopBarRightWidget::updateUsbState()
 
     // 兜底：扫描 /mnt/usb 下是否存在设备目录（例如 /mnt/usb/sda1）
     if (!foundUsb) {
-        QDir usbRoot(QStringLiteral("/mnt/usb"));
+        QDir usbRoot(kUsbMountDir);
         if (usbRoot.exists()) {
             const QFileInfoList entries = usbRoot.entryInfoList(
                 QDir::NoDotAndDotDot | QDir::Dirs,

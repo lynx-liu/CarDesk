@@ -10,7 +10,6 @@
 #include "systemsettingwindow.h"
 #include "drivingimagewindow.h"
 #include "imageviewingwindow.h"
-#include "usbmanager.h"
 #include "videolistwindow.h"
 #include "musicplayerwindow.h"
 #include "topbarwidget.h"
@@ -44,7 +43,6 @@ MainWindow::MainWindow(QWidget *parent)
     , m_systemSettingWindow(nullptr)
     , m_drivingImageWindow(nullptr)
     , m_imageViewingWindow(nullptr)
-    , m_usbManager(new USBManager(this))
 {
     m_mediaManager->setBluetoothManager(m_bluetoothManager);
     setupWindowSize();
@@ -264,12 +262,6 @@ void MainWindow::onBluetoothClicked() {
     qDebug() << "Bluetooth button clicked";
     m_bluetoothManager->scanDevices();
 }
-
-void MainWindow::onUSBClicked() {
-    qDebug() << "USB button clicked";
-    m_usbManager->scanDevices();
-}
-
 
 void MainWindow::onVideoListClicked() {
     qDebug() << "Video List button clicked";

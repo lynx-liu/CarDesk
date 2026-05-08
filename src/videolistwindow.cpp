@@ -8,6 +8,9 @@
 #include <QVBoxLayout>
 #include <QKeyEvent>
 #include <QHBoxLayout>
+
+static const QString kUsbMountDir    = QStringLiteral("/mnt/usb");
+static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
 #include <QGridLayout>
 #include <QDir>
 #include <QStandardPaths>
@@ -270,9 +273,7 @@ void VideoListWindow::loadVideoFiles(const QString &directory) {
     
     const QString normalizedPath = QDir::cleanPath(directory);
     if (!dir.exists()) {
-        const bool inUsb = normalizedPath.startsWith(QLatin1String("/mnt/usb"))
-                        || normalizedPath.startsWith(QLatin1String("/media/usb"));
-        if (!inUsb) {
+        if (!normalizedPath.startsWith(kUsbMountPrefix)) {
             m_currentPath.clear();
             m_videoListWidget->clear();
             if (m_pathLabel) m_pathLabel->setText(QStringLiteral("请插入U盘"));
@@ -325,19 +326,10 @@ void VideoListWindow::loadVideoFiles(const QString &directory) {
     
     // USB 路径标签（sda1 为设备根）
     if (m_pathLabel) {
-        static const QStringList kUsbBases = {
-            QStringLiteral("/mnt/usb0/"),
-            QStringLiteral("/mnt/usb/"),
-            QStringLiteral("/media/usb0/"),
-            QStringLiteral("/media/usb/"),
-        };
         QString deviceRoot;
-        for (const QString &base : kUsbBases) {
-            if (normalizedPath.startsWith(base)) {
-                int sep = normalizedPath.indexOf('/', base.length());
-                deviceRoot = (sep < 0) ? normalizedPath : normalizedPath.left(sep);
-                break;
-            }
+        if (normalizedPath.startsWith(kUsbMountPrefix)) {
+            int sep = normalizedPath.indexOf('/', 9);
+            deviceRoot = (sep < 0) ? normalizedPath : normalizedPath.left(sep);
         }
         QString displayPath;
         if (!deviceRoot.isEmpty()) {
@@ -371,20 +363,11 @@ void VideoListWindow::onHomeClicked() {
 }
 
 void VideoListWindow::onBackClicked() {
-    static const QStringList kUsbBases = {
-        QStringLiteral("/mnt/usb0/"),
-        QStringLiteral("/mnt/usb/"),
-        QStringLiteral("/media/usb0/"),
-        QStringLiteral("/media/usb/"),
-    };
     const QString normalizedPath = QDir::cleanPath(m_currentPath);
     QString deviceRoot;
-    for (const QString &base : kUsbBases) {
-        if (normalizedPath.startsWith(base)) {
-            int sep = normalizedPath.indexOf('/', base.length());
-            deviceRoot = (sep < 0) ? normalizedPath : normalizedPath.left(sep);
-            break;
-        }
+    if (normalizedPath.startsWith(kUsbMountPrefix)) {
+        int sep = normalizedPath.indexOf('/', 9);
+        deviceRoot = (sep < 0) ? normalizedPath : normalizedPath.left(sep);
     }
     if (!deviceRoot.isEmpty()) {
         if (normalizedPath == deviceRoot) {
@@ -501,19 +484,11 @@ void VideoListWindow::setMusicWindow(MusicPlayerWindow *musicWindow) {
 }
 
 static QString findFirstUsbVideoDirectory() {
-    static const QStringList kBases = {
-        QStringLiteral("/mnt/usb/"),
-        QStringLiteral("/mnt/usb0/"),
-        QStringLiteral("/media/usb/"),
-        QStringLiteral("/media/usb0/"),
-    };
-    for (const QString &base : kBases) {
-        const QString basePath = base.left(base.length() - 1);
-        QDir d(basePath);
-        if (!d.exists()) continue;
+    QDir d(kUsbMountDir);
+    if (d.exists()) {
         const QStringList subs = d.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         if (!subs.isEmpty())
-            return base + subs.first();
+            return kUsbMountPrefix + subs.first();
     }
     return {};
 }
