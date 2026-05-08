@@ -25,7 +25,7 @@ static void publishVolumeLevel(int level)
     AppSignals::instance()->volumeLevelChanged(bounded);
 }
 
-void AppSignals::setVolumeLevel(int level, QObject *parent)
+void AppSignals::setVolumeLevel(int level)
 {
     const int boundedLevel = qBound(0, level, 10);
     qDebug() << "[AppSignals] setVolumeLevel:" << boundedLevel;
@@ -38,29 +38,29 @@ void AppSignals::setVolumeLevel(int level, QObject *parent)
     saveVolumeLevel(boundedLevel);
 }
 
-void AppSignals::toggleMute(QObject *parent)
+void AppSignals::toggleMute()
 {
     const int currentLevel = qBound(0, qApp->property("appVolumeLevel").toInt(), 10);
     if (currentLevel == 0) {
         const QVariant previous = qApp->property("appVolumePrevLevel");
         const int restoreLevel = previous.isValid() ? qBound(1, previous.toInt(), 10) : 10;
         qDebug() << "[AppSignals] toggleMute: unmute restoreLevel=" << restoreLevel;
-        setVolumeLevel(restoreLevel, parent);
+        setVolumeLevel(restoreLevel);
     } else {
         qApp->setProperty("appVolumePrevLevel", currentLevel);
         qDebug() << "[AppSignals] toggleMute: mute currentLevel=" << currentLevel;
-        setVolumeLevel(0, parent);
+        setVolumeLevel(0);
     }
 }
 
-void AppSignals::changeVolume(int delta, QObject *parent)
+void AppSignals::changeVolume(int delta)
 {
     const QVariant currentVolume = qApp->property("appVolumeLevel");
     const int currentLevel = currentVolume.isValid()
         ? qBound(0, currentVolume.toInt(), 10)
         : loadSavedVolumeLevel();
     const int targetLevel = qBound(0, currentLevel + delta, 10);
-    AppSignals::setVolumeLevel(targetLevel, parent);
+    AppSignals::setVolumeLevel(targetLevel);
 }
 
 

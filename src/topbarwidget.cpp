@@ -172,7 +172,7 @@ void TopBarRightWidget::onVolumeBtnClicked()
             QString("QPushButton { border: none; background-image: url(%1); "
                     "background-repeat: no-repeat; background-position: center; }").arg(icon));
     }
-    AppSignals::toggleMute(this);
+    AppSignals::toggleMute();
 }
 
 void TopBarRightWidget::onClockTick()

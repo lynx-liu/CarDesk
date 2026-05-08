@@ -2440,10 +2440,10 @@ void MusicPlayerWindow::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_VolumeUp:
-        AppSignals::changeVolume(+1, this);
+        AppSignals::changeVolume(+1);
         break;
     case Qt::Key_VolumeDown:
-        AppSignals::changeVolume(-1, this);
+        AppSignals::changeVolume(-1);
         break;
     case Qt::Key_MediaPrevious:
         onPreviousMusic();

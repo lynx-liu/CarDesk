@@ -128,6 +128,7 @@ void T507SdkBridge::setMute(bool mute)
     ::ioctl(fd, TM2313_MUTE_ENABLE, mute ? 0 : 1);
     ::close(fd);
 #endif
+    qDebug() << "[TM2313] setMute:" << (mute ? "ON" : "OFF");
 }
 
 QStringList T507SdkBridge::ahdVideoNodes()

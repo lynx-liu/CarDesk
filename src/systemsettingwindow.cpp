@@ -813,48 +813,6 @@ QWidget *SystemSettingWindow::createDisplayPage()
     right1Layout->addWidget(brightnessRow);
     row1Layout->addWidget(right1, 1);
 
-    auto makeSwitchRow = [page](const QString &name, const QString &l, const QString &r) {
-        auto *row = new QWidget(page);
-        row->setFixedHeight(98);
-        auto *h = new QHBoxLayout(row);
-        h->setContentsMargins(0, 27, 0, 27);
-        h->setSpacing(16);
-        auto *title = new QLabel(name, row);
-        title->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;}");
-        title->setFixedWidth(170);
-        h->addWidget(title);
-        h->addStretch();
-
-        // CSS .setting_btn: 整体 240×44 图片作容器背景，点选哪侧换图
-        auto *container = new QWidget(row);
-        container->setFixedSize(240, 44);
-        container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_left.png) no-repeat;}");
-
-        auto *leftBtn  = new QPushButton(l,  container);
-        auto *rightBtn = new QPushButton(r, container);
-        leftBtn->setGeometry(0,   0, 120, 44);
-        rightBtn->setGeometry(120, 0, 120, 44);
-        const QString btnBase =
-            "QPushButton{border:none;background:transparent;color:#fff;font-size:24px;}"
-            "QPushButton:hover{color:#00faff;}"
-            "QPushButton:focus, QPushButton:checked:focus, QPushButton:focus-visible {outline:none;border:none;}";
-        leftBtn->setStyleSheet(btnBase);
-        rightBtn->setStyleSheet(btnBase);
-        leftBtn->setCursor(Qt::PointingHandCursor);
-        rightBtn->setCursor(Qt::PointingHandCursor);
-
-        // 切换：点左 → butt_setting_choose_left.png；点右 → butt_setting_choose_right.png
-        QObject::connect(leftBtn,  &QPushButton::clicked, container, [container](){
-            container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_left.png) no-repeat;}");
-        });
-        QObject::connect(rightBtn, &QPushButton::clicked, container, [container](){
-            container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_right.png) no-repeat;}");
-        });
-
-        h->addWidget(container);
-        return row;
-    };
-
     layout->addWidget(row1);
     layout->addWidget(makeDivider());
     {
@@ -1018,7 +976,7 @@ QWidget *SystemSettingWindow::createSoundPage()
     // 用户拖动滑块时，设置系统音量（统一使用 TM2313 / AppSignals）
     connect(slider, &QSlider::valueChanged, this, [slider](int v) {
         // 将 0..10 映射到系统音量等级，统一使用 TM2313 / AppSignals 中央控制。
-        AppSignals::setVolumeLevel(v, slider);
+        AppSignals::setVolumeLevel(v);
     });
     // 当外部（按键或其它窗口）改变音量时，更新滑块（避免产生 valueChanged 循环）
     connect(AppSignals::instance(), &AppSignals::volumeLevelChanged, this, [slider, tips](int level){
@@ -1186,7 +1144,8 @@ QWidget *SystemSettingWindow::createSoundPage()
                                     "QPushButton:focus, QPushButton:checked:focus, QPushButton:focus-visible {outline:none;}"
                         );
                         btn->setCursor(Qt::PointingHandCursor);
-                        connect(btn, &QPushButton::clicked, &dialog, [&dialog, fieldBtn, text = modes[i]]() {
+                        const QString text = modes[i];
+                        connect(btn, &QPushButton::clicked, &dialog, [&dialog, fieldBtn, text]() {
                                 fieldBtn->setText(text);
                                 qApp->setProperty("appSoundMode", text);
                                 T507SdkBridge::setSoundMode(text);
@@ -1781,7 +1740,8 @@ QWidget *SystemSettingWindow::createBluetoothPage()
             lbl->setStyleSheet("font-size:48px;font-weight:bold;color:#fff;background:transparent;");
             lbl->setAttribute(Qt::WA_TransparentForMouseEvents);
         }
-        connect(btn, &QPushButton::clicked, this, [pwdEdit, num=keyDefs[i].num](){
+        const QString num = keyDefs[i].num;
+        connect(btn, &QPushButton::clicked, this, [pwdEdit, num](){
             pwdEdit->setText((pwdEdit->text() + num).right(8));
         });
     }
@@ -2538,10 +2498,10 @@ void SystemSettingWindow::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_VolumeUp:
-        AppSignals::changeVolume(+1, this);
+        AppSignals::changeVolume(+1);
         break;
     case Qt::Key_VolumeDown:
-        AppSignals::changeVolume(-1, this);
+        AppSignals::changeVolume(-1);
         break;
     case Qt::Key_HomePage:
     case Qt::Key_Back:

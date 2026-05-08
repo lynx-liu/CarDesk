@@ -34,13 +34,25 @@ PhoneWindow::PhoneWindow(BluetoothManager *bluetoothManager, MediaManager *media
     : QMainWindow(parent)
     , m_bluetoothManager(bluetoothManager)
     , m_mediaManager(mediaManager)
+    , m_topBar(nullptr)
+    , m_tabWrap(nullptr)
     , m_tabStack(nullptr)
     , m_tabDial(nullptr)
+    , m_previousTabIndex(0)
     , m_tabHistory(nullptr)
     , m_tabContacts(nullptr)
-    , m_topBar(nullptr)
+    , m_contactEntries()
+    , m_callEntries()
+    , m_lastSyncedDeviceAddress()
+    , m_phonebookSyncInProgress(false)
+    , m_phonebookPendingByNumber()
+    , m_contactRebuildCursor(0)
+    , m_contactRebuildScheduled(false)
+    , m_liveCallNumber()
+    , m_liveCallStartStatus(0)
+    , m_liveCallReachedActive(false)
+    , m_liveCallPending(false)
     , m_numberEdit(nullptr)
-    , m_previousTabIndex(0)
     , m_callNumber(nullptr)
     , m_callTimer(nullptr)
     , m_callStateLabel(nullptr)
@@ -1280,10 +1292,10 @@ void PhoneWindow::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_VolumeUp:
-        AppSignals::changeVolume(+1, this);
+        AppSignals::changeVolume(+1);
         break;
     case Qt::Key_VolumeDown:
-        AppSignals::changeVolume(-1, this);
+        AppSignals::changeVolume(-1);
         break;
     case Qt::Key_Phone:
         qDebug() << "PhoneWindow keyPressEvent Key_Phone";

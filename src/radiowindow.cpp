@@ -1425,11 +1425,11 @@ void RadioWindow::keyPressEvent(QKeyEvent *event)
     switch (event->key()) {
     case Qt::Key_VolumeUp:
         qDebug() << "[KeyPress] => VolumeUp";
-        AppSignals::changeVolume(+1, this);
+        AppSignals::changeVolume(+1);
         break;
     case Qt::Key_VolumeDown:
         qDebug() << "[KeyPress] => VolumeDown";
-        AppSignals::changeVolume(-1, this);
+        AppSignals::changeVolume(-1);
         break;
     case Qt::Key_MediaPrevious:
         qDebug() << "[KeyPress] => MediaPrevious";

@@ -21,13 +21,12 @@ public:
         return (v.isValid() && v.toBool()) ? QStringLiteral("HH:mm") : QStringLiteral("hh:mm AP");
     }
 
-    /**
     /** Change volume up/down by one app level. */
-    static void changeVolume(int delta, QObject *parent = nullptr);
+    static void changeVolume(int delta);
     /** Set the app volume level directly (0..10). */
-    static void setVolumeLevel(int level, QObject *parent = nullptr);
+    static void setVolumeLevel(int level);
     /** Toggle mute on/off based on the current app volume level. */
-    static void toggleMute(QObject *parent = nullptr);
+    static void toggleMute();
 
 signals:
     /** 音量等级变化（0–10 整数等级，对应 amixer 0-100% 归一化）*/

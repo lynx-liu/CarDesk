@@ -125,21 +125,22 @@ static bool ensureSdkResourcesCreated()
 VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_titleLabel(new QLabel("速度与激情", this))
-    , m_speedWarningLabel(nullptr)
+    , m_timeLabel(new QLabel("01:24:20", this))
+    , m_durationLabel(new QLabel("01:44:48", this))
     , m_prevButton(new QPushButton(this))
     , m_playButton(new QPushButton(this))
     , m_nextButton(new QPushButton(this))
     , m_backButton(new QPushButton(this))
     , m_progressSlider(new QSlider(Qt::Horizontal, this))
-    , m_timeLabel(new QLabel("01:24:20", this))
-    , m_durationLabel(new QLabel("01:44:48", this))
+    , m_progressContainer(nullptr)
+    , m_topBar(nullptr)
+    , m_bottomBar(nullptr)
+    , m_speedWarningLabel(nullptr)
     , m_currentIndex(-1)
     , m_playerProcess(nullptr)
     , m_hideTimer(nullptr)
     , m_mediaPlayer(nullptr)
     , m_videoWidget(nullptr)
-    , m_topBar(nullptr)
-    , m_bottomBar(nullptr)
     , m_useSdkPlayer(false)
     , m_controlsHidden(false)
     , m_sliderDragging(false)
@@ -1341,10 +1342,10 @@ void VideoPlayWindow::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_VolumeUp:
-        AppSignals::changeVolume(+1, this);
+        AppSignals::changeVolume(+1);
         break;
     case Qt::Key_VolumeDown:
-        AppSignals::changeVolume(-1, this);
+        AppSignals::changeVolume(-1);
         break;
     case Qt::Key_MediaPrevious:
         onPreviousVideo();

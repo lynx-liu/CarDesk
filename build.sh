@@ -1,7 +1,7 @@
 #!/bin/bash
 # 跨平台编译脚本 - 支持 PC Ubuntu 和 T507 Ubuntu
 
-set -e
+set -eo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$PROJECT_DIR/build"
@@ -112,7 +112,11 @@ build_pc() {
     cd "$BUILD_DIR/pc"
     
     qmake -config release CONFIG+=pc_build DEFINES+=CAR_DESK_DEVICE_PC "$PROJECT_DIR/CarDesk.pro"
-    make -j$(nproc)
+    local _rc=0
+    make -j$(nproc) 2>&1 | grep -E --line-buffered 'warning:|error:|undefined reference|note:' \
+        | grep -Ev --line-buffered 'sdk-work|Qt_5\\.|/usr/include/|/usr/lib/' || true
+    _rc=${PIPESTATUS[0]}
+    [[ $_rc -eq 0 ]] || { print_error "make failed (exit $_rc)"; return $_rc; }
     
     print_info "PC build completed successfully!"
     echo "Binary location: $PROJECT_DIR/build/pc/CarDesk"
@@ -156,7 +160,11 @@ build_t507() {
 
     print_info "Using qmake: $arm_qmake"
     "$arm_qmake" -config release CONFIG+=arm64_build DEFINES+="CAR_DESK_DEVICE_CARUNIT CAR_DESK_USE_T507_SDK" "$PROJECT_DIR/CarDesk.pro"
-    make -j$(nproc)
+    local _rc=0
+    make -j$(nproc) 2>&1 | grep -E --line-buffered 'warning:|error:|undefined reference|note:' \
+        | grep -Ev --line-buffered 'sdk-work|Qt_5\\.|/usr/include/|/usr/lib/' || true
+    _rc=${PIPESTATUS[0]}
+    [[ $_rc -eq 0 ]] || { print_error "make failed (exit $_rc)"; return $_rc; }
 
     local arm_bin="$PROJECT_DIR/build/arm64/CarDesk"
     if [[ ! -f "$arm_bin" ]]; then

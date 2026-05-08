@@ -49,9 +49,9 @@ ImageViewingWindow::ImageViewingWindow(QWidget *parent)
     , m_rotationAngle(0)
     , m_zoomFactor(1.0)
     , m_isPinching(false)
-    , m_cachedRotation(-1)
     , m_thumbLoader(nullptr)
     , m_loaderThread(nullptr)
+    , m_cachedRotation(-1)
     , m_currentPath(QStringLiteral("/mnt"))
     , m_initialPath(QStringLiteral("/mnt"))
 {
@@ -639,10 +639,10 @@ void ImageViewingWindow::keyPressEvent(QKeyEvent *event)
 {
     switch (event->key()) {
     case Qt::Key_VolumeUp:
-        AppSignals::changeVolume(+1, this);
+        AppSignals::changeVolume(+1);
         break;
     case Qt::Key_VolumeDown:
-        AppSignals::changeVolume(-1, this);
+        AppSignals::changeVolume(-1);
         break;
     case Qt::Key_MediaPrevious:
         onPrevImage();

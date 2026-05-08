@@ -10,12 +10,12 @@
 BluetoothManager::BluetoothManager(QObject *parent)
     : QObject(parent)
     , m_isConnected(false)
+    , m_queryState(BluetoothQueryState::None)
     , m_port(new QSerialPort(this))
     , m_initialized(false)
     , m_scanning(false)
     , m_btEnabled(true)
     , m_queryingPaired(false)
-    , m_queryState(BluetoothQueryState::None)
     , m_clearingAddress()
 {
     connect(m_port, &QSerialPort::readyRead, this, &BluetoothManager::onSerialReadyRead);

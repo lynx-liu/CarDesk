@@ -550,17 +550,17 @@ protected:
             switch (key) {
             case Qt::Key_VolumeUp:
                 qDebug() << "[GlobalKey] => VolumeUp";
-                AppSignals::changeVolume(+1, nullptr);
+                AppSignals::changeVolume(+1);
                 scheduleVolumeRead(m_overlay);
                 return true;
             case Qt::Key_VolumeDown:
                 qDebug() << "[GlobalKey] => VolumeDown";
-                AppSignals::changeVolume(-1, nullptr);
+                AppSignals::changeVolume(-1);
                 scheduleVolumeRead(m_overlay);
                 return true;
             case Qt::Key_VolumeMute:
                 qDebug() << "[GlobalKey] => Mute";
-                AppSignals::toggleMute(nullptr);
+                AppSignals::toggleMute();
                 scheduleVolumeRead(m_overlay);
                 return true;
             case Qt::Key_Menu:
@@ -1158,7 +1158,7 @@ int main(int argc, char *argv[]) {
     {
         QSettings settings;
         const int savedLevel = qBound(0, settings.value("sound/volumeLevel", 10).toInt(), 10);
-        AppSignals::setVolumeLevel(savedLevel, nullptr);
+        AppSignals::setVolumeLevel(savedLevel);
         app.setProperty("appVolumeLevel", savedLevel);
     }
 
