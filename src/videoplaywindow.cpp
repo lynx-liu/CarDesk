@@ -758,6 +758,8 @@ void VideoPlayWindow::updateTitle() {
 
 void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex) {
     m_pausedForHome = false;  // 选择了新视频，放弃原暂停状态
+    m_pausedForInterruption = false;  // 清除 HOME 暂停状态，避免新视频从旧进度恢复
+    m_resumeInterruptPositionMs = 0;
     m_resumePath.clear();
     m_resumePositionMs = 0;
     m_videoFiles = files;
@@ -1359,11 +1361,31 @@ void VideoPlayWindow::keyPressEvent(QKeyEvent *event)
         onPlayVideo();
         break;
     case Qt::Key_HomePage:
-        // HOME 走“窗口遮挡暂停”链路：仅暂停，不 reset SDK，避免再次进入时有声无画。
-        m_pausedForHome = (m_currentIndex >= 0 && m_currentIndex < m_videoFiles.count());
-        if (m_pausedForHome) {
-            m_pausedForInterruption = false;
-            pauseIfPlaying();
+        // HOME 路径：直接释放 SDK 播放器（归还 PCM 设备），记录进度，
+        // 回来时通过 resumeAfterInterruption 路径从断点恢复。
+#ifdef CAR_DESK_USE_T507_SDK
+        if (m_useSdkPlayer) {
+            if (m_sdkPlayer && (m_currentIndex >= 0 && m_currentIndex < m_videoFiles.count())) {
+                int curPos = 0;
+                XPlayerGetCurrentPosition(m_sdkPlayer, &curPos);
+                m_resumeInterruptPositionMs = curPos;
+                m_pausedForInterruption = true;
+            } else {
+                m_pausedForInterruption = false;
+                m_resumeInterruptPositionMs = 0;
+            }
+            m_pausedForHome = false;
+            m_pausedForOcclusion = false;
+            releaseSdkPlayer();  // 释放 PCM 设备，允许音乐播放器使用
+        } else
+#endif
+        {
+            // 非 SDK（PC 预览）保持原有暂停行为
+            m_pausedForHome = (m_currentIndex >= 0 && m_currentIndex < m_videoFiles.count());
+            if (m_pausedForHome) {
+                m_pausedForInterruption = false;
+                pauseIfPlaying();
+            }
         }
         emit requestReturnToMain();
         hide();
@@ -1483,8 +1505,8 @@ void VideoPlayWindow::hideEvent(QHideEvent *event)
 {
     QMainWindow::hideEvent(event);
 #ifdef CAR_DESK_USE_T507_SDK
-    if (m_useSdkPlayer && !m_pausedForOcclusion && !m_pausedForHome) {
-        releaseSdkPlayer();  // HOME 路径已由 keyPressEvent 释放，m_sdkPlayer==nullptr 此处为空操作
+    if (m_useSdkPlayer && !m_pausedForOcclusion && !m_pausedForHome && !m_pausedForInterruption) {
+        releaseSdkPlayer();
     }
 #endif
 }
