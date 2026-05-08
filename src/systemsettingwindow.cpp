@@ -1448,11 +1448,11 @@ QWidget *SystemSettingWindow::createBluetoothPage()
         if (link != QStringLiteral("rename")) return;
         QDialog dialog(this);
         dialog.setWindowTitle(QStringLiteral("蓝牙名称"));
-        dialog.setFixedSize(680, 560);
+        dialog.setFixedSize(620, 460);
         dialog.setStyleSheet("QDialog{background:#0d1f3f;color:#fff;border:1px solid #0068ff;}");
         auto *dLayout = new QVBoxLayout(&dialog);
         dLayout->setContentsMargins(24, 20, 24, 20);
-        dLayout->setSpacing(14);
+        dLayout->setSpacing(8);
 
         auto *line = new QLineEdit(m_bluetoothDeviceName, &dialog);
         line->setReadOnly(true);
@@ -1463,12 +1463,12 @@ QWidget *SystemSettingWindow::createBluetoothPage()
         auto *keypadWrap = new QWidget(&dialog);
         auto *keypad = new QGridLayout(keypadWrap);
         keypad->setContentsMargins(0, 0, 0, 0);
-        keypad->setHorizontalSpacing(12);
-        keypad->setVerticalSpacing(10);
+        keypad->setHorizontalSpacing(4);
+        keypad->setVerticalSpacing(4);
 
         auto makeKey = [](const QString &text, QWidget *parent) {
             auto *btn = new QPushButton(text, parent);
-            btn->setFixedSize(190, 66);
+            btn->setFixedSize(182, 60);
             btn->setStyleSheet(
                 "QPushButton{background:rgba(0,104,255,0.22);border:1px solid #0068ff;color:#fff;font-size:30px;}"
                 "QPushButton:hover{border:2px solid #00faff;color:#00faff;}"
@@ -1534,6 +1534,11 @@ QWidget *SystemSettingWindow::createBluetoothPage()
         r->addWidget(cancel);
         r->addStretch();
         dLayout->addLayout(r);
+
+        // 对话框整体下移，避免挡住标题下方 tab 栏。
+        const QPoint globalPos = this->mapToGlobal(QPoint((this->width() - dialog.width()) / 2, 224));
+        dialog.move(globalPos);
+
         connect(ok, &QPushButton::clicked, &dialog, &QDialog::accept);
         connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
         if (dialog.exec() == QDialog::Accepted && !line->text().trimmed().isEmpty()) {
