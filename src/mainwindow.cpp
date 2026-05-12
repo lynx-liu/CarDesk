@@ -183,17 +183,18 @@ void MainWindow::createNavigationBar() {
         QString upImage;
         QString downImage;
         const char *slot;
+        bool suppressTouchSound;
     };
 
     NavItem items[] = {
-        {0, 0, ":/images/butt_home_radio_up.png", ":/images/butt_home_radio_down.png", SLOT(onRadioClicked())},
-        {0, 1, ":/images/butt_home_driving_image_up.png", ":/images/butt_home_driving_image_down.png", SLOT(onDrivingImageClicked())},
-        {0, 2, ":/images/butt_home_video_play_up.png", ":/images/butt_home_video_play_down.png", SLOT(onVideoListClicked())},
-        {0, 3, ":/images/butt_home_image_viewing_up.png", ":/images/butt_home_image_viewing_down.png", SLOT(onImageViewingClicked())},
-        {1, 0, ":/images/butt_home_diagnostic_maintenance_up.png", ":/images/butt_home_diagnostic_maintenance_down.png", SLOT(onDiagnosticClicked())},
-        {1, 1, ":/images/butt_home_bluetooth_phone_up.png", ":/images/butt_home_bluetooth_phone_down.png", SLOT(onPhoneClicked())},
-        {1, 2, ":/images/butt_home_audio_play_up.png", ":/images/butt_home_audio_play_down.png", SLOT(onMusicUSBClicked())},
-        {1, 3, ":/images/butt_home_system_settings_up.png", ":/images/butt_home_system_settings_down.png", SLOT(onSystemSettingsClicked())},
+        {0, 0, ":/images/butt_home_radio_up.png", ":/images/butt_home_radio_down.png", SLOT(onRadioClicked()), false},
+        {0, 1, ":/images/butt_home_driving_image_up.png", ":/images/butt_home_driving_image_down.png", SLOT(onDrivingImageClicked()), false},
+        {0, 2, ":/images/butt_home_video_play_up.png", ":/images/butt_home_video_play_down.png", SLOT(onVideoListClicked()), true},
+        {0, 3, ":/images/butt_home_image_viewing_up.png", ":/images/butt_home_image_viewing_down.png", SLOT(onImageViewingClicked()), false},
+        {1, 0, ":/images/butt_home_diagnostic_maintenance_up.png", ":/images/butt_home_diagnostic_maintenance_down.png", SLOT(onDiagnosticClicked()), false},
+        {1, 1, ":/images/butt_home_bluetooth_phone_up.png", ":/images/butt_home_bluetooth_phone_down.png", SLOT(onPhoneClicked()), false},
+        {1, 2, ":/images/butt_home_audio_play_up.png", ":/images/butt_home_audio_play_down.png", SLOT(onMusicUSBClicked()), true},
+        {1, 3, ":/images/butt_home_system_settings_up.png", ":/images/butt_home_system_settings_down.png", SLOT(onSystemSettingsClicked()), false},
     };
 
     for (const auto &item : items) {
@@ -208,6 +209,9 @@ void MainWindow::createNavigationBar() {
 
         if (item.slot) {
             connect(btn, SIGNAL(clicked()), this, item.slot);
+        }
+        if (item.suppressTouchSound) {
+            btn->setProperty("suppressTouchClickSound", true);
         }
 
         navLayout->addWidget(btn, item.row, item.col, Qt::AlignCenter);

@@ -435,6 +435,36 @@ static bool shouldSuppressTouchClickSound()
     return false;
 }
 
+static bool widgetSuppressesTouchClickSound(QObject *obj)
+{
+    while (obj) {
+        if (obj->property("suppressTouchClickSound").toBool())
+            return true;
+        obj = obj->parent();
+    }
+    return false;
+}
+
+static bool shouldSkipTouchClickSound(QObject *watched, QEvent *event)
+{
+    if (widgetSuppressesTouchClickSound(watched)) {
+        return true;
+    }
+    QWidget *widget = qobject_cast<QWidget *>(watched);
+    if (!widget) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            auto *me = static_cast<QMouseEvent *>(event);
+            widget = QApplication::widgetAt(me->globalPos());
+        } else if (event->type() == QEvent::TouchBegin) {
+            auto *te = static_cast<QTouchEvent *>(event);
+            if (!te->touchPoints().isEmpty()) {
+                widget = QApplication::widgetAt(te->touchPoints().first().screenPos().toPoint());
+            }
+        }
+    }
+    return widget && widgetSuppressesTouchClickSound(widget);
+}
+
 static void playTouchClickSound() {
     const int level = qApp->property("appTouchSoundLevel").toInt();
     if (level <= 0) {
@@ -485,7 +515,9 @@ protected:
                 ScreenBlanker::instance()->unblank();
                 return true;  // 吸收事件，防止触发底层操作
             }
-            playTouchClickSound();
+            if (!shouldSkipTouchClickSound(watched, event)) {
+                playTouchClickSound();
+            }
             if (ScreenClockOverlay::instance()->isVisible()) {
                 ScreenClockOverlay::instance()->hideClock();
                 return true;  // 消耗事件，不让底层界面误操作
