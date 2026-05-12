@@ -444,12 +444,7 @@ static void playTouchClickSound() {
         return;
     }
     static QProcess *proc = nullptr;
-    static bool clickSoundDisabled = false;
-    static bool missingLogged = false;
-
-    if (clickSoundDisabled) {
-        return;
-    }
+    static QString lastMissingWav;
 
     if (!proc) {
         proc = new QProcess(qApp);
@@ -464,13 +459,13 @@ static void playTouchClickSound() {
     }
     const QString wav = clickSoundPath(level);
     if (!QFileInfo::exists(wav) || !QFileInfo(wav).isFile()) {
-        if (!missingLogged) {
+        if (lastMissingWav != wav) {
             qWarning() << "[ClickSound] click sound file not found:" << wav;
-            missingLogged = true;
+            lastMissingWav = wav;
         }
-        clickSoundDisabled = true;
         return;
     }
+    lastMissingWav.clear();
     qDebug() << "[ClickSound] playing level=" << level << "wav=" << wav;
     proc->start(QStringLiteral("tinyplay"), {wav});
 }
