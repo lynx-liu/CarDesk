@@ -11,6 +11,154 @@ static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
 #include <QVariant>
 #include <QFile>
 #include <QDir>
+#include <QSet>
+#include <QFileInfo>
+#include <QRegularExpression>
+#include <QQueue>
+#include <fcntl.h>
+#include <unistd.h>
+
+// --- USBtest核心检测逻辑移植 ---
+static bool isAnyUsbStoragePresentAndCleanup(const QString &mountBaseDir = QStringLiteral("/mnt/usb")) {
+    // 1. 枚举所有USB设备，查找有效block设备
+    QSet<QString> validBlocks;
+    auto addBlockAndPartitions = [&](const QString &blk) {
+        if (validBlocks.contains(blk))
+            return;
+        validBlocks.insert(blk);
+        QDir blockDir(QStringLiteral("/sys/block/%1").arg(blk));
+        if (!blockDir.exists())
+            return;
+        QRegularExpression partRegex(QStringLiteral("^%1(?:\\d+|p\\d+)$").arg(QRegularExpression::escape(blk)));
+        const QStringList parts = blockDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QString &part : parts) {
+            if (partRegex.match(part).hasMatch()) {
+                validBlocks.insert(part);
+            }
+        }
+    };
+
+    QDir sysUsbDir("/sys/bus/usb/devices");
+    const QStringList devEntries = sysUsbDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QString &devName : devEntries) {
+        QString devPath = "/sys/bus/usb/devices/" + devName;
+        // 跳过root hub
+        if (!QFile::exists(devPath + "/idVendor")) continue;
+        QString devClass;
+        QFile classFile(devPath + "/bDeviceClass");
+        if (classFile.open(QIODevice::ReadOnly)) {
+            devClass = QString::fromLatin1(classFile.readLine()).trimmed();
+            classFile.close();
+        }
+        if (devClass == "09") continue; // root hub
+        // 查找block设备（USBtest风格）
+        QDir devDir(devPath);
+        const QStringList subDirs = devDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        bool foundBlockForDevice = false;
+        for (const QString &sub : subDirs) {
+            QString blockPath = devPath + "/" + sub + "/block";
+            QDir blkDir(blockPath);
+            if (blkDir.exists()) {
+                const QStringList blks = blkDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+                for (const QString &blk : blks) {
+                    QString devNode = "/dev/" + blk;
+                    QFileInfo fi(devNode);
+                    bool valid = false;
+                    if (fi.exists()) {
+                        int fd = ::open(devNode.toLocal8Bit().constData(), O_RDONLY | O_NONBLOCK);
+                        if (fd >= 0) {
+                            valid = true;
+                            ::close(fd);
+                        }
+                    }
+                    if (valid) {
+                        addBlockAndPartitions(blk);
+                        foundBlockForDevice = true;
+                    }
+                }
+            }
+            // host分支
+            QString hostBase = devPath + "/" + sub;
+            QDir hostDir(hostBase);
+            const QStringList hostEntries = hostDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+            for (const QString &host : hostEntries) {
+                if (!host.startsWith("host")) continue;
+                QString targetBase = hostBase + "/" + host;
+                QDir targetDir(targetBase);
+                const QStringList targetEntries = targetDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+                for (const QString &target : targetEntries) {
+                    if (!target.startsWith("target")) continue;
+                    QString scsiBase = targetBase + "/" + target;
+                    QDir scsiDir(scsiBase);
+                    const QStringList scsiEntries = scsiDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+                    for (const QString &scsi : scsiEntries) {
+                        QString blkPath = scsiBase + "/" + scsi + "/block";
+                        QDir blkDir2(blkPath);
+                        if (blkDir2.exists()) {
+                            const QStringList blks = blkDir2.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+                            for (const QString &blk : blks) {
+                                QString devNode = "/dev/" + blk;
+                                QFileInfo fi(devNode);
+                                bool valid = false;
+                                if (fi.exists()) {
+                                    int fd = ::open(devNode.toLocal8Bit().constData(), O_RDONLY | O_NONBLOCK);
+                                    if (fd >= 0) {
+                                        valid = true;
+                                        ::close(fd);
+                                    }
+                                }
+                                if (valid) {
+                                    addBlockAndPartitions(blk);
+                                    foundBlockForDevice = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (!foundBlockForDevice) {
+            QStringList allBlocks = QDir("/sys/block").entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+            for (const QString &blk : allBlocks) {
+                QString link = QFile::symLinkTarget(QString("/sys/block/%1").arg(blk));
+                if (link.contains(devName)) {
+                    QString devNode = "/dev/" + blk;
+                    QFileInfo fi(devNode);
+                    bool valid = false;
+                    if (fi.exists()) {
+                        int fd = ::open(devNode.toLocal8Bit().constData(), O_RDONLY | O_NONBLOCK);
+                        if (fd >= 0) {
+                            valid = true;
+                            ::close(fd);
+                        }
+                    }
+                    if (valid) {
+                        addBlockAndPartitions(blk);
+                    }
+                }
+            }
+        }
+    }
+    // 2. 检查/mnt/usb下是否有有效block设备目录，并清理无效空目录
+    bool foundUsb = false;
+    QDir usbRoot(mountBaseDir);
+    if (usbRoot.exists()) {
+        const QStringList subs = usbRoot.entryList(QDir::NoDotAndDotDot | QDir::Dirs, QDir::Name);
+        for (const QString &sub : subs) {
+            if (validBlocks.contains(sub)) {
+                foundUsb = true;
+            } else {
+                // 目录为空且无block设备，自动清理
+                QDir mountDir(mountBaseDir + "/" + sub);
+                QStringList contents = mountDir.entryList(QDir::AllEntries | QDir::NoDotAndDotDot);
+                if (contents.isEmpty()) {
+                    mountDir.rmdir(".");
+                }
+            }
+        }
+    }
+    return foundUsb;
+}
 
 TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     : QWidget(parent)
@@ -213,15 +361,9 @@ void TopBarRightWidget::updateUsbState()
         mounts.close();
     }
 
-    // 兜底：扫描 /mnt/usb 下是否存在设备目录（例如 /mnt/usb/sda1）
-    // 使用 entryList(QDir::Dirs) 仅取名字列表，不调用 stat/lstat，比 entryInfoList 快
+    // 完全移植USBtest的U盘有效性判定逻辑
     if (!foundUsb) {
-        QDir usbRoot(kUsbMountDir);
-        if (usbRoot.exists()) {
-            const QStringList subs = usbRoot.entryList(
-                QDir::NoDotAndDotDot | QDir::Dirs, QDir::Name);
-            foundUsb = !subs.isEmpty();
-        }
+        foundUsb = isAnyUsbStoragePresentAndCleanup(kUsbMountDir);
     }
 
     if (foundUsb == m_usbConnected)
@@ -240,3 +382,4 @@ void TopBarRightWidget::updateUsbState()
                 "background-repeat: no-repeat; background-position: center; }")
             .arg(icon));
 }
+
