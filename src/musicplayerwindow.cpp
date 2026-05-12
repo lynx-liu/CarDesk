@@ -1356,6 +1356,17 @@ void MusicPlayerWindow::scanFlatPlaylist()
     m_scanWatcher->setFuture(future);
 }
 
+static bool isUsbMountSubdirValid(const QString &sub)
+{
+    // 有效 USB 子目录必须对应一个真实块设备或分区
+    const QString devNode = QStringLiteral("/dev/%1").arg(sub);
+    const QString sysBlock = QStringLiteral("/sys/block/%1").arg(sub);
+    if (QFile::exists(devNode) && QDir(sysBlock).exists()) {
+        return true;
+    }
+    return false;
+}
+
 static QString findFirstUsbDevicePath()
 {
     for (const QStorageInfo &storage : QStorageInfo::mountedVolumes()) {
@@ -1369,7 +1380,10 @@ static QString findFirstUsbDevicePath()
     QDir d(kUsbMountDir);
     if (d.exists()) {
         const QStringList subs = d.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-        if (!subs.isEmpty()) return kUsbMountPrefix + subs.first();
+        for (const QString &sub : subs) {
+            if (isUsbMountSubdirValid(sub))
+                return kUsbMountPrefix + sub;
+        }
     }
     return {};
 }
@@ -2038,6 +2052,14 @@ void MusicPlayerWindow::updateNowPlaying()
 {
     if (!m_nowPlayingLabel) return;
     if (m_isUsbMode) {
+        const QString usbPath = findFirstUsbDevicePath();
+        if (usbPath.isEmpty()) {
+            m_nowPlayingLabel->setText(QStringLiteral("请插入U盘"));
+            m_nowPlayingLabel->setStyleSheet("color: #FF4D4F; font-size: 48px; background: transparent;");
+            if (m_singerLabel) m_singerLabel->setText(QStringLiteral("--"));
+            if (m_albumLabel) m_albumLabel->setText(QStringLiteral("--"));
+            return;
+        }
         m_nowPlayingLabel->setStyleSheet("color: #fff; font-size: 48px; background: transparent;");
     }
     if (m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count()) {
