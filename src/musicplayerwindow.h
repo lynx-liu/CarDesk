@@ -177,6 +177,11 @@ private:
     void refreshPlaylistWidget();
     void updateCollectButtonState();
     void tryConnectLastA2dpDevice();
+    void captureUsbProgressBeforePlayerRelease();
+    void updateUsbPendingProgressSnapshot(qint64 posMs, qint64 durMs);
+    void applyUsbResumeSeekAfterPlayStarted();
+    void restoreUsbProgressBarFromPending();
+    void clearUsbPendingResumeState();
     static QString formatTime(qint64 ms);
 
     // ── Stacked pages ──
@@ -239,6 +244,13 @@ private:
     QStringList m_favoriteFiles;                // 由播放页添加到收藏的音频文件
     bool        m_isUsbMode          = true;
     bool        m_preservePlaybackOnHide = false;
+    // 通过 Home 回主界面且已停止/暂停时释放底层播放器，避免占 ALSA 导致点屏音 tinyplay 卡死；Back 返回不置位。
+    bool        m_hideFromHomeNavigation = false;
+    // Home / 切蓝牙前记下 USB 曲目的绝对路径、进度与总时长；重扫列表后按路径对齐索引。
+    QString     m_usbPendingResumeFilePath;
+    int         m_usbPendingResumeIndex = -1;
+    qint64      m_usbPendingResumePositionMs = 0;
+    qint64      m_usbPendingResumeDurationMs = 0;
     PlayMode    m_playMode           = PlayMode::RepeatAll;
     QFutureWatcher<QStringList> *m_scanWatcher = nullptr;  // 后台扫描 watcher
     const QStringList m_audioExtensions = {

@@ -28,6 +28,7 @@ static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
 #include <QTime>
 #include <QRandomGenerator>
 #include <QMediaMetaData>
+#include <QMediaContent>
 #include <QTimer>
 #include <QUrl>
 #include <QFile>
@@ -36,6 +37,26 @@ static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
 #include <QStorageInfo>
 #include <QShowEvent>
 #include <QtConcurrent/QtConcurrent>
+
+// 与 m_musicFiles 中路径匹配（含 QDir::cleanPath 归一化）
+static int indexOfPathInStringList(const QStringList &list, const QString &path)
+{
+    if (path.isEmpty() || list.isEmpty()) {
+        return -1;
+    }
+    for (int i = 0; i < list.size(); ++i) {
+        if (list.at(i) == path) {
+            return i;
+        }
+    }
+    const QString norm = QDir::cleanPath(path);
+    for (int i = 0; i < list.size(); ++i) {
+        if (QDir::cleanPath(list.at(i)) == norm) {
+            return i;
+        }
+    }
+    return -1;
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // T507 SDK 全局音频资源（进程内单例，只创建一次）
@@ -721,19 +742,31 @@ void MusicPlayerWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
     tryConnectLastA2dpDevice();
-    if (m_pausedForInterruption) {
-        QTimer::singleShot(0, this, [this]() {
-            if (isVisible() && m_pausedForInterruption) {
-                resumeAfterInterruption();
-            }
-        });
-    }
+    QTimer::singleShot(0, this, [this]() {
+        if (!isVisible()) {
+            return;
+        }
+        restoreUsbProgressBarFromPending();
+        // 有 USB 离屏恢复的进度时，不要走 resumeAfterInterruption（否则会 XPlayerStart / play 误起播）
+        const bool usbResumePending = !m_usbPendingResumeFilePath.isEmpty()
+            || m_usbPendingResumePositionMs > 0;
+        if (m_pausedForInterruption && !usbResumePending) {
+            resumeAfterInterruption();
+        }
+    });
 }
 
 void MusicPlayerWindow::hideEvent(QHideEvent *event)
 {
     if (m_preservePlaybackOnHide) {
         m_preservePlaybackOnHide = false;
+        // Home 回主界面且已非播放：释放 XPlayer/QMediaPlayer，避免仍占 ALSA 使点屏音 tinyplay 阻塞。
+        // Back 键会先 pause 再 hide，不置 m_hideFromHomeNavigation，以便保留暂停态可继续播。
+        if (m_hideFromHomeNavigation && !isPlaying()) {
+            captureUsbProgressBeforePlayerRelease();
+            releaseAudioPlayer();
+        }
+        m_hideFromHomeNavigation = false;
         QMainWindow::hideEvent(event);
         return;
     }
@@ -1001,6 +1034,7 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
 
     // ── 按钮信号 ─────────────────────────────────────────────────────────
     connect(m_homeButton,     &QPushButton::clicked, this, [this]() {
+        m_hideFromHomeNavigation = true;
         m_preservePlaybackOnHide = true;
         emit requestReturnToMain();
         hide();
@@ -1048,6 +1082,7 @@ void MusicPlayerWindow::setupListPage(QWidget *page)
         "QPushButton:hover, QPushButton:pressed { background-image: url(:/images/pict_home_down.png); }");
     listTopHomeBtn->setCursor(Qt::PointingHandCursor);
     connect(listTopHomeBtn, &QPushButton::clicked, this, [this]() {
+        m_hideFromHomeNavigation = true;
         m_preservePlaybackOnHide = true;
         emit requestReturnToMain();
         hide();
@@ -1314,6 +1349,7 @@ void MusicPlayerWindow::scanFlatPlaylist()
                 m_currentIndex = 0;
             refreshPlaylistWidget();
             updateNowPlaying();
+            restoreUsbProgressBarFromPending();
         });
     }
     // 如果上一次扫描仍在运行，忽略新请求（旧扫描完成后会自动刷新）
@@ -1403,6 +1439,195 @@ void MusicPlayerWindow::refreshPlaylistWidget()
     }
 }
 
+void MusicPlayerWindow::clearUsbPendingResumeState()
+{
+    m_usbPendingResumeFilePath.clear();
+    m_usbPendingResumeIndex = -1;
+    m_usbPendingResumePositionMs = 0;
+    m_usbPendingResumeDurationMs = 0;
+}
+
+// 播放过程中每次 tick / position 信号都会调它，pending 始终是「最后已知的有效进度」。
+// 这样 release / 切 tab / 退出 都不需要专门 capture，也不会因为 capture 时机错过而清零。
+void MusicPlayerWindow::updateUsbPendingProgressSnapshot(qint64 posMs, qint64 durMs)
+{
+    if (!m_isUsbMode) {
+        return;
+    }
+    if (m_currentIndex < 0 || m_currentIndex >= m_musicFiles.count()) {
+        return;
+    }
+    if (posMs < 0) posMs = 0;
+    m_usbPendingResumeIndex = m_currentIndex;
+    m_usbPendingResumeFilePath = m_musicFiles[m_currentIndex];
+    m_usbPendingResumePositionMs = posMs;
+    if (durMs > 0) {
+        m_usbPendingResumeDurationMs = durMs;
+    }
+}
+
+void MusicPlayerWindow::captureUsbProgressBeforePlayerRelease()
+{
+    // pending 平时由 updateUsbPendingProgressSnapshot 持续累积，这里只是 release 前再保险做一次快照。
+    // 重要：拿不到新进度时绝不清掉已有 pending！
+    if (!m_isUsbMode) {
+        return;
+    }
+    if (m_currentIndex < 0 || m_currentIndex >= m_musicFiles.count()) {
+        return;
+    }
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        if (!m_sdkPlayer) {
+            return;
+        }
+        int posMs = 0;
+        if (XPlayerGetCurrentPosition(m_sdkPlayer, &posMs) != 0) {
+            return;
+        }
+        qint64 durMs = qMax(qint64(0), static_cast<qint64>(m_sdkDurationMs));
+        if (durMs <= 0) {
+            int durInt = 0;
+            if (XPlayerGetDuration(m_sdkPlayer, &durInt) == 0 && durInt > 0) {
+                durMs = durInt;
+            }
+        }
+        m_usbPendingResumeIndex = m_currentIndex;
+        m_usbPendingResumeFilePath = m_musicFiles[m_currentIndex];
+        m_usbPendingResumePositionMs = qMax(0, posMs);
+        m_usbPendingResumeDurationMs = durMs;
+        qDebug() << "MusicPlayer: captureUsbProgress(SDK) path=" << m_usbPendingResumeFilePath
+                 << "index=" << m_usbPendingResumeIndex
+                 << "ms=" << m_usbPendingResumePositionMs << "durMs=" << m_usbPendingResumeDurationMs;
+        return;
+    }
+#endif
+    if (!m_mediaPlayer || m_mediaPlayer->media().isNull()) {
+        // QMP 已被 release 清空，position()/duration() 都是 0，不要覆盖 pending
+        return;
+    }
+    m_usbPendingResumeIndex = m_currentIndex;
+    m_usbPendingResumeFilePath = m_musicFiles[m_currentIndex];
+    m_usbPendingResumePositionMs = qMax(qint64(0), m_mediaPlayer->position());
+    m_usbPendingResumeDurationMs = qMax(qint64(0), m_mediaPlayer->duration());
+    qDebug() << "MusicPlayer: captureUsbProgress(QMP) path=" << m_usbPendingResumeFilePath
+             << "index=" << m_usbPendingResumeIndex
+             << "ms=" << m_usbPendingResumePositionMs << "durMs=" << m_usbPendingResumeDurationMs;
+}
+
+void MusicPlayerWindow::applyUsbResumeSeekAfterPlayStarted()
+{
+    bool match = false;
+    if (!m_usbPendingResumeFilePath.isEmpty()) {
+        if (m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count()
+                && indexOfPathInStringList(m_musicFiles, m_usbPendingResumeFilePath) == m_currentIndex) {
+            match = true;
+        }
+    } else if (m_usbPendingResumeIndex >= 0 && m_usbPendingResumeIndex == m_currentIndex) {
+        match = true;
+    }
+    if (!match) {
+        return;
+    }
+
+    const qint64 pendingMs = m_usbPendingResumePositionMs;
+    if (pendingMs <= 0) {
+        clearUsbPendingResumeState();
+        return;
+    }
+
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer && m_sdkPlayer) {
+        qint64 seekMs = pendingMs;
+        if (m_sdkDurationMs > 0) {
+            seekMs = qMin(seekMs, static_cast<qint64>(qMax(1, m_sdkDurationMs) - 1));
+        }
+        if (seekMs > 0) {
+            XPlayerSeekTo(m_sdkPlayer, static_cast<int>(seekMs), AW_SEEK_CLOSEST_SYNC);
+            updateProgressBar(seekMs, m_sdkDurationMs);
+        }
+        clearUsbPendingResumeState();
+        return;
+    }
+#endif
+    if (!m_mediaPlayer) {
+        clearUsbPendingResumeState();
+        return;
+    }
+    const int idx = m_currentIndex;
+    QTimer::singleShot(200, this, [this, pendingMs, idx]() {
+        if (!m_mediaPlayer) {
+            clearUsbPendingResumeState();
+            return;
+        }
+        if (idx != m_currentIndex) {
+            clearUsbPendingResumeState();
+            return;
+        }
+        qint64 seekMs = pendingMs;
+        const qint64 dur = m_mediaPlayer->duration();
+        if (dur > 0) {
+            seekMs = qMin(seekMs, qMax(qint64(0), dur - 1));
+        }
+        if (seekMs > 0) {
+            m_mediaPlayer->setPosition(seekMs);
+        }
+        updateProgressBar(m_mediaPlayer->position(), dur > 0 ? dur : m_mediaPlayer->duration());
+        clearUsbPendingResumeState();
+    });
+}
+
+void MusicPlayerWindow::restoreUsbProgressBarFromPending()
+{
+    if (!m_isUsbMode) {
+        return;
+    }
+
+    bool haveValidPending = false;
+    if (!m_usbPendingResumeFilePath.isEmpty()) {
+        if (m_musicFiles.isEmpty()) {
+            // 切回 USB 后异步扫盘未完成时 m_musicFiles 仍可能为空：保留 pending，先把进度条 UI 恢复出来，
+            // 等 scan 完成后此函数会被再次调用，那时再对齐 m_currentIndex / 播放列表选中项。
+            haveValidPending = true;
+        } else {
+            const int idx = indexOfPathInStringList(m_musicFiles, m_usbPendingResumeFilePath);
+            if (idx < 0) {
+                clearUsbPendingResumeState();
+                return;
+            }
+            m_currentIndex = idx;
+            m_usbPendingResumeIndex = idx;
+            refreshPlaylistWidget();
+            updateNowPlaying();
+            haveValidPending = true;
+        }
+    } else if (m_usbPendingResumeIndex >= 0 && m_usbPendingResumeIndex == m_currentIndex) {
+        haveValidPending = true;
+    }
+
+    if (!haveValidPending) {
+        return;
+    }
+
+    const qint64 durMs = m_usbPendingResumeDurationMs;
+    qint64 posMs = m_usbPendingResumePositionMs;
+    if (durMs > 0) {
+        posMs = qMin(posMs, qMax(qint64(0), durMs - 1));
+        updateProgressBar(posMs, durMs);
+    } else if (posMs > 0) {
+        if (m_posLabel) {
+            m_posLabel->setText(formatTime(posMs));
+        }
+        if (m_durLabel) {
+            m_durLabel->setText(QStringLiteral("--:--"));
+        }
+        // 没有 duration 时不动 slider value：保持当前显示，避免把刚恢复的视觉位置又打回零。
+    }
+    if (!isPlaying()) {
+        setPlayButtonState(false);
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // 播放控制
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1410,6 +1635,16 @@ void MusicPlayerWindow::refreshPlaylistWidget()
 void MusicPlayerWindow::playMusic(int index)
 {
     if (index < 0 || index >= m_musicFiles.count()) return;
+
+    if (!m_usbPendingResumeFilePath.isEmpty()) {
+        if (index < 0 || index >= m_musicFiles.count()
+                || indexOfPathInStringList(m_musicFiles, m_usbPendingResumeFilePath) != index) {
+            clearUsbPendingResumeState();
+        }
+    } else if (m_usbPendingResumeIndex >= 0 && index != m_usbPendingResumeIndex) {
+        clearUsbPendingResumeState();
+    }
+
     m_currentIndex = index;
 
     if (m_bluetoothManager) {
@@ -1456,6 +1691,7 @@ void MusicPlayerWindow::playMusic(int index)
         setPlayButtonState(true);
         if (m_sdkTimer && !m_sdkTimer->isActive()) m_sdkTimer->start();
         updateMetadata();
+        applyUsbResumeSeekAfterPlayStarted();
         return;
     }
 #endif
@@ -1463,6 +1699,7 @@ void MusicPlayerWindow::playMusic(int index)
     m_mediaPlayer->setMedia(QMediaContent(QUrl::fromLocalFile(musicPath)));
     m_mediaPlayer->play();
     updateMetadata();
+    applyUsbResumeSeekAfterPlayStarted();
 }
 
 void MusicPlayerWindow::pauseForInterruption()
@@ -1693,7 +1930,10 @@ void MusicPlayerWindow::releaseAudioPlayer()
         return;
     }
 #endif
-    if (m_mediaPlayer) m_mediaPlayer->stop();
+    if (m_mediaPlayer) {
+        m_mediaPlayer->stop();
+        m_mediaPlayer->setMedia(QMediaContent());
+    }
     updateProgressBar(0, 0);
 }
 
@@ -1843,7 +2083,14 @@ void MusicPlayerWindow::onUsbTabClicked()
 
     setPlayButtonState(false);
     updatePlayModeUI();
+    // 同步先把进度条 UI 恢复出来，避免「扫盘异步未完成 → restore 早退 → 进度条停留在 0」
+    restoreUsbProgressBarFromPending();
     refreshUsbContent();
+    QTimer::singleShot(0, this, [this]() {
+        if (m_isUsbMode) {
+            restoreUsbProgressBarFromPending();
+        }
+    });
 }
 
 void MusicPlayerWindow::onBtTabClicked()
@@ -1852,6 +2099,8 @@ void MusicPlayerWindow::onBtTabClicked()
     if (m_mediaManager) {
         m_mediaManager->prepareForBluetoothMusic();
     }
+    // 仍在 USB 模式时保存进度，避免下面 m_isUsbMode=false 后 capture 直接 return
+    captureUsbProgressBeforePlayerRelease();
     m_isUsbMode = false;
     tryConnectLastA2dpDevice();
     releaseAudioPlayer();
@@ -2369,18 +2618,32 @@ QString MusicPlayerWindow::formatTime(qint64 ms)
 
 void MusicPlayerWindow::onMediaPositionChanged(qint64 position)
 {
-    if (!m_sliderDragging)
-        updateProgressBar(position, m_mediaPlayer->duration());
+    // 切蓝牙时 releaseAudioPlayer 会清空 QMediaPlayer；排队的 positionChanged(0) 若在切回 USB
+    // 且 restoreUsbProgressBarFromPending 之后到达，会把进度条打回 0。车机走 SDK 时 QMP 常为空但仍连接信号。
+    if (!m_isUsbMode || !m_mediaPlayer || m_mediaPlayer->media().isNull()) {
+        return;
+    }
+    const qint64 durMs = m_mediaPlayer->duration();
+    updateUsbPendingProgressSnapshot(position, durMs);
+    if (!m_sliderDragging) {
+        updateProgressBar(position, durMs);
+    }
 }
 
 void MusicPlayerWindow::onMediaDurationChanged(qint64 duration)
 {
-    updateProgressBar(m_mediaPlayer->position(), duration);
+    if (!m_isUsbMode || !m_mediaPlayer || m_mediaPlayer->media().isNull()) {
+        return;
+    }
+    const qint64 posMs = m_mediaPlayer->position();
+    updateUsbPendingProgressSnapshot(posMs, duration);
+    updateProgressBar(posMs, duration);
 }
 
 void MusicPlayerWindow::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
 {
     if (status == QMediaPlayer::EndOfMedia) {
+        clearUsbPendingResumeState();
         if (m_musicFiles.isEmpty()) {
             setPlayButtonState(false);
             return;
@@ -2420,13 +2683,16 @@ void MusicPlayerWindow::onSdkTick()
 {
     if (!m_sdkPlayer || !m_sdkPlaying) return;
     int posMs = 0;
-    if (XPlayerGetCurrentPosition(m_sdkPlayer, &posMs) == 0)
+    if (XPlayerGetCurrentPosition(m_sdkPlayer, &posMs) == 0) {
+        updateUsbPendingProgressSnapshot(posMs, m_sdkDurationMs);
         updateProgressBar(posMs, m_sdkDurationMs);
+    }
 }
 
 void MusicPlayerWindow::onSdkPlaybackComplete()
 {
     if (m_sdkSwitching) return;
+    clearUsbPendingResumeState();
     m_sdkPlaying = false;
     if (m_sdkTimer) m_sdkTimer->stop();
     setPlayButtonState(false);
@@ -2479,6 +2745,7 @@ void MusicPlayerWindow::keyPressEvent(QKeyEvent *event)
         onPlayPause();
         break;
     case Qt::Key_HomePage:
+        m_hideFromHomeNavigation = true;
         m_preservePlaybackOnHide = true;
         emit requestReturnToMain();
         hide();
@@ -2488,6 +2755,7 @@ void MusicPlayerWindow::keyPressEvent(QKeyEvent *event)
         if (m_stackedWidget && m_stackedWidget->currentIndex() == kPageList) {
             onBackFromListPage();
         } else {
+            m_hideFromHomeNavigation = false;
             m_preservePlaybackOnHide = true;
             pauseIfPlaying();
             emit requestReturnToMain();
