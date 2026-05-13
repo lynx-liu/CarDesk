@@ -1089,6 +1089,14 @@ int main(int argc, char *argv[]) {
 
     // 全局硬件键监听（音量键 + 诊断日志）
     auto *volumeOverlay = new VolumeOverlay();
+    QTimer::singleShot(500, &app, [volumeOverlay]() {
+        volumeOverlay->move(-2000, -2000);
+        volumeOverlay->show();
+        volumeOverlay->raise();
+        QTimer::singleShot(300, volumeOverlay, [volumeOverlay]() {
+            volumeOverlay->hide();
+        });
+    });
     app.installEventFilter(new GlobalKeyFilter(volumeOverlay, &app));
 
     // Qt 5.12 evdevkeyboard 默认 keymap 里没有 KEY_HOMEPAGE(172) 和 KEY_BACK(158)，
