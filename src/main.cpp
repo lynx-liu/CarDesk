@@ -16,6 +16,8 @@
 #include <QTimer>
 #include <QDialog>
 #include <QSettings>
+#include <QSet>
+#include <QTouchEvent>
 #include <QTime>
 #include <QAbstractButton>
 #include <QAbstractItemView>
@@ -491,13 +493,16 @@ static bool isClickableWidget(QObject *watched, QEvent *event)
     return false;
 }
 
-static void playTouchClickSound() {
+// 同一触摸点 id 在未收到 TouchEnd 前不应再次播点屏音（应对异常重复 TouchBegin）。
+static QSet<int> s_touchClickSoundActiveIds;
+
+static bool playTouchClickSound() {
     const int level = qApp->property("appTouchSoundLevel").toInt();
     if (level <= 0) {
-        return;
+        return false;
     }
     if (shouldSuppressTouchClickSound()) {
-        return;
+        return false;
     }
     static QProcess *proc = nullptr;
     static QString lastMissingWav;
@@ -511,8 +516,7 @@ static void playTouchClickSound() {
             });
     }
     if (proc->state() != QProcess::NotRunning) {
-        qDebug() << "[ClickSound] tinyplay is already playing, ignoring duplicate click sound";
-        return;
+        return false;
     }
     const QString wav = clickSoundPath(level);
     if (!QFileInfo::exists(wav) || !QFileInfo(wav).isFile()) {
@@ -520,11 +524,12 @@ static void playTouchClickSound() {
             qWarning() << "[ClickSound] click sound file not found:" << wav;
             lastMissingWav = wav;
         }
-        return;
+        return false;
     }
     lastMissingWav.clear();
     qDebug() << "[ClickSound] playing level=" << level << "wav=" << wav;
     proc->start(QStringLiteral("tinyplay"), {wav});
+    return true;
 }
 
 // 挂在 QApplication 上，能拦截所有窗口的 KeyPress，不依赖窗口焦点
@@ -539,32 +544,53 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override {
         // 任意按键或触摸 → 完成亮屏
         const QEvent::Type t = event->type();
-        QWidget *eventWidget = qobject_cast<QWidget *>(watched);
-        if (!eventWidget) {
-            if (t == QEvent::MouseButtonPress) {
-                auto *me = static_cast<QMouseEvent *>(event);
-                eventWidget = QApplication::widgetAt(me->globalPos());
-            } else if (t == QEvent::TouchBegin) {
-                auto *te = static_cast<QTouchEvent *>(event);
-                if (!te->touchPoints().isEmpty()) {
-                    eventWidget = QApplication::widgetAt(te->touchPoints().first().screenPos().toPoint());
+        if (t == QEvent::TouchEnd || t == QEvent::TouchCancel) {
+            const auto *te = static_cast<const QTouchEvent *>(event);
+            for (const QTouchEvent::TouchPoint &tp : te->touchPoints()) {
+                if (t == QEvent::TouchCancel || tp.state() == Qt::TouchPointReleased) {
+                    s_touchClickSoundActiveIds.remove(tp.id());
                 }
             }
         }
-
         if (t == QEvent::MouseButtonPress || t == QEvent::TouchBegin) {
             if (ScreenBlanker::instance()->isBlanked()) {
                 ScreenBlanker::instance()->unblank();
                 return true;  // 吸收事件，防止触发底层操作
             }
+            QWidget *hitForSound = nullptr;
+            if (t == QEvent::TouchBegin) {
+                const auto *te = static_cast<const QTouchEvent *>(event);
+                if (!te->touchPoints().isEmpty()) {
+                    hitForSound = QApplication::widgetAt(
+                        te->touchPoints().constFirst().screenPos().toPoint());
+                }
+            } else {
+                const auto *me = static_cast<const QMouseEvent *>(event);
+                hitForSound = QApplication::widgetAt(me->globalPos());
+            }
             const bool touchDevice = DeviceDetect::instance().isTouchDevice();
             const bool isTouchEvent = (t == QEvent::TouchBegin);
-            const bool shouldPlaySound = eventWidget
-                && isClickableWidget(eventWidget, event)
+            // 用触点处 widgetAt 判断「是否点在可点控件上」，与事件实际投递给父还是子无关；
+            // 同一次按压若有多条 TouchBegin，靠触摸点 id 只播一次。
+            const bool shouldPlaySound = hitForSound
+                && isClickableWidget(hitForSound, event)
                 && !shouldSkipTouchClickSound(watched, event)
                 && ((touchDevice && isTouchEvent) || (!touchDevice && !isTouchEvent));
             if (shouldPlaySound) {
-                playTouchClickSound();
+                if (isTouchEvent) {
+                    const auto *te = static_cast<const QTouchEvent *>(event);
+                    const int tid = te->touchPoints().isEmpty()
+                        ? -1 : te->touchPoints().constFirst().id();
+                    const bool duplicateTouchBegin = (tid >= 0
+                        && s_touchClickSoundActiveIds.contains(tid));
+                    if (!duplicateTouchBegin) {
+                        if (playTouchClickSound() && tid >= 0) {
+                            s_touchClickSoundActiveIds.insert(tid);
+                        }
+                    }
+                } else {
+                    playTouchClickSound();
+                }
             }
             if (ScreenClockOverlay::instance()->isVisible()) {
                 ScreenClockOverlay::instance()->hideClock();
