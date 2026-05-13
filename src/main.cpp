@@ -891,6 +891,16 @@ static VideoListWindow *findVideoListWindow()
     return nullptr;
 }
 
+static VideoPlayWindow *findVideoPlayWindow()
+{
+    for (QWidget *widget : QApplication::topLevelWidgets()) {
+        if (auto *video = qobject_cast<VideoPlayWindow *>(widget)) {
+            return video;
+        }
+    }
+    return nullptr;
+}
+
 static bool handleMenuKeyPress()
 {
     if (PhoneWindow *phone = findPhoneWindow()) {
@@ -905,8 +915,13 @@ static bool handleMenuKeyPress()
     }
 
     QWidget *current = nullptr;
-    if (auto *music = findMusicPlayerWindow()) {
-        if (music->isVisible()) current = music;
+    if (auto *videoPlay = findVideoPlayWindow()) {
+        if (videoPlay->isVisible()) current = videoPlay;
+    }
+    if (!current) {
+        if (auto *music = findMusicPlayerWindow()) {
+            if (music->isVisible()) current = music;
+        }
     }
     if (!current) {
         if (auto *radio = findRadioWindow()) {
@@ -932,28 +947,48 @@ static bool handleMenuKeyPress()
         }
     }
 
-    if (current && current != main) {
-        current->hide();
-    }
-
+    // 切换链：(video play / video list) → radio → music → video list → radio → ...
+    const char *nextSlot = "onRadioClicked";
     if (qobject_cast<RadioWindow *>(current) || current == main) {
+        nextSlot = "onMusicUSBClicked";
         qDebug() << "[InputNotifier] KEY_MENU => switch from radio/main to music";
-        QMetaObject::invokeMethod(main, "onMusicUSBClicked", Qt::QueuedConnection);
-        return true;
-    }
-    if (qobject_cast<MusicPlayerWindow *>(current)) {
+    } else if (qobject_cast<MusicPlayerWindow *>(current)) {
+        nextSlot = "onVideoListClicked";
         qDebug() << "[InputNotifier] KEY_MENU => switch from music to video";
-        QMetaObject::invokeMethod(main, "onVideoListClicked", Qt::QueuedConnection);
-        return true;
-    }
-    if (qobject_cast<VideoListWindow *>(current)) {
+    } else if (qobject_cast<VideoListWindow *>(current)
+               || qobject_cast<VideoPlayWindow *>(current)) {
+        nextSlot = "onRadioClicked";
         qDebug() << "[InputNotifier] KEY_MENU => switch from video to radio";
-        QMetaObject::invokeMethod(main, "onRadioClicked", Qt::QueuedConnection);
-        return true;
+    } else {
+        nextSlot = "onRadioClicked";
+        qDebug() << "[InputNotifier] KEY_MENU => fallback to radio";
     }
 
-    qDebug() << "[InputNotifier] KEY_MENU => fallback to radio";
-    QMetaObject::invokeMethod(main, "onRadioClicked", Qt::QueuedConnection);
+    // MENU 切换语义 = "先标记被中断 + 走 HOME 释放路径"：
+    //   - HOME 用户按：musicHide 时仍 isPlaying()，preserve 分支不 release，音乐继续后台播。
+    //   - MENU 切换：在 postEvent(HOME) 之前同步调一次 pauseForInterruption()。它把
+    //     m_pausedForInterruption=true 设上并停止播放，hideEvent 看到 !isPlaying() 走 capture+release，
+    //     下一个播放器拿到 ALSA；再次进入音乐界面时凭 m_pausedForInterruption 自动 resume。
+    //   pauseForInterruption() 内部已区分 BT/SDK/QMP 三种路径并自行保存位置，且已做幂等保护
+    //   （未在播时不会把已设上的 m_pausedForInterruption 清回 false），所以稍后 MainWindow 的
+    //   onVideoListClicked / prepareForRadioAudio 再次调它也不会丢失中断态。
+    if (auto *musicNow = qobject_cast<MusicPlayerWindow *>(current)) {
+        musicNow->pauseForInterruption();
+    }
+
+    // 模拟用户按 HOME：把 HOME 键事件投递给当前窗口，让它走自己已有的 HOME 路径
+    //（保存进度 / 释放播放器 / emit requestReturnToMain / hide），状态机与按 HOME 完全一致。
+    // 然后再投递下一个界面对应的按钮 slot 完成切换。
+    // 用 postEvent 而非 sendEvent：本工程运行环境的 libQt5Core.so 未导出
+    //   QCoreApplication::sendEvent 符号（Qt 5.15+ 改为 inline），用 sendEvent 会启动失败。
+    if (current && current != main) {
+        QApplication::postEvent(current,
+            new QKeyEvent(QEvent::KeyPress, Qt::Key_HomePage, Qt::NoModifier));
+        QApplication::postEvent(current,
+            new QKeyEvent(QEvent::KeyRelease, Qt::Key_HomePage, Qt::NoModifier));
+    }
+
+    QMetaObject::invokeMethod(main, nextSlot, Qt::QueuedConnection);
     return true;
 }
 

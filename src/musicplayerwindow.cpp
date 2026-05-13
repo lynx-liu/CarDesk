@@ -747,11 +747,27 @@ void MusicPlayerWindow::showEvent(QShowEvent *event)
             return;
         }
         restoreUsbProgressBarFromPending();
-        // 有 USB 离屏恢复的进度时，不要走 resumeAfterInterruption（否则会 XPlayerStart / play 误起播）
-        const bool usbResumePending = !m_usbPendingResumeFilePath.isEmpty()
-            || m_usbPendingResumePositionMs > 0;
-        if (m_pausedForInterruption && !usbResumePending) {
+        if (!m_pausedForInterruption) {
+            return;  // 用户主动停止 / 未播放过：保持停止状态
+        }
+        // 被外部打断（HOME/MENU 切换、来电等）→ 自动恢复播放
+        if (!m_isUsbMode && m_bluetoothManager) {
             resumeAfterInterruption();
+            return;
+        }
+        // USB 模式：等扫盘完成才能起播；空列表交给 scanWatcher.finished 再触发。
+        if (m_musicFiles.isEmpty()) {
+            return;
+        }
+#ifdef CAR_DESK_USE_T507_SDK
+        if (m_useSdkPlayer && restoreSdkPlaybackAfterInterruption()) {
+            return;
+        }
+#endif
+        if (m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count()) {
+            playMusic(m_currentIndex);  // applyUsbResumeSeekAfterPlayStarted 会 seek 到 pending 位置
+            m_pausedForInterruption = false;
+            m_resumeInterruptionPositionMs = 0;
         }
     });
 }
@@ -762,6 +778,8 @@ void MusicPlayerWindow::hideEvent(QHideEvent *event)
         m_preservePlaybackOnHide = false;
         // Home 回主界面且已非播放：释放 XPlayer/QMediaPlayer，避免仍占 ALSA 使点屏音 tinyplay 阻塞。
         // Back 键会先 pause 再 hide，不置 m_hideFromHomeNavigation，以便保留暂停态可继续播。
+        // MENU 切换路径：handleMenuKeyPress 已先调过 pauseForInterruption()，进来时 isPlaying()=false，
+        //   同时 m_pausedForInterruption=true，会被 capture+release 后再次进入时自动恢复。
         if (m_hideFromHomeNavigation && !isPlaying()) {
             captureUsbProgressBeforePlayerRelease();
             releaseAudioPlayer();
@@ -1350,6 +1368,18 @@ void MusicPlayerWindow::scanFlatPlaylist()
             refreshPlaylistWidget();
             updateNowPlaying();
             restoreUsbProgressBarFromPending();
+            // 扫盘完成后若界面已显示且仍处于"被打断"状态 → 自动恢复播放
+            if (m_pausedForInterruption && m_isUsbMode && isVisible()
+                && m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count()) {
+#ifdef CAR_DESK_USE_T507_SDK
+                if (m_useSdkPlayer && restoreSdkPlaybackAfterInterruption()) {
+                    return;
+                }
+#endif
+                playMusic(m_currentIndex);
+                m_pausedForInterruption = false;
+                m_resumeInterruptionPositionMs = 0;
+            }
         });
     }
     // 如果上一次扫描仍在运行，忽略新请求（旧扫描完成后会自动刷新）
@@ -1704,13 +1734,16 @@ void MusicPlayerWindow::playMusic(int index)
 
 void MusicPlayerWindow::pauseForInterruption()
 {
+    // 幂等：只有"当前在播"才设 m_pausedForInterruption = true；
+    // 当前不在播时绝不动这个标志——避免 MENU 切换路径上多个上层 slot
+    //（handleMenuKeyPress / MainWindow::onVideoListClicked / MediaManager::prepareForRadioAudio
+    //  / prepareForBluetoothMusic 等）连续调用本函数时，第二次进来 isPlaying==false
+    //  把上一次刚设上的 true 又覆盖成 false，导致再次进入界面无法自动 resume。
     if (!m_isUsbMode && m_bluetoothManager) {
         if (m_btPlaying) {
             m_pausedForInterruption = true;
             qDebug() << "MusicPlayer: pauseForInterruption BT currentIndex=" << m_currentIndex;
             onPlayPause();
-        } else {
-            m_pausedForInterruption = false;
         }
         return;
     }
@@ -1729,10 +1762,7 @@ void MusicPlayerWindow::pauseForInterruption()
         m_mediaPlayer->pause();
         setPlayButtonState(false);
         m_pausedForInterruption = true;
-        return;
     }
-
-    m_pausedForInterruption = false;
 }
 
 void MusicPlayerWindow::resetSdkPlayerForCall()
