@@ -44,58 +44,6 @@
 // ── 背光控制（POWER 键关/亮屏，SLEEP 键关机，具体 dispdbg 操作在 backlight.cpp）─
 static MainWindow *findMainWindow();
 static DrivingImageWindow *findDrivingImageWindow();
-static void hideClockOverlayIfVisible(bool resume = true);
-class ScreenClockOverlay;
-
-class ScreenBlanker : public QObject {
-public:
-    static ScreenBlanker *instance() {
-        static ScreenBlanker s;
-        return &s;
-    }
-    bool isBlanked() const { return m_blanked; }
-
-    void blank() {
-        if (m_blanked) return;
-        qDebug() << "[ScreenBlanker] blank: hiding clock overlay and pausing playback";
-        hideClockOverlayIfVisible(false);
-        if (MainWindow *main = findMainWindow()) {
-            if (main->mediaManager()) {
-                QTimer::singleShot(0, this, [main]() {
-                    qDebug() << "[ScreenBlanker] blank: executing deferred pausePlaybackForInterruption";
-                    main->mediaManager()->pausePlaybackForInterruption();
-                });
-            }
-        }
-        // 保存当前亮度（来自 Backlight 缓存或 sysfs）
-        m_savedBrightness = Backlight::get();
-        qDebug() << "[ScreenBlanker] blank: saved brightness=" << m_savedBrightness;
-        m_blanked = true;
-        Backlight::set(0);
-    }
-    void unblank() {
-        if (!m_blanked) return;
-        m_blanked = false;
-        Backlight::set(m_savedBrightness);
-        qDebug() << "[ScreenBlanker] unblank: restore brightness=" << m_savedBrightness;
-        hideClockOverlayIfVisible(false);
-        if (MainWindow *main = findMainWindow()) {
-            if (main->mediaManager()) {
-                QTimer::singleShot(0, this, [main]() {
-                    qDebug() << "[ScreenBlanker] unblank: executing deferred resumePlaybackAfterInterruption";
-                    main->mediaManager()->resumePlaybackAfterInterruption();
-                });
-            }
-        }
-    }
-    void toggle() {
-        if (m_blanked) unblank(); else blank();
-    }
-
-private:
-    bool m_blanked = false;
-    int  m_savedBrightness = 128;
-};
 
 class ScreenClockOverlay : public QWidget {
 public:
@@ -113,12 +61,9 @@ public:
     }
 
     void showClock() {
-        if (ScreenBlanker::instance()->isBlanked()) {
-            ScreenBlanker::instance()->unblank();
-        }
         if (DrivingImageWindow *drive = findDrivingImageWindow()) {
             if (drive->isVisible()) {
-                qDebug() << "[ScreenClockOverlay] closing driving image before showing clock";
+                qDebug() << "closing driving image before showing clock";
                 drive->close();
             }
         }
@@ -245,25 +190,7 @@ protected:
         p.drawEllipse(QPoint(0, 0), 5, 5);
     }
 
-    void keyPressEvent(QKeyEvent *event) override {
-        Q_UNUSED(event);
-        hideClock();
-    }
-
-    void mousePressEvent(QMouseEvent *event) override {
-        Q_UNUSED(event);
-        hideClock();
-    }
-
-    bool event(QEvent *event) override {
-        if (event->type() == QEvent::TouchBegin) {
-            hideClock();
-            return true;
-        }
-        return QWidget::event(event);
-    }
-
-private:
+protected:
     ScreenClockOverlay()
         : QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
         , m_updateTimer(this)
@@ -285,15 +212,56 @@ private:
     bool m_digitalMode;
 };
 
-static void hideClockOverlayIfVisible(bool resume)
-{
-    if (ScreenClockOverlay::instance()->isVisible()) {
-        qDebug() << "[ScreenBlanker] hideClockOverlayIfVisible: visible=" << true << " resume=" << resume;
-        ScreenClockOverlay::instance()->hideClock(resume);
-    } else {
-        qDebug() << "[ScreenBlanker] hideClockOverlayIfVisible: overlay not visible";
+class ScreenBlanker : public ScreenClockOverlay {
+public:
+    static ScreenBlanker *instance() {
+        static ScreenBlanker s;
+        return &s;
     }
-}
+    bool isBlanked() const { return m_blanked; }
+
+    void blank() {
+        if (m_blanked) return;
+        qDebug() << "blank: hiding clock overlay and pausing playback";
+        if (MainWindow *main = findMainWindow()) {
+            if (main->mediaManager()) {
+                QTimer::singleShot(0, this, [main]() {
+                    qDebug() << "blank: executing deferred pausePlaybackForInterruption";
+                    main->mediaManager()->pausePlaybackForInterruption();
+                });
+            }
+        }
+        // 保存当前亮度（来自 Backlight 缓存或 sysfs）
+        m_savedBrightness = Backlight::get();
+        qDebug() << "blank: saved brightness=" << m_savedBrightness;
+        m_blanked = true;
+        Backlight::set(0);
+        if (!isVisible())
+            showClock();
+
+    }
+    void unblank() {
+        if (!m_blanked) return;
+        m_blanked = false;
+
+        if (isVisible())
+            hideClock(false);
+        Backlight::set(m_savedBrightness);
+        
+        if (MainWindow *main = findMainWindow()) {
+            if (main->mediaManager()) {
+                QTimer::singleShot(0, this, [main]() {
+                    qDebug() << "unblank: executing deferred resumePlaybackAfterInterruption";
+                    main->mediaManager()->resumePlaybackAfterInterruption();
+                });
+            }
+        }
+    }
+
+private:
+    bool m_blanked = false;
+    int  m_savedBrightness = 128;
+};
 
 // ── 音量浮动指示条 ────────────────────────────────────────────────────────────
 // 按下音量键时显示在屏幕左侧，2 秒无操作后自动隐藏
@@ -553,10 +521,6 @@ protected:
             }
         }
         if (t == QEvent::MouseButtonPress || t == QEvent::TouchBegin) {
-            if (ScreenBlanker::instance()->isBlanked()) {
-                ScreenBlanker::instance()->unblank();
-                return true;  // 吸收事件，防止触发底层操作
-            }
             QWidget *hitForSound = nullptr;
             if (t == QEvent::TouchBegin) {
                 const auto *te = static_cast<const QTouchEvent *>(event);
@@ -592,32 +556,9 @@ protected:
                     playTouchClickSound();
                 }
             }
-            if (ScreenClockOverlay::instance()->isVisible()) {
-                ScreenClockOverlay::instance()->hideClock();
-                return true;  // 消耗事件，不让底层界面误操作
-            }
         }
         if (t == QEvent::KeyPress) {
-            // 任意按键亮屏——但电源/睡眠键由 InputNotifier raw 路径处理（toggle/poweroff）。
-            // 这里只消耗事件、不亮屏，避免两条路径叠加导致闪屏后又关屏。
-            // 双重判断：scanCode（raw evdev code）和 Qt key value（evdevkeyboard 可能
-            // 将 KEY_POWER→Key_PowerOff，其 nativeScanCode 不保证等于 116）。
             QKeyEvent *ke = static_cast<QKeyEvent *>(event);
-            const unsigned int sc = ke->nativeScanCode();
-            const int k = ke->key();
-            const bool isPowerKey = (sc == 116u || sc == 142u
-                || k == Qt::Key_PowerOff || k == Qt::Key_Sleep
-                || k == Qt::Key_WakeUp   || k == Qt::Key_PowerDown);
-            if (ScreenBlanker::instance()->isBlanked()) {
-                if (isPowerKey) {
-                    return true;  // 消耗事件，亮屏由 InputNotifier::toggle() 完成
-                }
-                ScreenBlanker::instance()->unblank();
-                return true;
-            }
-            if (isPowerKey) {
-                return true;  // 消耗电源键 Qt 事件，避免 overlay/当前窗口收到重复按键
-            }
             qDebug() << "[GlobalKey] type=KeyPress"
                      << "key=" << ke->key()
                      << "nativeScanCode=" << ke->nativeScanCode()
@@ -1239,7 +1180,6 @@ int main(int argc, char *argv[]) {
                         continue;
                     case KEY_SLEEP:
                         qDebug() << "[InputNotifier] ev.code=142 KEY_SLEEP => blank screen";
-                        ScreenClockOverlay::instance()->hideClock(false);
                         ScreenBlanker::instance()->blank();
                         break;
                     case KEY_POWER:
@@ -1247,25 +1187,12 @@ int main(int argc, char *argv[]) {
                             qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => unblank screen";
                             ScreenBlanker::instance()->unblank();
                         } else {
-                            bool closedDrivingImage = false;
                             for (QWidget *widget : QApplication::topLevelWidgets()) {
                                 if (auto *drive = qobject_cast<DrivingImageWindow *>(widget)) {
-                                    if (drive->isVisible()) {
-                                        qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => close driving image";
-                                        drive->close();
-                                        closedDrivingImage = true;
-                                    }
+                                    if (drive->isVisible()) drive->close();
                                 }
                             }
-                            if (closedDrivingImage) {
-                                qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => schedule clock overlay after driving image close";
-                                QTimer::singleShot(0, []() {
-                                    ScreenClockOverlay::instance()->showClock();
-                                });
-                            } else {
-                                qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => toggle clock overlay";
-                                ScreenClockOverlay::instance()->toggle();
-                            }
+                            ScreenBlanker::instance()->toggle();
                         }
                         break;
                     default: break;

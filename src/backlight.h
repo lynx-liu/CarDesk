@@ -1,8 +1,6 @@
 #pragma once
 
 // Allwinner dispdbg 背光控制工具
-// 同时被 main.cpp 的 ScreenBlanker 和 SystemSettingWindow 使用
-
 namespace Backlight {
 
     // 读取当前亮度（先取缓存，再尝试 sysfs，失败返回 180）
