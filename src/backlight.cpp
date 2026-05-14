@@ -23,15 +23,6 @@ static int readFileValue(const char *path)
     return ok ? v : -1;
 }
 
-static int tryReadPaths(const char *paths[])
-{
-    for (int i = 0; paths[i]; ++i) {
-        int v = readFileValue(paths[i]);
-        if (v >= 0) return v;
-    }
-    return -1;
-}
-
 static void writeDispDbg(const char *path, const QByteArray &data)
 {
     int fd = ::open(path, O_WRONLY | O_CLOEXEC);
@@ -50,25 +41,10 @@ static int readDispDbgBrightness()
     return readFileValue("/sys/kernel/debug/dispdbg/param");
 }
 
-static int readFromSysfs()
-{
-    const char *paths[] = {
-        "/sys/class/disp/disp/attr/lcd_bl",
-        "/sys/class/backlight/backlight/brightness",
-        "/sys/class/backlight/backlight/actual_brightness",
-        "/sys/class/backlight/pwm-backlight/brightness",
-        "/sys/class/backlight/pwm-backlight/actual_brightness",
-        nullptr
-    };
-    int v = tryReadPaths(paths);
-    if (v >= 0) return v;
-    return readDispDbgBrightness();
-}
-
 int get()
 {
     if (s_cache > 0) return s_cache;
-    int v = readFromSysfs();
+    int v = readDispDbgBrightness();
     s_cache = (v >= 0) ? v : 180;
     return s_cache;
 }
