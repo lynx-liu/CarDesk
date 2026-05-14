@@ -1100,6 +1100,8 @@ int main(int argc, char *argv[]) {
                 struct input_event ev;
                 while (::read(kbFd, &ev, sizeof(ev)) == (ssize_t)sizeof(ev)) {
                     if (ev.type != EV_KEY || ev.value != 1) continue; // 只处理 key-down
+                    qDebug() << "[InputNotifier] ev.code=" << ev.code;
+
                     if (kbDev == qtKeyboardDevice &&
                         (ev.code == KEY_VOLUMEUP || ev.code == KEY_VOLUMEDOWN || ev.code == KEY_MUTE)) {
                         continue; // 避免 Qt 已经从该设备收到同一音量/静音按键，导致双重处理
@@ -1142,65 +1144,68 @@ int main(int argc, char *argv[]) {
                         qtKey = Qt::Key_Phone;
                         break;
                     case KEY_END:
-                        qDebug() << "[InputNotifier] ev.code=" << ev.code << "KEY_END => hangup";
+                        qDebug() << "KEY_END => hangup";
                         if (handleEndKeyPress()) {
                             continue;
                         }
                         qtKey = Qt::Key_End;
                         break;
                     case KEY_A:
-                        qDebug() << "[InputNotifier] ev.code=30 KEY_A => driving reverse mode";
+                        qDebug() << "KEY_A => driving reverse mode";
                         activateDrivingImageMode(270);
                         continue;
                     case KEY_B:
-                        qDebug() << "[InputNotifier] ev.code=78 KEY_B => exit reverse mode";
+                        qDebug() << "KEY_B => exit reverse mode";
                         deactivateDrivingImageMode(270);
                         continue;
                     case KEY_C:
-                        qDebug() << "[InputNotifier] ev.code=46 KEY_C => enter left-turn mode";
+                        qDebug() << "KEY_C => enter left-turn mode";
                         activateDrivingImageMode(271);
                         continue;
                     case KEY_D:
-                        qDebug() << "[InputNotifier] ev.code=32 KEY_D => exit left-turn mode";
+                        qDebug() << "KEY_D => exit left-turn mode";
                         deactivateDrivingImageMode(271);
                         continue;
                     case KEY_K:
-                        qDebug() << "[InputNotifier] ev.code=37 KEY_K => enter right-turn mode";
+                        qDebug() << "KEY_K => enter right-turn mode";
                         activateDrivingImageMode(272);
                         continue;
                     case KEY_L:
-                        qDebug() << "[InputNotifier] ev.code=38 KEY_L => exit right-turn mode";
+                        qDebug() << "KEY_L => exit right-turn mode";
                         deactivateDrivingImageMode(272);
                         continue;
                     case KEY_M:
-                        qDebug() << "[InputNotifier] ev.code=50 KEY_M => enter illumination mode";
+                        qDebug() << "KEY_M => enter illumination mode";
                         activateDrivingImageMode(180);
                         continue;
                     case KEY_N:
-                        qDebug() << "[InputNotifier] ev.code=49 KEY_N => exit illumination mode";
+                        qDebug() << "KEY_N => exit illumination mode";
                         deactivateDrivingImageMode(180);
                         continue;
                     case KEY_SLEEP:
-                        qDebug() << "[InputNotifier] ev.code=142 KEY_SLEEP => blank screen";
-                        ScreenBlanker::instance()->blank();
+                        qDebug() << "KEY_SLEEP => blank screen";
+                        if (DrivingImageWindow *drive = findDrivingImageWindow()) {
+                            if (!drive->isVisible()) {
+                                ScreenBlanker::instance()->blank();
+                            }
+                        }
                         break;
                     case KEY_POWER:
                         if (ScreenBlanker::instance()->isBlanked()) {
                             qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => unblank screen";
                             ScreenBlanker::instance()->unblank();
                         } else {
-                            for (QWidget *widget : QApplication::topLevelWidgets()) {
-                                if (auto *drive = qobject_cast<DrivingImageWindow *>(widget)) {
-                                    if (drive->isVisible()) drive->close();
+                            if (DrivingImageWindow *drive = findDrivingImageWindow()) {
+                                if (!drive->isVisible()) {
+                                    ScreenBlanker::instance()->toggle();
                                 }
                             }
-                            ScreenBlanker::instance()->toggle();
                         }
                         break;
                     default: break;
                     }
                     if (qtKey == 0) continue;
-                    qDebug() << "[InputNotifier] ev.code=" << ev.code << "=> qtKey=" << qtKey;
+
                     QWidget *w = QApplication::activeWindow();
                     if (!w) {
                         for (QWidget *tw : QApplication::topLevelWidgets()) {
