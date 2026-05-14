@@ -589,47 +589,49 @@ protected:
             }
             // ────────────────────────────────────────────────────────────────
 
-            switch (key) {
-            case Qt::Key_VolumeUp:
-                qDebug() << "[GlobalKey] => VolumeUp";
-                AppSignals::changeVolume(+1);
-                scheduleVolumeRead(m_overlay);
-                return true;
-            case Qt::Key_VolumeDown:
-                qDebug() << "[GlobalKey] => VolumeDown";
-                AppSignals::changeVolume(-1);
-                scheduleVolumeRead(m_overlay);
-                return true;
-            case Qt::Key_VolumeMute:
-                qDebug() << "[GlobalKey] => Mute";
-                AppSignals::toggleMute();
-                scheduleVolumeRead(m_overlay);
-                return true;
-            case Qt::Key_Menu:
-                qDebug() << "[GlobalKey] => Menu";
-                {
-                    QWidget *w = QApplication::activeWindow();
-                    if (!w) {
-                        for (QWidget *tw : QApplication::topLevelWidgets()) {
-                            if (tw->isVisible() && tw->isWindow()) { w = tw; break; }
+            if (!ScreenBlanker::instance()->isBlanked() && !ScreenBlanker::instance()->isVisible()) {
+                switch (key) {
+                case Qt::Key_VolumeUp:
+                    qDebug() << "[GlobalKey] => VolumeUp";
+                    AppSignals::changeVolume(+1);
+                    scheduleVolumeRead(m_overlay);
+                    return true;
+                case Qt::Key_VolumeDown:
+                    qDebug() << "[GlobalKey] => VolumeDown";
+                    AppSignals::changeVolume(-1);
+                    scheduleVolumeRead(m_overlay);
+                    return true;
+                case Qt::Key_VolumeMute:
+                    qDebug() << "[GlobalKey] => Mute";
+                    AppSignals::toggleMute();
+                    scheduleVolumeRead(m_overlay);
+                    return true;
+                case Qt::Key_Menu:
+                    qDebug() << "[GlobalKey] => Menu";
+                    {
+                        QWidget *w = QApplication::activeWindow();
+                        if (!w) {
+                            for (QWidget *tw : QApplication::topLevelWidgets()) {
+                                if (tw->isVisible() && tw->isWindow()) { w = tw; break; }
+                            }
+                        }
+                        if (w) {
+                            QApplication::postEvent(w,
+                                new QKeyEvent(QEvent::KeyPress, Qt::Key_HomePage, Qt::NoModifier));
+                            QApplication::postEvent(w,
+                                new QKeyEvent(QEvent::KeyRelease, Qt::Key_HomePage, Qt::NoModifier));
                         }
                     }
-                    if (w) {
-                        QApplication::postEvent(w,
-                            new QKeyEvent(QEvent::KeyPress, Qt::Key_HomePage, Qt::NoModifier));
-                        QApplication::postEvent(w,
-                            new QKeyEvent(QEvent::KeyRelease, Qt::Key_HomePage, Qt::NoModifier));
-                    }
+                    return true;
+                case Qt::Key_HomePage:
+                    qDebug() << "[GlobalKey] => HomePage";
+                    break;  // 交给各窗口 keyPressEvent 处理
+                case Qt::Key_Back:
+                    qDebug() << "[GlobalKey] => Back";
+                    break;  // 交给各窗口 keyPressEvent 处理
+                default:
+                    break;
                 }
-                return true;
-            case Qt::Key_HomePage:
-                qDebug() << "[GlobalKey] => HomePage";
-                break;  // 交给各窗口 keyPressEvent 处理
-            case Qt::Key_Back:
-                qDebug() << "[GlobalKey] => Back";
-                break;  // 交给各窗口 keyPressEvent 处理
-            default:
-                break;
             }
         }
         return QObject::eventFilter(watched, event);
