@@ -598,7 +598,9 @@ void BluetoothManager::parseLine(const QByteArray &line) {
     }
 
     if (text == QLatin1String("IF")) {
-        emit callStatusChanged(1);
+        QTimer::singleShot(3500, this, [this]() {
+            emit callStatusChanged(1);
+        });
         return;
     }
 
