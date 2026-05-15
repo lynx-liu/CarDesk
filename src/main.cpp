@@ -500,6 +500,69 @@ static bool playTouchClickSound() {
     return true;
 }
 
+static void activateDrivingImageMode(int mode);
+static void deactivateDrivingImageMode(int mode);
+
+static int s_turnRTurn = 0;
+static int s_turnLTurn = 0;
+static int s_turnBackup = 0;
+static bool s_debugMode = false;
+
+static void updateTurnState(int rTurn, int lTurn, int backup)
+{
+    if (backup != s_turnBackup) {
+        if (backup) {
+            activateDrivingImageMode(270);
+        } else {
+            deactivateDrivingImageMode(270);
+        }
+        s_turnBackup = backup;
+    }
+
+    if (rTurn != s_turnRTurn || lTurn != s_turnLTurn) {
+        if (rTurn) {
+            activateDrivingImageMode(272);
+        } else if (lTurn) {
+            activateDrivingImageMode(271);
+        } else {
+            if (s_turnRTurn) {
+                deactivateDrivingImageMode(272);
+            } else if (s_turnLTurn) {
+                deactivateDrivingImageMode(271);
+            }
+        }
+        s_turnRTurn = rTurn;
+        s_turnLTurn = lTurn;
+    }
+}
+
+static void toggleDrivingTurnMode(int mode)
+{
+    if (mode == 271) {
+        if (s_turnLTurn) {
+            updateTurnState(0, 0, 0);
+        } else {
+            updateTurnState(0, 1, 0);
+        }
+        return;
+    }
+    if (mode == 272) {
+        if (s_turnRTurn) {
+            updateTurnState(0, 0, 0);
+        } else {
+            updateTurnState(1, 0, 0);
+        }
+        return;
+    }
+
+    DrivingImageWindow *drive = findDrivingImageWindow();
+    if (drive && drive->isVisible() && drive->drivingMode() == mode) {
+        deactivateDrivingImageMode(mode);
+        return;
+    }
+    activateDrivingImageMode(mode);
+}
+
 // 挂在 QApplication 上，能拦截所有窗口的 KeyPress，不依赖窗口焦点
 class GlobalKeyFilter : public QObject {
 public:
@@ -593,13 +656,21 @@ protected:
                 switch (key) {
                 case Qt::Key_VolumeUp:
                     qDebug() << "[GlobalKey] => VolumeUp";
-                    AppSignals::changeVolume(+1);
-                    scheduleVolumeRead(m_overlay);
+                    if (s_debugMode) {
+                        toggleDrivingTurnMode(272); // 测试：音量加键对应右转
+                    } else {
+                        AppSignals::changeVolume(+1);
+                        scheduleVolumeRead(m_overlay);
+                    }
                     return true;
                 case Qt::Key_VolumeDown:
                     qDebug() << "[GlobalKey] => VolumeDown";
-                    AppSignals::changeVolume(-1);
-                    scheduleVolumeRead(m_overlay);
+                    if (s_debugMode) {
+                        toggleDrivingTurnMode(271); // 测试：音量减键对应左转
+                    } else {
+                        AppSignals::changeVolume(-1);
+                        scheduleVolumeRead(m_overlay);
+                    }
                     return true;
                 case Qt::Key_VolumeMute:
                     qDebug() << "[GlobalKey] => Mute";
@@ -1027,6 +1098,23 @@ static void deactivateDrivingImageMode(int mode)
 }
 
 int main(int argc, char *argv[]) {
+    QStringList rawArgs;
+    rawArgs.reserve(qMax(0, argc - 1));
+    for (int i = 1; i < argc; ++i) {
+        rawArgs.append(QString::fromLocal8Bit(argv[i]));
+    }
+    for (const QString &arg : rawArgs) {
+        const QString lowerArg = arg.toLower();
+        if (lowerArg == QStringLiteral("debug")
+            || lowerArg == QStringLiteral("--debug")
+            || lowerArg == QStringLiteral("-debug")
+            || lowerArg == QStringLiteral("/debug")) {
+            s_debugMode = true;
+            qDebug() << "Debug enabled";
+            break;
+        }
+    }
+
     // eglfs 平台下 Qt 不自动扫描 /dev/input，需在 QApplication 构造前设置。
     // 如果环境变量未设置，则选择第一个支持硬件按键的 event 设备。
     if (qgetenv("QT_QPA_EVDEV_KEYBOARD_PARAMETERS").isEmpty()) {
@@ -1251,23 +1339,7 @@ int main(int argc, char *argv[]) {
         // LC 灯光指令 → 对应模式开/关（边沿触发，避免每 35ms 重复调用）
         QObject::connect(txrxReader, &McuSerialReader::lcReceived,
                          &app, [](int rTurn, int lTurn, int backup) {
-            static int lastRTurn = 0, lastLTurn = 0, lastBackup = 0;
-            // 倒车优先级最高
-            if (backup != lastBackup) {
-                if (backup) activateDrivingImageMode(270);
-                else        deactivateDrivingImageMode(270);
-                lastBackup = backup;
-            }
-            if (lTurn != lastLTurn) {
-                if (lTurn)  activateDrivingImageMode(271);
-                else        deactivateDrivingImageMode(271);
-                lastLTurn = lTurn;
-            }
-            if (rTurn != lastRTurn) {
-                if (rTurn)  activateDrivingImageMode(272);
-                else        deactivateDrivingImageMode(272);
-                lastRTurn = rTurn;
-            }
+            updateTurnState(rTurn, lTurn, backup);
         });
 
         // TD 时间日期 → 同步系统时钟（至多每分钟同步一次）
