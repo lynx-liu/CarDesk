@@ -512,10 +512,22 @@ static void deactivateDrivingImageMode(int mode);
 static int s_turnRTurn = 0;
 static int s_turnLTurn = 0;
 static int s_turnBackup = 0;
+static bool s_turnManualClosed = false;
 static bool s_debugMode = false;
 
 static void updateTurnState(int rTurn, int lTurn, int backup)
 {
+    if (s_turnManualClosed && (backup || rTurn || lTurn)) {
+        if (backup) {
+            activateDrivingImageMode(270);
+        } else if (rTurn) {
+            activateDrivingImageMode(272);
+        } else if (lTurn) {
+            activateDrivingImageMode(271);
+        }
+        s_turnManualClosed = false;
+    }
+
     if (backup != s_turnBackup) {
         if (backup) {
             activateDrivingImageMode(270);
@@ -542,8 +554,11 @@ static void updateTurnState(int rTurn, int lTurn, int backup)
     }
 }
 
-void resetDrivingTurnState()
+void resetDrivingTurnState(bool manualClose = false)
 {
+    if (manualClose) {
+        s_turnManualClosed = true;
+    }
     updateTurnState(0, 0, 0);
 }
 
