@@ -512,18 +512,12 @@ void MainWindow::onDrivingImageClicked() {
         if (m_mediaManager) {
             m_mediaManager->resumePlaybackAfterInterruption();
         }
-        this->show();
-        this->raise();
-        this->activateWindow();
     }, Qt::UniqueConnection);
     connect(m_drivingImageWindow, &QObject::destroyed, this, [this]() {
         m_drivingImageWindow = nullptr;
         if (m_mediaManager) {
             m_mediaManager->resumePlaybackAfterInterruption();
         }
-        this->show();
-        this->raise();
-        this->activateWindow();
     }, Qt::UniqueConnection);
 
     if (m_mediaManager) {
@@ -537,7 +531,6 @@ void MainWindow::onDrivingImageClicked() {
     m_drivingImageWindow->show();
     m_drivingImageWindow->raise();
     m_drivingImageWindow->activateWindow();
-    this->hide();
 }
 
 QWidget *MainWindow::findCurrentVisibleNonPhoneWindow() const {
