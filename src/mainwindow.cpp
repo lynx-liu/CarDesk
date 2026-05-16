@@ -15,6 +15,8 @@
 #include "topbarwidget.h"
 #include "t507sdkbridge.h"
 
+extern void resetDrivingTurnState();
+
 #include <QApplication>
 #include <QKeyEvent>
 #include <QVBoxLayout>
@@ -512,12 +514,14 @@ void MainWindow::onDrivingImageClicked() {
         if (m_mediaManager) {
             m_mediaManager->resumePlaybackAfterInterruption();
         }
+        resetDrivingTurnState();
     }, Qt::UniqueConnection);
     connect(m_drivingImageWindow, &QObject::destroyed, this, [this]() {
         m_drivingImageWindow = nullptr;
         if (m_mediaManager) {
             m_mediaManager->resumePlaybackAfterInterruption();
         }
+        resetDrivingTurnState();
     }, Qt::UniqueConnection);
 
     if (m_mediaManager) {

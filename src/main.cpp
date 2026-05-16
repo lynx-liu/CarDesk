@@ -542,6 +542,11 @@ static void updateTurnState(int rTurn, int lTurn, int backup)
     }
 }
 
+void resetDrivingTurnState()
+{
+    updateTurnState(0, 0, 0);
+}
+
 static void toggleDrivingTurnMode(int mode)
 {
     if (mode == 271) {
