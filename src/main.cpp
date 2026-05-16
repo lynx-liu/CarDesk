@@ -120,7 +120,13 @@ protected:
     void paintEvent(QPaintEvent *) override {
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
-        p.fillRect(rect(), Qt::black);
+
+        const QPixmap bgPixmap(":/images/background.png");
+        if (!bgPixmap.isNull()) {
+            p.drawPixmap(rect(), bgPixmap.scaled(rect().size(), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
+        } else {
+            p.fillRect(rect(), Qt::black);
+        }
 
         const QTime current = QTime::currentTime();
         if (m_digitalMode) {
