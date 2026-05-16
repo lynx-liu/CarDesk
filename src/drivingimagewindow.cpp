@@ -137,6 +137,12 @@ void DrivingImageWindow::returnToMainSafely()
                 break;
             }
         }
+        for (QWidget *widget : QApplication::topLevelWidgets()) {
+            if (widget != this && widget->isVisible()) {
+                widget->update();
+                widget->repaint();
+            }
+        }
     });
 }
 
