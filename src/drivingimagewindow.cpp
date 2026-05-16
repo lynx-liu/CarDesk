@@ -246,6 +246,7 @@ void DrivingImageWindow::setupUI()
     m_exitHintLabel->setAlignment(Qt::AlignCenter);
     m_exitHintLabel->setStyleSheet("QLabel{background:rgba(0,0,0,0.45);color:#ffffff;border:1px solid #00A9FF;border-radius:10px;padding:8px 14px;font-size:28px;font-weight:700;}");
     m_exitHintLabel->raise();
+    m_exitHintLabel->hide();
 
     previewLayout->addWidget(previewSurface, 1);
     root->addWidget(previewWrap, 1);
@@ -295,19 +296,7 @@ void DrivingImageWindow::startPreviewIfNeeded()
         return;
     }
 
-    m_exitHintLabel->setText(m_isFullscreen
-                                 ? QStringLiteral("加载中... 单路%1").arg(m_fullscreenCameraId + 1)
-                                 : QStringLiteral("加载中... %1").arg([this]() {
-                                       switch (m_cameraMode) {
-                                       case 270: return QStringLiteral("倒车");
-                                       case 271: return QStringLiteral("左转");
-                                       case 272: return QStringLiteral("右转");
-                                       case 180: return QStringLiteral("行车");
-                                       default:  return QStringLiteral("四路");
-                                       }
-                                   }()));
-    layoutCenterHint();
-    m_exitHintLabel->show();
+    // Startup loading text is not shown here.
 
     if (!m_ahdManager->startCamera()) {
         m_exitHintLabel->setText(QStringLiteral("摄像头启动失败"));
@@ -425,12 +414,7 @@ void DrivingImageWindow::setLoadingState(bool loading)
         return;
     }
 
-    if (loading) {
-        m_exitHintLabel->setText(QStringLiteral("加载中..."));
-        layoutCenterHint();
-        m_exitHintLabel->show();
-        return;
+    if (!loading) {
+        m_exitHintLabel->hide();
     }
-
-    m_exitHintLabel->hide();
 }
