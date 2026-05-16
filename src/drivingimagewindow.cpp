@@ -1,5 +1,7 @@
 #include "drivingimagewindow.h"
 #include "devicedetect.h"
+#include "mainwindow.h"
+#include "mediamanager.h"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -127,6 +129,14 @@ void DrivingImageWindow::returnToMainSafely()
         m_exitInProgress = false;
         m_returning = false;
         emit requestReturnToMain();
+        for (QWidget *widget : QApplication::topLevelWidgets()) {
+            if (auto *main = qobject_cast<MainWindow *>(widget)) {
+                if (main->mediaManager()) {
+                    main->mediaManager()->resumePlaybackAfterInterruption();
+                }
+                break;
+            }
+        }
     });
 }
 
