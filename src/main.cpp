@@ -506,87 +506,26 @@ static bool playTouchClickSound() {
     return true;
 }
 
+static bool s_debugMode = false;
 static void activateDrivingImageMode(int mode);
 static void deactivateDrivingImageMode(int mode);
 
-static int s_turnRTurn = 0;
-static int s_turnLTurn = 0;
-static int s_turnBackup = 0;
-static bool s_turnManualClosed = false;
-static bool s_debugMode = false;
-
 static void updateTurnState(int rTurn, int lTurn, int backup)
 {
-    if (s_turnManualClosed && (backup || rTurn || lTurn)) {
-        if (backup) {
-            activateDrivingImageMode(270);
-        } else if (rTurn) {
-            activateDrivingImageMode(272);
-        } else if (lTurn) {
-            activateDrivingImageMode(271);
+    qDebug() << "updateTurnState: rTurn=" << rTurn << "lTurn=" << lTurn << "backup=" << backup;
+    
+    if (backup) {
+        activateDrivingImageMode(270);
+    } else if (rTurn) {
+        activateDrivingImageMode(272);
+    } else if (lTurn) {
+        activateDrivingImageMode(271);
+    } else {
+        DrivingImageWindow *drive = findDrivingImageWindow();
+        if (drive && drive->isVisible()) {
+            deactivateDrivingImageMode(drive->drivingMode());
         }
-        s_turnManualClosed = false;
     }
-
-    if (backup != s_turnBackup) {
-        if (backup) {
-            activateDrivingImageMode(270);
-        } else {
-            deactivateDrivingImageMode(270);
-        }
-        s_turnBackup = backup;
-    }
-
-    if (rTurn != s_turnRTurn || lTurn != s_turnLTurn) {
-        if (rTurn) {
-            activateDrivingImageMode(272);
-        } else if (lTurn) {
-            activateDrivingImageMode(271);
-        } else {
-            if (s_turnRTurn) {
-                deactivateDrivingImageMode(272);
-            } else if (s_turnLTurn) {
-                deactivateDrivingImageMode(271);
-            }
-        }
-        s_turnRTurn = rTurn;
-        s_turnLTurn = lTurn;
-    }
-}
-
-void resetDrivingTurnState(bool manualClose = false)
-{
-    if (manualClose) {
-        s_turnManualClosed = true;
-    }
-    updateTurnState(0, 0, 0);
-}
-
-static void toggleDrivingTurnMode(int mode)
-{
-    if (mode == 271) {
-        if (s_turnLTurn) {
-            updateTurnState(0, 0, 0);
-        } else {
-            updateTurnState(0, 1, 0);
-        }
-        return;
-    }
-    if (mode == 272) {
-        if (s_turnRTurn) {
-            updateTurnState(0, 0, 0);
-        } else {
-            updateTurnState(1, 0, 0);
-        }
-        return;
-    }
-
-    DrivingImageWindow *drive = findDrivingImageWindow();
-    if (drive && drive->isVisible() && drive->drivingMode() == mode) {
-        deactivateDrivingImageMode(mode);
-        return;
-    }
-    activateDrivingImageMode(mode);
 }
 
 // 挂在 QApplication 上，能拦截所有窗口的 KeyPress，不依赖窗口焦点
@@ -683,7 +622,7 @@ protected:
                 case Qt::Key_VolumeUp:
                     qDebug() << "[GlobalKey] => VolumeUp";
                     if (s_debugMode) {
-                        toggleDrivingTurnMode(272); // 测试：音量加键对应右转
+                        updateTurnState(1, 0, 0); // 测试：音量加键对应右转
                     } else {
                         AppSignals::changeVolume(+1);
                         scheduleVolumeRead(m_overlay);
@@ -692,7 +631,7 @@ protected:
                 case Qt::Key_VolumeDown:
                     qDebug() << "[GlobalKey] => VolumeDown";
                     if (s_debugMode) {
-                        toggleDrivingTurnMode(271); // 测试：音量减键对应左转
+                        updateTurnState(0, 1, 0); // 测试：音量减键对应左转
                     } else {
                         AppSignals::changeVolume(-1);
                         scheduleVolumeRead(m_overlay);
