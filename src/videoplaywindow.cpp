@@ -1392,8 +1392,13 @@ void VideoPlayWindow::keyPressEvent(QKeyEvent *event)
         break;
     case Qt::Key_Back:
     case Qt::Key_Escape:
+#ifdef CAR_DESK_USE_T507_SDK
+        if (m_useSdkPlayer) {
+            releaseSdkPlayer();
+        }
+#endif
         emit requestReturnToList();
-        hide();  // hideEvent 负责 releaseSdkPlayer()
+        hide();
         break;
     default:
         QMainWindow::keyPressEvent(event);
