@@ -143,6 +143,15 @@ void DrivingImageWindow::returnToMainSafely()
                 widget->repaint();
             }
         }
+        QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 20);
+        QTimer::singleShot(60, this, [this]() {
+            for (QWidget *widget : QApplication::topLevelWidgets()) {
+                if (widget != this && widget->isVisible()) {
+                    widget->update();
+                    widget->repaint();
+                }
+            }
+        });
     });
 }
 
@@ -360,6 +369,11 @@ void DrivingImageWindow::keyPressEvent(QKeyEvent *event)
     case Qt::Key_HomePage:
     case Qt::Key_Back:
     case Qt::Key_Escape:
+        if (m_singleClickTimer->isActive()) {
+            m_singleClickTimer->stop();
+            m_lastClickMs = 0;
+        }
+        event->accept();
         returnToMainSafely();
         break;
     default:

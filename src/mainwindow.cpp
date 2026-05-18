@@ -589,25 +589,6 @@ void MainWindow::restorePreviousWindow() {
     this->activateWindow();
 }
 
-void MainWindow::forceMainInterfaceRedraw()
-{
-    // 对所有可见子控件递归同步重绘，覆盖 T507 双缓冲的两张 buffer：
-    // 第一轮写入当前 buffer，第二轮（60ms 后）写入另一张 buffer，
-    // 确保后续任意 buffer 切换时不出现黑屏。
-    auto repaintAll = [this]() {
-        const QList<QWidget *> children = findChildren<QWidget *>();
-        for (QWidget *w : children) {
-            if (w->isVisible())
-                w->repaint();
-        }
-        repaint();
-        QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 30);
-    };
-
-    repaintAll();                             // 立即刷新第一张 buffer
-    QTimer::singleShot(60, this, repaintAll); // 60ms 后刷新第二张 buffer
-}
-
 void MainWindow::ensureTransitionOverlay()
 {
     if (m_transitionOverlay) {

@@ -56,7 +56,6 @@ private:
     void setupWindowSize();
     void setupSystemInfo();
     void applyIndexStyle();
-    void forceMainInterfaceRedraw();
     void ensureTransitionOverlay();
     void showTransitionOverlay();
     void hideTransitionOverlay();
