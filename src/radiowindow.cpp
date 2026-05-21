@@ -944,6 +944,7 @@ void RadioWindow::onToggleFavorite() {
         settings.setValue("radio/fmFavorites", m_fmFavorites);
         settings.setValue("radio/amFavorites", m_amFavorites);
     }
+    rebuildStationStrip();
     updateFrequencyView();
 }
 
@@ -1368,7 +1369,7 @@ void RadioWindow::rebuildStationStrip() {
         return;
     }
     m_stationList->clear();
-    const QStringList stations = m_isFM ? m_fmStations : m_amStations;
+    const QStringList stations = m_isFM ? m_fmFavorites : m_amFavorites;
     for (const QString &s : stations) {
         QListWidgetItem *it = new QListWidgetItem(s, m_stationList);
         it->setSizeHint(QSize(150, 118));
