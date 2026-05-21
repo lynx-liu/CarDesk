@@ -44,6 +44,11 @@ resolve_sdk_env() {
         print_info "Using SDK toolchain: $ARM_TOOLCHAIN ($(basename "$sdk_gxx"))"
     fi
 
+    if [[ -n "${ARM_TOOLCHAIN:-}" ]]; then
+        export PATH="$ARM_TOOLCHAIN:$PATH"
+        print_info "Prepended SDK toolchain to PATH"
+    fi
+
     if [[ -z "${QT_ARM_QMAKE:-}" ]]; then
         # 优先使用 SDK 自带 qmake（与 SDK sysroot/toolchain 版本匹配）
         if [[ -x "$sdk_qmake" ]]; then
@@ -76,8 +81,91 @@ check_dependencies() {
         echo "On Ubuntu: sudo apt-get install build-essential"
         exit 1
     fi
+
+    # 检查 make
+    if ! command -v make &> /dev/null; then
+        print_error "make is not installed. Please install GNU Make."
+        echo "On Ubuntu: sudo apt-get install make"
+        exit 1
+    fi
     
     print_info "All dependencies are available."
+}
+
+build_mupdf_host() {
+    print_info "Building MuPDF for host (PC)..."
+    cd "$PROJECT_DIR/thirdparty/mupdf"
+    if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+        git checkout -- Makefile || true
+    fi
+    rm -rf build/pc-release
+    make -j$(nproc) build=release OUT=build/pc-release libs
+}
+
+build_mupdf_arm() {
+    print_info "Building MuPDF for ARM (T507)..."
+    cd "$PROJECT_DIR/thirdparty/mupdf"
+    if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+        git checkout -- Makefile || true
+    fi
+    rm -rf build/arm64-release
+
+    local cc=""
+    local cxx=""
+    local ld=""
+    local ar=""
+    local ranlib=""
+    if [[ -n "${ARM_TOOLCHAIN:-}" ]]; then
+        if [[ -x "$ARM_TOOLCHAIN/aarch64-buildroot-linux-gnu-gcc" ]]; then
+            cc="$ARM_TOOLCHAIN/aarch64-buildroot-linux-gnu-gcc"
+            cxx="$ARM_TOOLCHAIN/aarch64-buildroot-linux-gnu-g++"
+            ld="$ARM_TOOLCHAIN/aarch64-buildroot-linux-gnu-ld"
+            ar="$ARM_TOOLCHAIN/aarch64-buildroot-linux-gnu-ar"
+            ranlib="$ARM_TOOLCHAIN/aarch64-buildroot-linux-gnu-ranlib"
+        elif [[ -x "$ARM_TOOLCHAIN/aarch64-linux-gnu-gcc" ]]; then
+            cc="$ARM_TOOLCHAIN/aarch64-linux-gnu-gcc"
+            cxx="$ARM_TOOLCHAIN/aarch64-linux-gnu-g++"
+            ld="$ARM_TOOLCHAIN/aarch64-linux-gnu-ld"
+            ar="$ARM_TOOLCHAIN/aarch64-linux-gnu-ar"
+            ranlib="$ARM_TOOLCHAIN/aarch64-linux-gnu-ranlib"
+        fi
+    fi
+
+    if [[ -z "$cc" ]]; then
+        if command -v aarch64-buildroot-linux-gnu-gcc &> /dev/null; then
+            cc=$(command -v aarch64-buildroot-linux-gnu-gcc)
+            cxx=$(command -v aarch64-buildroot-linux-gnu-g++ 2>/dev/null || true)
+            ld=$(command -v aarch64-buildroot-linux-gnu-ld 2>/dev/null || true)
+            ar=$(command -v aarch64-buildroot-linux-gnu-ar 2>/dev/null || true)
+            ranlib=$(command -v aarch64-buildroot-linux-gnu-ranlib 2>/dev/null || true)
+        elif command -v aarch64-linux-gnu-gcc &> /dev/null; then
+            cc=$(command -v aarch64-linux-gnu-gcc)
+            cxx=$(command -v aarch64-linux-gnu-g++ 2>/dev/null || true)
+            ld=$(command -v aarch64-linux-gnu-ld 2>/dev/null || true)
+            ar=$(command -v aarch64-linux-gnu-ar 2>/dev/null || true)
+            ranlib=$(command -v aarch64-linux-gnu-ranlib 2>/dev/null || true)
+        fi
+    fi
+
+    if [[ -z "$cc" ]]; then
+        print_error "ARM compiler not found. Please export ARM_TOOLCHAIN or install an aarch64 cross compiler."
+        exit 1
+    fi
+
+    if [[ -z "$ar" ]]; then
+        ar=$(dirname "$cc")/aarch64-buildroot-linux-gnu-ar
+    fi
+    if [[ -z "$ranlib" ]]; then
+        ranlib=$(dirname "$cc")/aarch64-buildroot-linux-gnu-ranlib
+    fi
+    if [[ -z "$cxx" ]]; then
+        cxx=$(dirname "$cc")/aarch64-linux-gnu-g++
+    fi
+    if [[ -z "$ld" ]]; then
+        ld=$(dirname "$cc")/aarch64-linux-gnu-ld
+    fi
+
+    make -j$(nproc) CC="$cc" CXX="$cxx" LD="$ld" AR="$ar" RANLIB="$ranlib" XCFLAGS="-fPIC" XCXXFLAGS="-fPIC" build=release OUT=build/arm64-release USE_SYSTEM_LIBS=no libs
 }
 
 # 检测目标架构
@@ -107,6 +195,7 @@ clean_build() {
 # 编译 PC 版本
 build_pc() {
     print_info "Building PC version (x86/x64)..."
+    build_mupdf_host
     
     mkdir -p "$BUILD_DIR/pc"
     cd "$BUILD_DIR/pc"
@@ -157,6 +246,9 @@ build_t507() {
         echo "Example: QT_ARM_QMAKE=/usr/local/bin/aarch64-linux-gnu-qmake ./build.sh t507"
         exit 1
     fi
+
+    print_info "Building MuPDF for ARM before T507 build..."
+    build_mupdf_arm
 
     print_info "Using qmake: $arm_qmake"
     "$arm_qmake" -config release CONFIG+=arm64_build DEFINES+="CAR_DESK_DEVICE_CARUNIT CAR_DESK_USE_T507_SDK" "$PROJECT_DIR/CarDesk.pro"

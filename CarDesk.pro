@@ -121,7 +121,8 @@ HEADERS += \
     src/topbarwidget.h \
     src/faultcodedb.h \
     src/mcuserialreader.h \
-    src/backlight.h
+    src/backlight.h \
+    src/mupdfdocument.h
 
 SOURCES += \
     src/main.cpp \
@@ -146,7 +147,8 @@ SOURCES += \
     src/topbarwidget.cpp \
     src/faultcodedb.cpp \
     src/mcuserialreader.cpp \
-    src/backlight.cpp
+    src/backlight.cpp \
+    src/mupdfdocument.cpp
 
 # 资源文件（如果存在）
 exists(resources.qrc) {
@@ -155,6 +157,21 @@ exists(resources.qrc) {
 
 # 包含路径
 INCLUDEPATH += $$PWD/src
+INCLUDEPATH += $$PWD/thirdparty/mupdf/include
+
+contains(CONFIG, arm64_build) {
+    LIBS += -L$$PWD/thirdparty/mupdf/build/arm64-release
+    LIBS += -lmupdf
+    exists($$PWD/thirdparty/mupdf/build/arm64-release/libmupdf-third.a) {
+        LIBS += -lmupdf-third
+    }
+} else {
+    LIBS += -L$$PWD/thirdparty/mupdf/build/pc-release
+    LIBS += -lmupdf
+    exists($$PWD/thirdparty/mupdf/build/pc-release/libmupdf-third.a) {
+        LIBS += -lmupdf-third
+    }
+}
 
 # Linux DBus 支持
 unix {

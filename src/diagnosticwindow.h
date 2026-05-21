@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QMap>
 #include <QVector>
+#include <QString>
 #include "mcuserialreader.h"
 
 class QLabel;
@@ -11,12 +12,14 @@ class QLineEdit;
 class QScrollArea;
 class QStackedWidget;
 class QWidget;
+class MuPdfDocument;
 
 class DiagnosticWindow : public QMainWindow {
     Q_OBJECT
 
 public:
     explicit DiagnosticWindow(QWidget *parent = nullptr);
+    ~DiagnosticWindow() override;
 
 signals:
     void requestReturnToMain();
@@ -52,6 +55,7 @@ private:
     void openPage(int index);
     void appendCharToInput(QLineEdit *target, const QString &text);
     void updatePdfHeader();
+    void updatePdfView();
     void updateSearchResultHeader();
     void showFaultDetail(const QString &controller);
     void populateFaultDetailContent();
@@ -62,10 +66,13 @@ private:
     QLabel *m_pdfHeaderLabel;
     QLabel *m_pdfSearchKeywordLabel;
     QLabel *m_pdfSearchResultLabel;
+    QLabel *m_pdfRenderLabel;
     QLineEdit *m_searchInput;
     QLineEdit *m_jumpInput;
     QWidget *m_pdfBottomNormal;
     QWidget *m_pdfBottomSearch;
+    QString m_currentPdfFilePath;
+    MuPdfDocument *m_pdfDocument;
     int m_pdfPage;
     int m_pdfTotal;
     int m_resultIndex;

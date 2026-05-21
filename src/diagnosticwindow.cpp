@@ -1,4 +1,5 @@
 #include "diagnosticwindow.h"
+#include "mupdfdocument.h"
 #include "pagebgwidget.h"
 #include "devicedetect.h"
 #include "faultcodedb.h"
@@ -35,10 +36,13 @@ DiagnosticWindow::DiagnosticWindow(QWidget *parent)
     , m_pdfHeaderLabel(nullptr)
     , m_pdfSearchKeywordLabel(nullptr)
     , m_pdfSearchResultLabel(nullptr)
+    , m_pdfRenderLabel(nullptr)
     , m_searchInput(nullptr)
     , m_jumpInput(nullptr)
     , m_pdfBottomNormal(nullptr)
     , m_pdfBottomSearch(nullptr)
+    , m_currentPdfFilePath()
+    , m_pdfDocument(new MuPdfDocument())
     , m_pdfPage(1)
     , m_pdfTotal(10)
     , m_resultIndex(1)
@@ -65,6 +69,12 @@ DiagnosticWindow::DiagnosticWindow(QWidget *parent)
             this, &DiagnosticWindow::onFaultDataReceived);
     if (device.getDeviceType() == DeviceDetect::DEVICE_TYPE_CARUNIT)
         m_reader->open(QStringLiteral("/dev/ttyS2"));
+}
+
+DiagnosticWindow::~DiagnosticWindow()
+{
+    delete m_pdfDocument;
+    m_pdfDocument = nullptr;
 }
 
 void DiagnosticWindow::closeEvent(QCloseEvent *event)
@@ -369,7 +379,10 @@ QWidget *DiagnosticWindow::createMaintenanceBookPage()
             "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical{background:transparent;}"
         );
         connect(list, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
-            Q_UNUSED(item);
+            if (!item) {
+                return;
+            }
+            m_currentPdfFilePath = item->data(Qt::UserRole).toString();
             onOpenPdfView();
         });
         bookLayout->addWidget(list);
@@ -384,12 +397,14 @@ QWidget *DiagnosticWindow::createPdfPage()
     page->setStyleSheet("QWidget{background:#525659;}");
 
     auto *paper = new QLabel(page);
-    paper->setGeometry(454, 110, 372, 500);
-    paper->setStyleSheet("QLabel{background:rgba(255,255,255,0.1);}");
+    paper->setGeometry(0, 0, 1280, 720);
+    paper->setStyleSheet("QLabel{background:transparent;}");
 
-    auto *paperImage = new QLabel(paper);
-    paperImage->setGeometry(0, 0, 372, 500);
-    paperImage->setPixmap(QPixmap(":/images/pdf_view.png").scaled(372, 500, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
+    m_pdfRenderLabel = new QLabel(paper);
+    m_pdfRenderLabel->setGeometry(0, 0, 1280, 720);
+    m_pdfRenderLabel->setAlignment(Qt::AlignCenter);
+    m_pdfRenderLabel->setStyleSheet("QLabel{background:transparent;}");
+    m_pdfRenderLabel->setPixmap(QPixmap(":/images/pdf_view.png").scaled(1280, 720, Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
     auto *topOverlay = new QWidget(page);
     topOverlay->setGeometry(0, 0, 1280, 72);
@@ -881,6 +896,16 @@ void DiagnosticWindow::onOpenPdfView()
         m_pdfBottomNormal->show();
         m_pdfBottomSearch->hide();
     }
+
+    if (!m_currentPdfFilePath.isEmpty() && m_pdfDocument) {
+        if (m_pdfDocument->openFile(m_currentPdfFilePath)) {
+            m_pdfPage = 1;
+            m_pdfTotal = qMax(1, m_pdfDocument->pageCount());
+            updatePdfHeader();
+            updatePdfView();
+        }
+    }
+
     openPage(3);
 }
 
@@ -953,6 +978,7 @@ void DiagnosticWindow::onConfirmPdfJump()
 
     m_pdfPage = qMax(1, qMin(page, m_pdfTotal));
     updatePdfHeader();
+    updatePdfView();
     openPage(3);
 }
 
@@ -961,6 +987,7 @@ void DiagnosticWindow::onPrevPage()
     if (m_pdfPage > 1) {
         --m_pdfPage;
         updatePdfHeader();
+        updatePdfView();
     }
 }
 
@@ -969,6 +996,7 @@ void DiagnosticWindow::onNextPage()
     if (m_pdfPage < m_pdfTotal) {
         ++m_pdfPage;
         updatePdfHeader();
+        updatePdfView();
     }
 }
 
@@ -994,6 +1022,20 @@ void DiagnosticWindow::updatePdfHeader()
         return;
     }
     m_pdfHeaderLabel->setText(QStringLiteral("第%1/%2页").arg(m_pdfPage).arg(m_pdfTotal));
+}
+
+void DiagnosticWindow::updatePdfView()
+{
+    if (!m_pdfDocument || !m_pdfRenderLabel || !m_pdfDocument->isOpen()) {
+        return;
+    }
+
+    const int width = m_pdfRenderLabel->width();
+    const int height = m_pdfRenderLabel->height();
+    QImage pageImage = m_pdfDocument->renderPage(m_pdfPage - 1, width, height);
+    if (!pageImage.isNull()) {
+        m_pdfRenderLabel->setPixmap(QPixmap::fromImage(pageImage).scaled(m_pdfRenderLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    }
 }
 
 void DiagnosticWindow::updateSearchResultHeader()
