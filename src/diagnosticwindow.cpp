@@ -19,9 +19,15 @@
 #include <QPushButton>
 #include <QScreen>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QStackedWidget>
 #include <QTime>
 #include <QVBoxLayout>
+#include <QDir>
+#include <QFileInfo>
+#include <QListWidget>
+#include <QListWidgetItem>
+#include <algorithm>
 
 DiagnosticWindow::DiagnosticWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -291,45 +297,82 @@ QWidget *DiagnosticWindow::createMaintenanceBookPage()
     auto *bookWrap = new QWidget(page);
     // CSS .diagnostic_maintenance_book { width:944; margin:24px auto }
     // => x=(1280-944)/2=168, y=topbar(82)+24=106
-    // 8 rows × 68px + 7 gaps × 2px = 558px
     bookWrap->setGeometry(168, 106, 944, 558);
     auto *bookLayout = new QVBoxLayout(bookWrap);
     bookLayout->setContentsMargins(0, 0, 0, 0);
-    bookLayout->setSpacing(2);
+    bookLayout->setSpacing(0);
 
-    const QStringList books = {
-        QStringLiteral("整车|第1册 共13册"),
-        QStringLiteral("发动机|第2册 共13册"),
-        QStringLiteral("发动机附件|第3册 共13册"),
-        QStringLiteral("电控|第4册 共13册"),
-        QStringLiteral("电器|第5册 共13册"),
-        QStringLiteral("整车|第6册 共13册"),
-        QStringLiteral("整车|第7册 共13册"),
-        QStringLiteral("整车|第8册 共13册")
-    };
-
-    for (const QString &row : books) {
-        const QStringList parts = row.split('|');
-        auto *line = new QPushButton(bookWrap);
-        line->setCursor(Qt::PointingHandCursor);
-        line->setFixedHeight(68);
-        line->setStyleSheet(
-            "QPushButton{border:none;background:rgba(255,255,255,0.1);text-align:left;padding:0 24px;}"
-            "QPushButton:hover{background:rgba(0,104,255,0.35);}"
+    const QDir docDir(QStringLiteral("/usr/share/doc"));
+    QFileInfoList entries = docDir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot,
+                                                  QDir::Name | QDir::DirsFirst);
+    if (entries.isEmpty()) {
+        auto *hint = new QLabel(QStringLiteral("未找到维护资料文件。\n请检查 /usr/share/doc 目录是否存在或是否包含文件。"), bookWrap);
+        hint->setAlignment(Qt::AlignCenter);
+        hint->setWordWrap(true);
+        hint->setStyleSheet("QLabel{color:#aaa;font-size:28px;background:transparent;}");
+        bookLayout->addStretch();
+        bookLayout->addWidget(hint);
+        bookLayout->addStretch();
+    } else {
+        auto *list = new QListWidget(bookWrap);
+        list->setFrameShape(QFrame::NoFrame);
+        list->setFocusPolicy(Qt::NoFocus);
+        list->setStyleSheet(
+            "QListWidget{background:transparent;border:none;color:#fff;font-size:24px;outline:none;}"
+            "QListWidget::item{height:68px;background:rgba(255,255,255,0.1);margin:0 0 2px 0;padding:0 24px;text-align:left;outline:none;}"
+            "QListWidget::item:hover{background:rgba(0,104,255,0.10);color:#dff9ff;}"
+            "QListWidget::item:selected{background:rgba(0,104,255,0.35);color:#fff;outline:none;}"
         );
-        auto *lineLayout = new QHBoxLayout(line);
-        lineLayout->setContentsMargins(24, 0, 24, 0);
+        list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+        list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        list->setContentsMargins(0, 0, 0, 0);
+        list->setSpacing(0);
 
-        auto *left = new QLabel(parts.value(0), line);
-        left->setStyleSheet("QLabel{color:#fff;font-size:24px;background:transparent;}");
-        auto *right = new QLabel(parts.value(1), line);
-        right->setStyleSheet("QLabel{color:#fff;font-size:24px;background:transparent;}");
-        lineLayout->addWidget(left);
-        lineLayout->addStretch();
-        lineLayout->addWidget(right);
-
-        connect(line, &QPushButton::clicked, this, &DiagnosticWindow::onOpenPdfView);
-        bookLayout->addWidget(line);
+        std::sort(entries.begin(), entries.end(), [](const QFileInfo &a, const QFileInfo &b) {
+            const auto parseNumericPrefix = [](const QString &name, int &num, QString &rest) {
+                int i = 0;
+                while (i < name.size() && name.at(i).isDigit())
+                    ++i;
+                if (i == 0)
+                    return false;
+                bool ok = false;
+                num = name.left(i).toInt(&ok);
+                if (!ok)
+                    return false;
+                rest = name.mid(i);
+                return true;
+            };
+            int aNum = 0, bNum = 0;
+            QString aRest, bRest;
+            const bool aHas = parseNumericPrefix(a.fileName(), aNum, aRest);
+            const bool bHas = parseNumericPrefix(b.fileName(), bNum, bRest);
+            if (aHas && bHas) {
+                if (aNum != bNum)
+                    return aNum < bNum;
+                return aRest.compare(bRest, Qt::CaseInsensitive) < 0;
+            }
+            if (aHas != bHas)
+                return aHas;
+            return a.fileName().compare(b.fileName(), Qt::CaseInsensitive) < 0;
+        });
+        for (const QFileInfo &info : entries) {
+            QListWidgetItem *item = new QListWidgetItem(info.fileName(), list);
+            item->setData(Qt::UserRole, info.absoluteFilePath());
+            item->setSizeHint(QSize(944, 68));
+        }
+        list->verticalScrollBar()->setStyleSheet(
+            "QScrollBar:vertical{width:48px;background:transparent;border-radius:6px;margin:0;padding:0;}"
+            "QScrollBar::groove:vertical{background:rgba(0,104,255,0.10);border-radius:3px;margin:0px 18px;padding:0;}"
+            "QScrollBar::handle:vertical{background:#0068FF;border-radius:3px;min-height:60px;margin:3px 18px;}"
+            "QScrollBar::handle:vertical:hover{background:#00faff;}"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical{height:0;background:none;border:none;}"
+            "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical{background:transparent;}"
+        );
+        connect(list, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
+            Q_UNUSED(item);
+            onOpenPdfView();
+        });
+        bookLayout->addWidget(list);
     }
 
     return page;
