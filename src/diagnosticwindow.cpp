@@ -608,7 +608,9 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
 
     m_searchInput = new QLineEdit(inputWrap);
     m_searchInput->setGeometry(0, 0, 816, 72);
-    m_searchInput->setStyleSheet("QLineEdit{border:none;background:transparent;color:#fff;font-size:48px;padding:0 24px;}");
+    m_searchInput->setStyleSheet(
+        "QLineEdit{border:none;background:transparent;color:#fff;font-size:48px;padding:0 24px;}"
+        "QLineEdit::selection{background:transparent;color:#fff;text-decoration:underline;}");
     m_searchInput->setText(QStringLiteral("维修"));
 
     auto *candidatePane = new QWidget(page);
@@ -670,22 +672,24 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
     pageLineLeft->setFrameShadow(QFrame::Plain);
     pageLineLeft->setLineWidth(1);
     pageLineLeft->setMidLineWidth(0);
-    pageLineLeft->setFixedSize(1, 20);
-    pageLineLeft->setStyleSheet("background:#fff;border:none;");
+    pageLineLeft->setFixedSize(1, 40);
+    pageLineLeft->setStyleSheet("background:#0068FF;border:none;");
 
     auto *pageLineRight = new QFrame(candidatePane);
     pageLineRight->setFrameShape(QFrame::VLine);
     pageLineRight->setFrameShadow(QFrame::Plain);
     pageLineRight->setLineWidth(1);
     pageLineRight->setMidLineWidth(0);
-    pageLineRight->setFixedSize(1, 20);
-    pageLineRight->setStyleSheet("background:#fff;border:none;");
+    pageLineRight->setFixedSize(1, 40);
+    pageLineRight->setStyleSheet("background:#0068FF;border:none;");
 
     auto *pageLabelWrap = new QWidget(candidatePane);
+    pageLabelWrap->setFixedHeight(40);
     pageLabelWrap->setStyleSheet("background:transparent;border:none;");
     auto *pageLabelLayout = new QHBoxLayout(pageLabelWrap);
     pageLabelLayout->setContentsMargins(0, 0, 0, 0);
     pageLabelLayout->setSpacing(6);
+    pageLabelLayout->setAlignment(Qt::AlignVCenter);
     pageLabelLayout->addWidget(pageLineLeft, 0, Qt::AlignVCenter);
     pageLabelLayout->addWidget(candidatePageLabel, 0, Qt::AlignVCenter);
     pageLabelLayout->addWidget(pageLineRight, 0, Qt::AlignVCenter);
@@ -695,9 +699,10 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
     auto *pagerLayout = new QVBoxLayout(pagerWrap);
     pagerLayout->setContentsMargins(0, 0, 0, 0);
     pagerLayout->setSpacing(2);
-    pagerLayout->setAlignment(Qt::AlignVCenter);
+    pagerLayout->addStretch(1);
     pagerLayout->addWidget(prevCandidatePage, 0, Qt::AlignHCenter);
     pagerLayout->addWidget(nextCandidatePage, 0, Qt::AlignHCenter);
+    pagerLayout->addStretch(1);
 
     auto *pagerOuterWrap = new QWidget(candidatePane);
     pagerOuterWrap->setStyleSheet("background:transparent;border:none;");
@@ -724,6 +729,18 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
         return m_searchInput->text().mid(startPos, *compositionLength);
     };
 
+    const auto updateCompositionSelection = [this, compositionLength]() {
+        if (*compositionLength > 0) {
+            const int pos = m_searchInput->cursorPosition();
+            const int startPos = pos - *compositionLength;
+            if (startPos >= 0) {
+                m_searchInput->setSelection(startPos, *compositionLength);
+                return;
+            }
+        }
+        m_searchInput->deselect();
+    };
+
     const QString candidateButtonStyle =
         "QPushButton{border:none;border-right:1px solid #0068FF;background:transparent;color:#fff;font-size:24px; padding:0 8px;}"
         "QPushButton:hover{color:#00FAFF;}";
@@ -731,7 +748,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
         "QPushButton{border:none;background:transparent;color:#fff;font-size:24px; padding:0 8px;}"
         "QPushButton:hover{color:#00FAFF;}";
 
-    const auto refreshCandidateDisplay = [state, candidatePageLabel, prevCandidatePage, nextCandidatePage, candidateButtonStyle, candidateButtonLastStyle, candidatesPerPage](const QString &pinyin) {
+    const auto refreshCandidateDisplay = [state, candidatePageLabel, prevCandidatePage, nextCandidatePage, candidateButtonStyle, candidateButtonLastStyle, candidatesPerPage, updateCompositionSelection](const QString &pinyin) {
         const QString normalized = QString(pinyin).remove(QRegExp("\\d")).toLower();
         state->currentCandidates = pinyin.isEmpty() ? QStringList() : PinyinDictionary::candidates(normalized);
         const int pageCount = qMax(1, (state->currentCandidates.size() + candidatesPerPage - 1) / candidatesPerPage);
@@ -756,10 +773,11 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
         candidatePageLabel->setAlignment(Qt::AlignCenter);
         prevCandidatePage->setEnabled(state->currentCandidatePage > 0);
         nextCandidatePage->setEnabled(state->currentCandidatePage + 1 < pageCount);
+        updateCompositionSelection();
     };
 
     for (auto *btn : qAsConst(state->candidateButtons)) {
-        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength](void) {
+        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, updateCompositionSelection](void) {
             const QString candidate = btn->text();
             if (candidate.isEmpty() || *compositionLength <= 0) {
                 return;
@@ -773,6 +791,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
             m_searchInput->setFocus();
             *compositionLength = 0;
             refreshCandidateDisplay(QString());
+            updateCompositionSelection();
         });
     }
 
@@ -804,15 +823,15 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
     };
 
     const QString normalKeyStyle =
-        "QPushButton{border:none;background:rgba(255,255,255,0.1);color:#fff;font-size:26px;outline:none;}"
-        "QPushButton:hover{background:rgba(255,255,255,0.1);border:none;color:#00FAFF;}"
-        "QPushButton:pressed{background:rgba(255,255,255,0.1);border:none;color:#fff;}"
-        "QPushButton:focus{background:rgba(255,255,255,0.1);border:none;color:#fff;}";
+        "QPushButton{border:1px solid #0068FF;background:rgba(255,255,255,0.1);color:#fff;font-size:26px;outline:none;}"
+        "QPushButton:hover{border-color:#00FAFF;color:#00FAFF;}"
+        "QPushButton:pressed{background:rgba(255,255,255,0.1);border-color:#0068FF;color:#fff;}"
+        "QPushButton:focus{background:rgba(255,255,255,0.1);border-color:#0068FF;color:#fff;}";
     const QString shiftOnStyle =
-        "QPushButton{border:none;background:rgba(0,170,255,0.2);color:#fff;font-size:26px;outline:none;}"
-        "QPushButton:hover{background:rgba(0,170,255,0.2);border:none;color:#00FAFF;}"
-        "QPushButton:pressed{background:rgba(0,170,255,0.2);border:none;color:#fff;}"
-        "QPushButton:focus{background:rgba(0,170,255,0.2);border:none;color:#fff;}";
+        "QPushButton{border:1px solid #00FAFF;background:rgba(0,170,255,0.2);color:#fff;font-size:26px;outline:none;}"
+        "QPushButton:hover{border-color:#00FAFF;color:#00FAFF;}"
+        "QPushButton:pressed{background:rgba(0,170,255,0.2);border-color:#00FAFF;color:#fff;}"
+        "QPushButton:focus{background:rgba(0,170,255,0.2);border-color:#00FAFF;color:#fff;}";
 
     const auto insertTextAtCursor = [this](const QString &text) {
         const int pos = m_searchInput->cursorPosition();
@@ -833,7 +852,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
         btn->setFocusPolicy(Qt::NoFocus);
         btn->setStyleSheet(normalKeyStyle);
 
-        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, shiftMode, currentComposition, punctuationButtons, punctuationCn, punctuationEn, insertTextAtCursor, normalKeyStyle, shiftOnStyle, bottomKeys](void) {
+        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, shiftMode, currentComposition, punctuationButtons, punctuationCn, punctuationEn, insertTextAtCursor, normalKeyStyle, shiftOnStyle, bottomKeys, updateCompositionSelection](void) {
             const QString key = btn->text();
             if (key == QStringLiteral("Shift")) {
                 *shiftMode = !*shiftMode;
@@ -873,10 +892,10 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
                 if (*compositionLength > 0) {
                     *compositionLength = 0;
                     refreshCandidateDisplay(QString());
+                    updateCompositionSelection();
+                    return;
                 }
                 insertTextAtCursor(QStringLiteral(" "));
-                btn->setStyleSheet(normalKeyStyle);
-                btn->clearFocus();
                 return;
             }
 
@@ -884,10 +903,9 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
                 if (*compositionLength > 0) {
                     *compositionLength = 0;
                     refreshCandidateDisplay(QString());
+                    updateCompositionSelection();
                 }
                 insertTextAtCursor(key);
-                btn->setStyleSheet(normalKeyStyle);
-                btn->clearFocus();
                 return;
             }
 
@@ -898,8 +916,6 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
                         refreshCandidateDisplay(QString());
                     }
                     insertTextAtCursor(key.toUpper());
-                    btn->setStyleSheet(normalKeyStyle);
-                    btn->clearFocus();
                     return;
                 }
                 if (*compositionLength == 0) {
@@ -909,8 +925,6 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
                 }
                 insertTextAtCursor(key.toLower());
                 refreshCandidateDisplay(currentComposition());
-                btn->setStyleSheet(normalKeyStyle);
-                btn->clearFocus();
                 return;
             }
         });
@@ -940,7 +954,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
         btn->setDefault(false);
         btn->setFocusPolicy(Qt::NoFocus);
         btn->setStyleSheet(normalKeyStyle);
-        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, shiftMode, currentComposition, punctuationButtons, punctuationCn, punctuationEn, insertTextAtCursor, normalKeyStyle, shiftOnStyle, bottomKeys](void) {
+        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, shiftMode, currentComposition, punctuationButtons, punctuationCn, punctuationEn, insertTextAtCursor, normalKeyStyle, shiftOnStyle, bottomKeys, updateCompositionSelection](void) {
             const QString key = btn->text();
             if (key == QStringLiteral("Shift")) {
                 *shiftMode = !*shiftMode;
@@ -970,6 +984,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
                             *compositionLength = 0;
                         }
                         refreshCandidateDisplay(currentComposition());
+                        updateCompositionSelection();
                     }
                 }
                 return;
@@ -978,6 +993,10 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
                 if (*compositionLength > 0) {
                     *compositionLength = 0;
                     refreshCandidateDisplay(QString());
+                    updateCompositionSelection();
+                    btn->setStyleSheet(normalKeyStyle);
+                    btn->clearFocus();
+                    return;
                 }
                 insertTextAtCursor(QStringLiteral(" "));
                 btn->setStyleSheet(normalKeyStyle);
@@ -990,6 +1009,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
                     if (*compositionLength > 0) {
                         *compositionLength = 0;
                         refreshCandidateDisplay(QString());
+                        updateCompositionSelection();
                     }
                     insertTextAtCursor(key.toUpper());
                     btn->setStyleSheet(normalKeyStyle);
@@ -1003,6 +1023,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
                 }
                 insertTextAtCursor(key.toLower());
                 refreshCandidateDisplay(currentComposition());
+                updateCompositionSelection();
                 btn->setStyleSheet(normalKeyStyle);
                 btn->clearFocus();
                 return;
@@ -1021,10 +1042,11 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
         btn->setFocusPolicy(Qt::NoFocus);
         btn->setStyleSheet(normalKeyStyle);
         punctuationButtons->append(btn);
-        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, currentComposition, insertTextAtCursor](void) {
+        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, currentComposition, insertTextAtCursor, updateCompositionSelection](void) {
             if (*compositionLength > 0) {
                 *compositionLength = 0;
                 refreshCandidateDisplay(QString());
+                updateCompositionSelection();
             }
             insertTextAtCursor(btn->text());
         });
