@@ -603,22 +603,23 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
     connect(backBtn, &QPushButton::clicked, this, [this]() { openPage(3); });
 
     auto *inputWrap = new QWidget(page);
-    inputWrap->setGeometry(232, 124, 816, 72);
+    inputWrap->setGeometry(172, 124, 1004, 72);
     inputWrap->setStyleSheet("QWidget{border:1px solid #0068FF;background:rgba(255,255,255,0.1);}");
 
     m_searchInput = new QLineEdit(inputWrap);
-    m_searchInput->setGeometry(0, 0, 816, 72);
+    m_searchInput->setGeometry(0, 0, 1004, 72);
     m_searchInput->setStyleSheet(
         "QLineEdit{border:none;background:transparent;color:#fff;font-size:48px;padding:0 24px;}"
         "QLineEdit::selection{background:transparent;color:#fff;text-decoration:underline;}");
-    m_searchInput->setText(QStringLiteral("维修"));
+    m_searchInput->setText(QString());
 
     auto *candidatePane = new QWidget(page);
-    candidatePane->setGeometry(232, 196, 816, 56);
+    candidatePane->setGeometry(172, 196, 1004, 76);
     candidatePane->setStyleSheet("QWidget{border:1px solid #0068FF;background:rgba(0,0,0,0.15);}");
     auto *candidateLayout = new QHBoxLayout(candidatePane);
-    candidateLayout->setContentsMargins(8, 8, 8, 8);
+    candidateLayout->setContentsMargins(8, 0, 8, 0);
     candidateLayout->setSpacing(4);
+    candidateLayout->setAlignment(Qt::AlignVCenter);
 
     struct PdfSearchState {
         QStringList currentCandidates;
@@ -631,19 +632,21 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
     auto punctuationButtons = QSharedPointer<QVector<QPushButton *>>::create();
     const QStringList punctuationCn = {
         QStringLiteral("，"), QStringLiteral("。"), QStringLiteral("？"), QStringLiteral("！"),
-        QStringLiteral("；"), QStringLiteral("："), QStringLiteral("（"), QStringLiteral("）")
+        QStringLiteral("；"), QStringLiteral("："), QStringLiteral("（"), QStringLiteral("）"),
+        QStringLiteral("《"), QStringLiteral("》")
     };
     const QStringList punctuationEn = {
         QStringLiteral(","), QStringLiteral("."), QStringLiteral("?"), QStringLiteral("!"),
-        QStringLiteral(";"), QStringLiteral(":"), QStringLiteral("("), QStringLiteral(")")
+        QStringLiteral(";"), QStringLiteral(":"), QStringLiteral("("), QStringLiteral(")"),
+        QStringLiteral("<"), QStringLiteral(">")
     };
     const int candidatesPerPage = 10;
 
     for (int i = 0; i < candidatesPerPage; ++i) {
         auto *btn = new QPushButton(QString(), candidatePane);
-        btn->setFixedSize(60, 44);
+        btn->setFixedSize(60, 64);
         btn->setCursor(Qt::PointingHandCursor);
-        btn->setStyleSheet("QPushButton{border:none;background:transparent;color:#fff;font-size:24px;padding:0 4px;}QPushButton:hover{color:#00FAFF;}");
+        btn->setStyleSheet("QPushButton{border:none;border-right:1px solid #0068FF;background:transparent;color:#fff;font-size:24px;padding:0 8px;}QPushButton:hover{color:#00FAFF;}");
         btn->hide();
         candidateLayout->addWidget(btn);
         state->candidateButtons.append(btn);
@@ -672,7 +675,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
     pageLineLeft->setFrameShadow(QFrame::Plain);
     pageLineLeft->setLineWidth(1);
     pageLineLeft->setMidLineWidth(0);
-    pageLineLeft->setFixedSize(1, 40);
+    pageLineLeft->setFixedSize(1, 64);
     pageLineLeft->setStyleSheet("background:#0068FF;border:none;");
 
     auto *pageLineRight = new QFrame(candidatePane);
@@ -680,11 +683,11 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
     pageLineRight->setFrameShadow(QFrame::Plain);
     pageLineRight->setLineWidth(1);
     pageLineRight->setMidLineWidth(0);
-    pageLineRight->setFixedSize(1, 40);
+    pageLineRight->setFixedSize(1, 64);
     pageLineRight->setStyleSheet("background:#0068FF;border:none;");
 
     auto *pageLabelWrap = new QWidget(candidatePane);
-    pageLabelWrap->setFixedHeight(40);
+    pageLabelWrap->setFixedHeight(64);
     pageLabelWrap->setStyleSheet("background:transparent;border:none;");
     auto *pageLabelLayout = new QHBoxLayout(pageLabelWrap);
     pageLabelLayout->setContentsMargins(0, 0, 0, 0);
@@ -806,11 +809,11 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
     });
 
     auto *keyPadWrap = new QWidget(page);
-    keyPadWrap->setGeometry(232, 274, 816, 260);
+    keyPadWrap->setGeometry(172, 304, 1004, 320);
     auto *grid = new QGridLayout(keyPadWrap);
     grid->setContentsMargins(0, 0, 0, 0);
-    grid->setHorizontalSpacing(5);
-    grid->setVerticalSpacing(5);
+    grid->setHorizontalSpacing(6);
+    grid->setVerticalSpacing(6);
 
     const QStringList keys = {
         QStringLiteral("1"), QStringLiteral("2"), QStringLiteral("3"), QStringLiteral("4"), QStringLiteral("5"), QStringLiteral("6"), QStringLiteral("7"), QStringLiteral("8"), QStringLiteral("9"), QStringLiteral("0"),
@@ -844,7 +847,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
 
     for (int i = 0; i < keys.size(); ++i) {
         auto *btn = new QPushButton(keys.at(i), keyPadWrap);
-        btn->setFixedSize(72, 44);
+        btn->setFixedSize(95, 54);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setFlat(true);
         btn->setAutoDefault(false);
@@ -856,8 +859,12 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
             const QString key = btn->text();
             if (key == QStringLiteral("Shift")) {
                 *shiftMode = !*shiftMode;
-                // 只在按下时高亮，松开恢复普通
-                btn->setStyleSheet(*shiftMode ? shiftOnStyle : normalKeyStyle);
+                if (*shiftMode) {
+                    btn->setStyleSheet(shiftOnStyle);
+                } else {
+                    btn->setStyleSheet(normalKeyStyle);
+                    btn->clearFocus();
+                }
                 for (QPushButton *pun : *punctuationButtons) {
                     const int index = punctuationButtons->indexOf(pun);
                     if (index >= 0 && index < punctuationCn.size()) {
@@ -939,7 +946,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
     }
 
     auto *confirmKey = new QPushButton(QStringLiteral("确认"), keyPadWrap);
-    confirmKey->setFixedSize(72, 44);
+    confirmKey->setFixedSize(95, 54);
     confirmKey->setCursor(Qt::PointingHandCursor);
     confirmKey->setStyleSheet(normalKeyStyle);
     connect(confirmKey, &QPushButton::clicked, this, &DiagnosticWindow::onConfirmPdfSearch);
@@ -947,7 +954,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
 
     for (int i = 0; i < bottomKeys.size(); ++i) {
         auto *btn = new QPushButton(bottomKeys.at(i), keyPadWrap);
-        btn->setFixedSize(72, 44);
+        btn->setFixedSize(95, 54);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setFlat(true);
         btn->setAutoDefault(false);
@@ -958,8 +965,12 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
             const QString key = btn->text();
             if (key == QStringLiteral("Shift")) {
                 *shiftMode = !*shiftMode;
-                // 只在按下时高亮，松开恢复普通
-                btn->setStyleSheet(*shiftMode ? shiftOnStyle : normalKeyStyle);
+                if (*shiftMode) {
+                    btn->setStyleSheet(shiftOnStyle);
+                } else {
+                    btn->setStyleSheet(normalKeyStyle);
+                    btn->clearFocus();
+                }
                 for (QPushButton *pun : *punctuationButtons) {
                     const int index = punctuationButtons->indexOf(pun);
                     if (index >= 0 && index < punctuationCn.size()) {
@@ -1034,7 +1045,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
 
     for (int i = 0; i < punctuationCn.size(); ++i) {
         auto *btn = new QPushButton(punctuationCn.at(i), keyPadWrap);
-        btn->setFixedSize(72, 44);
+        btn->setFixedSize(95, 54);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setFlat(true);
         btn->setAutoDefault(false);
