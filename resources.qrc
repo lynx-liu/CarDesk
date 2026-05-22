@@ -168,4 +168,7 @@
         <file alias="butt_video_back_up.png">ui/images/butt_video_back_up.png</file>
         <file alias="butt_video_back_down.png">ui/images/butt_video_back_down.png</file>
     </qresource>
+    <qresource prefix="/pinyin">
+        <file alias="pinyin_table.txt">src/pinyin_table.txt</file>
+    </qresource>
 </RCC>

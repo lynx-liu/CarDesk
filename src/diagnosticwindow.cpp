@@ -6,6 +6,7 @@
 #include "mcuserialreader.h"
 #include "topbarwidget.h"
 #include "appsignals.h"
+#include "pinyin_dictionary.h"
 
 #include <QApplication>
 #include <QKeyEvent>
@@ -25,8 +26,10 @@
 #include <QTime>
 #include <QVBoxLayout>
 #include <QDir>
+#include <QRegExp>
 #include <QFileInfo>
 #include <QListWidget>
+#include <QSharedPointer>
 #include <QListWidgetItem>
 #include <algorithm>
 
@@ -474,7 +477,7 @@ QWidget *DiagnosticWindow::createPdfPage()
         "QPushButton{border:none;background:transparent url(:/images/butt_radio_search_up.png) no-repeat center center;outline:none;}"
         "QPushButton:hover{background:transparent url(:/images/butt_radio_search_down.png) no-repeat center center;outline:none;}"
         "QPushButton:pressed{background:transparent url(:/images/butt_radio_search_down.png) no-repeat center center;outline:none;border:none;}"
-        "QPushButton:focus{outline:none;border:none;}"
+        "QPushButton:focus{outline:none;}"
     );
     connect(searchBtn, &QPushButton::clicked, this, &DiagnosticWindow::onOpenPdfSearchPage);
 
@@ -600,7 +603,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
     connect(backBtn, &QPushButton::clicked, this, [this]() { openPage(3); });
 
     auto *inputWrap = new QWidget(page);
-    inputWrap->setGeometry(232, 182, 816, 72);
+    inputWrap->setGeometry(232, 124, 816, 72);
     inputWrap->setStyleSheet("QWidget{border:1px solid #0068FF;background:rgba(255,255,255,0.1);}");
 
     m_searchInput = new QLineEdit(inputWrap);
@@ -608,77 +611,430 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
     m_searchInput->setStyleSheet("QLineEdit{border:none;background:transparent;color:#fff;font-size:48px;padding:0 24px;}");
     m_searchInput->setText(QStringLiteral("维修"));
 
-    auto *selectWrap = new QWidget(page);
-    selectWrap->setGeometry(232, 262, 816, 72);
-    selectWrap->setStyleSheet("QWidget{border:1px solid #0068FF;background:transparent;}");
+    auto *candidatePane = new QWidget(page);
+    candidatePane->setGeometry(232, 196, 816, 56);
+    candidatePane->setStyleSheet("QWidget{border:1px solid #0068FF;background:rgba(0,0,0,0.15);}");
+    auto *candidateLayout = new QHBoxLayout(candidatePane);
+    candidateLayout->setContentsMargins(8, 8, 8, 8);
+    candidateLayout->setSpacing(4);
 
-    const QStringList candidates = {QStringLiteral("一"), QStringLiteral("厂"), QStringLiteral("大"), QStringLiteral("木"), QStringLiteral("林")};
-    for (int i = 0; i < candidates.size(); ++i) {
-        auto *btn = new QPushButton(candidates.at(i), selectWrap);
-        btn->setGeometry(24 + i * 68, 1, 68, 68);
+    struct PdfSearchState {
+        QStringList currentCandidates;
+        int currentCandidatePage = 0;
+        QVector<QPushButton *> candidateButtons;
+    };
+    auto state = QSharedPointer<PdfSearchState>::create();
+    auto compositionLength = QSharedPointer<int>::create(0);
+    auto shiftMode = QSharedPointer<bool>::create(false);
+    auto punctuationButtons = QSharedPointer<QVector<QPushButton *>>::create();
+    const QStringList punctuationCn = {
+        QStringLiteral("，"), QStringLiteral("。"), QStringLiteral("？"), QStringLiteral("！"),
+        QStringLiteral("；"), QStringLiteral("："), QStringLiteral("（"), QStringLiteral("）")
+    };
+    const QStringList punctuationEn = {
+        QStringLiteral(","), QStringLiteral("."), QStringLiteral("?"), QStringLiteral("!"),
+        QStringLiteral(";"), QStringLiteral(":"), QStringLiteral("("), QStringLiteral(")")
+    };
+    const int candidatesPerPage = 10;
+
+    for (int i = 0; i < candidatesPerPage; ++i) {
+        auto *btn = new QPushButton(QString(), candidatePane);
+        btn->setFixedSize(60, 44);
         btn->setCursor(Qt::PointingHandCursor);
-        btn->setStyleSheet(
-            i == 0
-                ? "QPushButton{border:none;background:#00FAFF;color:#fff;font-size:48px;}"
-                : "QPushButton{border:none;background:transparent;color:#fff;font-size:48px;}QPushButton:hover{color:#00FAFF;}"
-        );
-        connect(btn, &QPushButton::clicked, this, [this, btn]() {
-            appendCharToInput(m_searchInput, btn->text());
+        btn->setStyleSheet("QPushButton{border:none;background:transparent;color:#fff;font-size:24px;padding:0 4px;}QPushButton:hover{color:#00FAFF;}");
+        btn->hide();
+        candidateLayout->addWidget(btn);
+        state->candidateButtons.append(btn);
+    }
+
+    const QString pagerButtonStyle = "QPushButton{border:none;outline:none;background:transparent;color:#fff;font-size:20px;padding:0;margin:0;}QPushButton:hover{color:#00FAFF;}QPushButton:pressed{background:transparent;border:none;}QPushButton:focus{outline:none;border:none;}";
+    auto *prevCandidatePage = new QPushButton(QStringLiteral("▲"), candidatePane);
+    prevCandidatePage->setFixedSize(28, 28);
+    prevCandidatePage->setCursor(Qt::PointingHandCursor);
+    prevCandidatePage->setFlat(true);
+    prevCandidatePage->setFocusPolicy(Qt::NoFocus);
+    prevCandidatePage->setStyleSheet(pagerButtonStyle);
+    auto *nextCandidatePage = new QPushButton(QStringLiteral("▼"), candidatePane);
+    nextCandidatePage->setFixedSize(28, 28);
+    nextCandidatePage->setCursor(Qt::PointingHandCursor);
+    nextCandidatePage->setFlat(true);
+    nextCandidatePage->setFocusPolicy(Qt::NoFocus);
+    nextCandidatePage->setStyleSheet(pagerButtonStyle);
+    auto *candidatePageLabel = new QLabel(QStringLiteral("1/1"), candidatePane);
+    candidatePageLabel->setFixedSize(48, 28);
+    candidatePageLabel->setAlignment(Qt::AlignCenter);
+    candidatePageLabel->setStyleSheet("QLabel{color:#fff;font-size:20px;background:transparent;border:none;}");
+
+    auto *pageLineLeft = new QFrame(candidatePane);
+    pageLineLeft->setFrameShape(QFrame::VLine);
+    pageLineLeft->setFrameShadow(QFrame::Plain);
+    pageLineLeft->setLineWidth(1);
+    pageLineLeft->setMidLineWidth(0);
+    pageLineLeft->setFixedSize(1, 20);
+    pageLineLeft->setStyleSheet("background:#fff;border:none;");
+
+    auto *pageLineRight = new QFrame(candidatePane);
+    pageLineRight->setFrameShape(QFrame::VLine);
+    pageLineRight->setFrameShadow(QFrame::Plain);
+    pageLineRight->setLineWidth(1);
+    pageLineRight->setMidLineWidth(0);
+    pageLineRight->setFixedSize(1, 20);
+    pageLineRight->setStyleSheet("background:#fff;border:none;");
+
+    auto *pageLabelWrap = new QWidget(candidatePane);
+    pageLabelWrap->setStyleSheet("background:transparent;border:none;");
+    auto *pageLabelLayout = new QHBoxLayout(pageLabelWrap);
+    pageLabelLayout->setContentsMargins(0, 0, 0, 0);
+    pageLabelLayout->setSpacing(6);
+    pageLabelLayout->addWidget(pageLineLeft, 0, Qt::AlignVCenter);
+    pageLabelLayout->addWidget(candidatePageLabel, 0, Qt::AlignVCenter);
+    pageLabelLayout->addWidget(pageLineRight, 0, Qt::AlignVCenter);
+
+    auto *pagerWrap = new QWidget(candidatePane);
+    pagerWrap->setStyleSheet("background:transparent;border:none;");
+    auto *pagerLayout = new QVBoxLayout(pagerWrap);
+    pagerLayout->setContentsMargins(0, 0, 0, 0);
+    pagerLayout->setSpacing(2);
+    pagerLayout->setAlignment(Qt::AlignVCenter);
+    pagerLayout->addWidget(prevCandidatePage, 0, Qt::AlignHCenter);
+    pagerLayout->addWidget(nextCandidatePage, 0, Qt::AlignHCenter);
+
+    auto *pagerOuterWrap = new QWidget(candidatePane);
+    pagerOuterWrap->setStyleSheet("background:transparent;border:none;");
+    auto *pagerOuterLayout = new QHBoxLayout(pagerOuterWrap);
+    pagerOuterLayout->setContentsMargins(0, 0, 0, 0);
+    pagerOuterLayout->setSpacing(6);
+    pagerOuterLayout->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    pagerOuterLayout->addWidget(pageLabelWrap, 0, Qt::AlignVCenter);
+    pagerOuterLayout->addWidget(pagerWrap, 0, Qt::AlignVCenter);
+    pagerOuterWrap->setFixedWidth(104);
+
+    candidateLayout->addStretch(1);
+    candidateLayout->addWidget(pagerOuterWrap, 0, Qt::AlignRight);
+
+    const auto currentComposition = [this, compositionLength]() {
+        if (*compositionLength <= 0) {
+            return QString();
+        }
+        const int pos = m_searchInput->cursorPosition();
+        const int startPos = pos - *compositionLength;
+        if (startPos < 0) {
+            return QString();
+        }
+        return m_searchInput->text().mid(startPos, *compositionLength);
+    };
+
+    const QString candidateButtonStyle =
+        "QPushButton{border:none;border-right:1px solid #0068FF;background:transparent;color:#fff;font-size:24px; padding:0 8px;}"
+        "QPushButton:hover{color:#00FAFF;}";
+    const QString candidateButtonLastStyle =
+        "QPushButton{border:none;background:transparent;color:#fff;font-size:24px; padding:0 8px;}"
+        "QPushButton:hover{color:#00FAFF;}";
+
+    const auto refreshCandidateDisplay = [state, candidatePageLabel, prevCandidatePage, nextCandidatePage, candidateButtonStyle, candidateButtonLastStyle, candidatesPerPage](const QString &pinyin) {
+        const QString normalized = QString(pinyin).remove(QRegExp("\\d")).toLower();
+        state->currentCandidates = pinyin.isEmpty() ? QStringList() : PinyinDictionary::candidates(normalized);
+        const int pageCount = qMax(1, (state->currentCandidates.size() + candidatesPerPage - 1) / candidatesPerPage);
+        state->currentCandidatePage = qBound(0, state->currentCandidatePage, pageCount - 1);
+        const int firstIndex = state->currentCandidatePage * candidatesPerPage;
+        const int visibleCount = qMax(0, qMin(state->currentCandidates.size() - firstIndex, state->candidateButtons.size()));
+
+        for (int i = 0; i < state->candidateButtons.size(); ++i) {
+            const int index = firstIndex + i;
+            if (index < state->currentCandidates.size()) {
+                state->candidateButtons[i]->setText(state->currentCandidates.at(index));
+                state->candidateButtons[i]->setEnabled(true);
+                state->candidateButtons[i]->setStyleSheet(i + 1 == visibleCount ? candidateButtonLastStyle : candidateButtonStyle);
+                state->candidateButtons[i]->show();
+            } else {
+                state->candidateButtons[i]->hide();
+            }
+        }
+
+        candidatePageLabel->setText(QStringLiteral("%1/%2").arg(state->currentCandidatePage + 1).arg(pageCount));
+        candidatePageLabel->setFixedWidth(72);
+        candidatePageLabel->setAlignment(Qt::AlignCenter);
+        prevCandidatePage->setEnabled(state->currentCandidatePage > 0);
+        nextCandidatePage->setEnabled(state->currentCandidatePage + 1 < pageCount);
+    };
+
+    for (auto *btn : qAsConst(state->candidateButtons)) {
+        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength](void) {
+            const QString candidate = btn->text();
+            if (candidate.isEmpty() || *compositionLength <= 0) {
+                return;
+            }
+            const int pos = m_searchInput->cursorPosition();
+            const int startPos = pos - *compositionLength;
+            QString mainText = m_searchInput->text();
+            mainText.replace(startPos, *compositionLength, candidate);
+            m_searchInput->setText(mainText);
+            m_searchInput->setCursorPosition(startPos + candidate.length());
+            m_searchInput->setFocus();
+            *compositionLength = 0;
+            refreshCandidateDisplay(QString());
         });
     }
 
-    auto *writeArea = new QLabel(page);
-    writeArea->setGeometry(335, 344, 610, 240);
-    writeArea->setStyleSheet("QLabel{background:url(:/images/pict_pdf_serch_writearea.png) no-repeat center center;}");
+    connect(prevCandidatePage, &QPushButton::clicked, this, [refreshCandidateDisplay, state, currentComposition](void) {
+        --state->currentCandidatePage;
+        refreshCandidateDisplay(currentComposition());
+    });
+
+    connect(nextCandidatePage, &QPushButton::clicked, this, [refreshCandidateDisplay, state, currentComposition](void) {
+        ++state->currentCandidatePage;
+        refreshCandidateDisplay(currentComposition());
+    });
 
     auto *keyPadWrap = new QWidget(page);
-    keyPadWrap->setGeometry(335, 360, 610, 210);
+    keyPadWrap->setGeometry(232, 274, 816, 260);
     auto *grid = new QGridLayout(keyPadWrap);
     grid->setContentsMargins(0, 0, 0, 0);
-    grid->setHorizontalSpacing(8);
-    grid->setVerticalSpacing(8);
+    grid->setHorizontalSpacing(5);
+    grid->setVerticalSpacing(5);
 
     const QStringList keys = {
-        QStringLiteral("一"), QStringLiteral("二"), QStringLiteral("三"),
-        QStringLiteral("四"), QStringLiteral("五"), QStringLiteral("六"),
-        QStringLiteral("七"), QStringLiteral("八"), QStringLiteral("九"),
-        QStringLiteral("删"), QStringLiteral("〇"), QStringLiteral("空")
+        QStringLiteral("1"), QStringLiteral("2"), QStringLiteral("3"), QStringLiteral("4"), QStringLiteral("5"), QStringLiteral("6"), QStringLiteral("7"), QStringLiteral("8"), QStringLiteral("9"), QStringLiteral("0"),
+        QStringLiteral("Q"), QStringLiteral("W"), QStringLiteral("E"), QStringLiteral("R"), QStringLiteral("T"), QStringLiteral("Y"), QStringLiteral("U"), QStringLiteral("I"), QStringLiteral("O"), QStringLiteral("P"),
+        QStringLiteral("A"), QStringLiteral("S"), QStringLiteral("D"), QStringLiteral("F"), QStringLiteral("G"), QStringLiteral("H"), QStringLiteral("J"), QStringLiteral("K"), QStringLiteral("L")
+    };
+    const QStringList bottomKeys = {
+        QStringLiteral("Z"), QStringLiteral("X"), QStringLiteral("C"), QStringLiteral("V"), QStringLiteral("B"), QStringLiteral("N"), QStringLiteral("M"),
+        QStringLiteral("Shift"), QStringLiteral("←"), QStringLiteral("空格")
+    };
+
+    const QString normalKeyStyle =
+        "QPushButton{border:none;background:rgba(255,255,255,0.1);color:#fff;font-size:26px;outline:none;}"
+        "QPushButton:hover{background:rgba(255,255,255,0.1);border:none;color:#00FAFF;}"
+        "QPushButton:pressed{background:rgba(255,255,255,0.1);border:none;color:#fff;}"
+        "QPushButton:focus{background:rgba(255,255,255,0.1);border:none;color:#fff;}";
+    const QString shiftOnStyle =
+        "QPushButton{border:none;background:rgba(0,170,255,0.2);color:#fff;font-size:26px;outline:none;}"
+        "QPushButton:hover{background:rgba(0,170,255,0.2);border:none;color:#00FAFF;}"
+        "QPushButton:pressed{background:rgba(0,170,255,0.2);border:none;color:#fff;}"
+        "QPushButton:focus{background:rgba(0,170,255,0.2);border:none;color:#fff;}";
+
+    const auto insertTextAtCursor = [this](const QString &text) {
+        const int pos = m_searchInput->cursorPosition();
+        QString existing = m_searchInput->text();
+        existing.insert(pos, text);
+        m_searchInput->setText(existing);
+        m_searchInput->setCursorPosition(pos + text.length());
+        m_searchInput->setFocus();
     };
 
     for (int i = 0; i < keys.size(); ++i) {
         auto *btn = new QPushButton(keys.at(i), keyPadWrap);
-        btn->setFixedSize(198, 46);
+        btn->setFixedSize(72, 44);
         btn->setCursor(Qt::PointingHandCursor);
-        btn->setStyleSheet(
-            "QPushButton{border:1px solid #0068FF;background:rgba(255,255,255,0.1);color:#fff;font-size:28px;}"
-            "QPushButton:hover{border-color:#00FAFF;color:#00FAFF;}"
-        );
-        connect(btn, &QPushButton::clicked, this, [this, btn]() {
+        btn->setFlat(true);
+        btn->setAutoDefault(false);
+        btn->setDefault(false);
+        btn->setFocusPolicy(Qt::NoFocus);
+        btn->setStyleSheet(normalKeyStyle);
+
+        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, shiftMode, currentComposition, punctuationButtons, punctuationCn, punctuationEn, insertTextAtCursor, normalKeyStyle, shiftOnStyle, bottomKeys](void) {
             const QString key = btn->text();
-            if (key == QStringLiteral("删")) {
-                if (m_searchInput) {
-                    QString text = m_searchInput->text();
-                    text.chop(1);
-                    m_searchInput->setText(text);
+            if (key == QStringLiteral("Shift")) {
+                *shiftMode = !*shiftMode;
+                // 只在按下时高亮，松开恢复普通
+                btn->setStyleSheet(*shiftMode ? shiftOnStyle : normalKeyStyle);
+                for (QPushButton *pun : *punctuationButtons) {
+                    const int index = punctuationButtons->indexOf(pun);
+                    if (index >= 0 && index < punctuationCn.size()) {
+                        pun->setText(*shiftMode ? punctuationEn.at(index) : punctuationCn.at(index));
+                    }
                 }
-            } else if (key == QStringLiteral("空")) {
-                appendCharToInput(m_searchInput, QStringLiteral(" "));
-            } else {
-                appendCharToInput(m_searchInput, key);
+                return;
+            }
+
+            if (key == QStringLiteral("←")) {
+                const int pos = m_searchInput->cursorPosition();
+                if (pos > 0) {
+                    QString text = m_searchInput->text();
+                    text.remove(pos - 1, 1);
+                    m_searchInput->setText(text);
+                    m_searchInput->setCursorPosition(pos - 1);
+                    m_searchInput->setFocus();
+                    if (*compositionLength > 0) {
+                        if (pos - 1 >= pos - *compositionLength) {
+                            --*compositionLength;
+                        }
+                        if (*compositionLength <= 0) {
+                            *compositionLength = 0;
+                        }
+                        refreshCandidateDisplay(currentComposition());
+                    }
+                }
+                return;
+            }
+
+            if (key == QStringLiteral("空格")) {
+                if (*compositionLength > 0) {
+                    *compositionLength = 0;
+                    refreshCandidateDisplay(QString());
+                }
+                insertTextAtCursor(QStringLiteral(" "));
+                btn->setStyleSheet(normalKeyStyle);
+                btn->clearFocus();
+                return;
+            }
+
+            if (key.size() == 1 && key.at(0).isDigit()) {
+                if (*compositionLength > 0) {
+                    *compositionLength = 0;
+                    refreshCandidateDisplay(QString());
+                }
+                insertTextAtCursor(key);
+                btn->setStyleSheet(normalKeyStyle);
+                btn->clearFocus();
+                return;
+            }
+
+            if (key.size() == 1 && key.at(0).isLetter()) {
+                if (*shiftMode) {
+                    if (*compositionLength > 0) {
+                        *compositionLength = 0;
+                        refreshCandidateDisplay(QString());
+                    }
+                    insertTextAtCursor(key.toUpper());
+                    btn->setStyleSheet(normalKeyStyle);
+                    btn->clearFocus();
+                    return;
+                }
+                if (*compositionLength == 0) {
+                    *compositionLength = 1;
+                } else {
+                    ++*compositionLength;
+                }
+                insertTextAtCursor(key.toLower());
+                refreshCandidateDisplay(currentComposition());
+                btn->setStyleSheet(normalKeyStyle);
+                btn->clearFocus();
+                return;
             }
         });
-        grid->addWidget(btn, i / 3, i % 3);
+
+        if (i < 10) {
+            grid->addWidget(btn, 0, i);
+        } else if (i < 20) {
+            grid->addWidget(btn, 1, i - 10);
+        } else {
+            grid->addWidget(btn, 2, i - 20);
+        }
     }
 
-    auto *confirmBtn = new QPushButton(QStringLiteral("确认"), page);
-    confirmBtn->setGeometry(829, 592, 116, 54);
-    confirmBtn->setCursor(Qt::PointingHandCursor);
-    confirmBtn->setStyleSheet(
-        "QPushButton{border:2px solid #0068FF;background:transparent;color:#fff;font-size:28px;}"
-        "QPushButton:hover{border-color:#00FAFF;color:#00FAFF;}"
-    );
-    connect(confirmBtn, &QPushButton::clicked, this, &DiagnosticWindow::onConfirmPdfSearch);
+    auto *confirmKey = new QPushButton(QStringLiteral("确认"), keyPadWrap);
+    confirmKey->setFixedSize(72, 44);
+    confirmKey->setCursor(Qt::PointingHandCursor);
+    confirmKey->setStyleSheet(normalKeyStyle);
+    connect(confirmKey, &QPushButton::clicked, this, &DiagnosticWindow::onConfirmPdfSearch);
+    grid->addWidget(confirmKey, 2, 9);
 
+    for (int i = 0; i < bottomKeys.size(); ++i) {
+        auto *btn = new QPushButton(bottomKeys.at(i), keyPadWrap);
+        btn->setFixedSize(72, 44);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setFlat(true);
+        btn->setAutoDefault(false);
+        btn->setDefault(false);
+        btn->setFocusPolicy(Qt::NoFocus);
+        btn->setStyleSheet(normalKeyStyle);
+        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, shiftMode, currentComposition, punctuationButtons, punctuationCn, punctuationEn, insertTextAtCursor, normalKeyStyle, shiftOnStyle, bottomKeys](void) {
+            const QString key = btn->text();
+            if (key == QStringLiteral("Shift")) {
+                *shiftMode = !*shiftMode;
+                // 只在按下时高亮，松开恢复普通
+                btn->setStyleSheet(*shiftMode ? shiftOnStyle : normalKeyStyle);
+                for (QPushButton *pun : *punctuationButtons) {
+                    const int index = punctuationButtons->indexOf(pun);
+                    if (index >= 0 && index < punctuationCn.size()) {
+                        pun->setText(*shiftMode ? punctuationEn.at(index) : punctuationCn.at(index));
+                    }
+                }
+                return;
+            }
+            if (key == QStringLiteral("←")) {
+                const int pos = m_searchInput->cursorPosition();
+                if (pos > 0) {
+                    QString text = m_searchInput->text();
+                    text.remove(pos - 1, 1);
+                    m_searchInput->setText(text);
+                    m_searchInput->setCursorPosition(pos - 1);
+                    m_searchInput->setFocus();
+                    if (*compositionLength > 0) {
+                        if (pos - 1 >= pos - *compositionLength) {
+                            --*compositionLength;
+                        }
+                        if (*compositionLength <= 0) {
+                            *compositionLength = 0;
+                        }
+                        refreshCandidateDisplay(currentComposition());
+                    }
+                }
+                return;
+            }
+            if (key == QStringLiteral("空格")) {
+                if (*compositionLength > 0) {
+                    *compositionLength = 0;
+                    refreshCandidateDisplay(QString());
+                }
+                insertTextAtCursor(QStringLiteral(" "));
+                btn->setStyleSheet(normalKeyStyle);
+                btn->clearFocus();
+                return;
+            }
+
+            if (key.size() == 1 && key.at(0).isLetter()) {
+                if (*shiftMode) {
+                    if (*compositionLength > 0) {
+                        *compositionLength = 0;
+                        refreshCandidateDisplay(QString());
+                    }
+                    insertTextAtCursor(key.toUpper());
+                    btn->setStyleSheet(normalKeyStyle);
+                    btn->clearFocus();
+                    return;
+                }
+                if (*compositionLength == 0) {
+                    *compositionLength = 1;
+                } else {
+                    ++*compositionLength;
+                }
+                insertTextAtCursor(key.toLower());
+                refreshCandidateDisplay(currentComposition());
+                btn->setStyleSheet(normalKeyStyle);
+                btn->clearFocus();
+                return;
+            }
+        });
+        grid->addWidget(btn, 3, i);
+    }
+
+    for (int i = 0; i < punctuationCn.size(); ++i) {
+        auto *btn = new QPushButton(punctuationCn.at(i), keyPadWrap);
+        btn->setFixedSize(72, 44);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setFlat(true);
+        btn->setAutoDefault(false);
+        btn->setDefault(false);
+        btn->setFocusPolicy(Qt::NoFocus);
+        btn->setStyleSheet(normalKeyStyle);
+        punctuationButtons->append(btn);
+        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, currentComposition, insertTextAtCursor](void) {
+            if (*compositionLength > 0) {
+                *compositionLength = 0;
+                refreshCandidateDisplay(QString());
+            }
+            insertTextAtCursor(btn->text());
+        });
+        grid->addWidget(btn, 4, i);
+    }
+
+    refreshCandidateDisplay(QString());
+
+    m_searchInput->setFocus();
+    m_searchInput->setCursorPosition(m_searchInput->text().length());
     return page;
 }
 

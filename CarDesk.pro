@@ -122,7 +122,8 @@ HEADERS += \
     src/faultcodedb.h \
     src/mcuserialreader.h \
     src/backlight.h \
-    src/mupdfdocument.h
+    src/mupdfdocument.h \
+    src/pinyin_dictionary.h
 
 SOURCES += \
     src/main.cpp \
@@ -148,7 +149,8 @@ SOURCES += \
     src/faultcodedb.cpp \
     src/mcuserialreader.cpp \
     src/backlight.cpp \
-    src/mupdfdocument.cpp
+    src/mupdfdocument.cpp \
+    src/pinyin_dictionary.cpp
 
 # 资源文件（如果存在）
 exists(resources.qrc) {
