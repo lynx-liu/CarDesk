@@ -92,14 +92,22 @@ check_dependencies() {
     print_info "All dependencies are available."
 }
 
+# 仅保留 make 错误输出：隐藏子仓库的警告与编译信息，但保留错误信息
+filter_make_errors() {
+    grep -E --line-buffered 'error:|undefined reference|fatal error|ld:|collect2:|Project ERROR:|make: \*\*\*'
+}
+
 build_mupdf_host() {
     print_info "Building MuPDF for host (PC)..."
     cd "$PROJECT_DIR/thirdparty/mupdf"
     if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
         git checkout -- Makefile || true
     fi
-    rm -rf build/pc-release
-    make -j$(nproc) build=release OUT=build/pc-release libs
+    mkdir -p build/pc-release
+    local _rc=0
+    make -j$(nproc) build=release OUT=build/pc-release 2>&1 | filter_make_errors || true
+    _rc=${PIPESTATUS[0]}
+    [[ $_rc -eq 0 ]] || { print_error "MuPDF host build failed (exit $_rc)"; return $_rc; }
 }
 
 build_mupdf_arm() {
@@ -108,7 +116,7 @@ build_mupdf_arm() {
     if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
         git checkout -- Makefile || true
     fi
-    rm -rf build/arm64-release
+    mkdir -p build/arm64-release
 
     local cc=""
     local cxx=""
@@ -165,7 +173,10 @@ build_mupdf_arm() {
         ld=$(dirname "$cc")/aarch64-linux-gnu-ld
     fi
 
-    make -j$(nproc) CC="$cc" CXX="$cxx" LD="$ld" AR="$ar" RANLIB="$ranlib" XCFLAGS="-fPIC" XCXXFLAGS="-fPIC" build=release OUT=build/arm64-release USE_SYSTEM_LIBS=no libs
+    local _rc=0
+    make -j$(nproc) CC="$cc" CXX="$cxx" LD="$ld" AR="$ar" RANLIB="$ranlib" XCFLAGS="-fPIC" XCXXFLAGS="-fPIC" build=release OUT=build/arm64-release USE_SYSTEM_LIBS=no libs 2>&1 | filter_make_errors || true
+    _rc=${PIPESTATUS[0]}
+    [[ $_rc -eq 0 ]] || { print_error "MuPDF ARM build failed (exit $_rc)"; return $_rc; }
 }
 
 # 检测目标架构
@@ -201,9 +212,12 @@ build_pc() {
     cd "$BUILD_DIR/pc"
     
     qmake -config release CONFIG+=pc_build DEFINES+=CAR_DESK_DEVICE_PC "$PROJECT_DIR/CarDesk.pro"
+    if [[ $? -ne 0 ]]; then
+        print_error "qmake failed for PC build"
+        return 1
+    fi
     local _rc=0
-    make -j$(nproc) 2>&1 | grep -E --line-buffered 'warning:|error:|undefined reference|note:' \
-        | grep -Ev --line-buffered 'sdk-work|Qt_5\\.|/usr/include/|/usr/lib/' || true
+    make -j$(nproc) 2>&1 | filter_make_errors || true
     _rc=${PIPESTATUS[0]}
     [[ $_rc -eq 0 ]] || { print_error "make failed (exit $_rc)"; return $_rc; }
     
@@ -252,9 +266,12 @@ build_t507() {
 
     print_info "Using qmake: $arm_qmake"
     "$arm_qmake" -config release CONFIG+=arm64_build DEFINES+="CAR_DESK_DEVICE_CARUNIT CAR_DESK_USE_T507_SDK" "$PROJECT_DIR/CarDesk.pro"
+    if [[ $? -ne 0 ]]; then
+        print_error "qmake failed for T507 build"
+        return 1
+    fi
     local _rc=0
-    make -j$(nproc) 2>&1 | grep -E --line-buffered 'warning:|error:|undefined reference|note:' \
-        | grep -Ev --line-buffered 'sdk-work|Qt_5\\.|/usr/include/|/usr/lib/' || true
+    make -j$(nproc) 2>&1 | filter_make_errors || true
     _rc=${PIPESTATUS[0]}
     [[ $_rc -eq 0 ]] || { print_error "make failed (exit $_rc)"; return $_rc; }
 
