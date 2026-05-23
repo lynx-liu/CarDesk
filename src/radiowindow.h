@@ -102,6 +102,9 @@ private:
     bool    m_barDragging;
     int     m_barDragStartX;
     int     m_barDragStartScroll;
+    bool    m_stationDragging;
+    int     m_stationDragStartX;
+    int     m_stationDragStartScroll;
 };
 
 #endif // RADIOWINDOW_H

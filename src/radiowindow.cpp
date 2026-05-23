@@ -29,6 +29,7 @@
 #include <QDebug>
 #include <QSettings>
 #include <QtMath>
+#include <algorithm>
 
 // ── V4L2 ─────────────────────────────────────────────────────────────────────
 #include <fcntl.h>
@@ -201,7 +202,10 @@ RadioWindow::RadioWindow(QWidget *parent)
     , m_scanTimer(new QTimer(this))
     , m_barDragging(false)
     , m_barDragStartX(0)
-    , m_barDragStartScroll(0) {
+    , m_barDragStartScroll(0)
+    , m_stationDragging(false)
+    , m_stationDragStartX(0)
+    , m_stationDragStartScroll(0) {
 
         m_scanTimer->setInterval(120);
     connect(m_scanTimer, &QTimer::timeout, this, &RadioWindow::onScanTick);
@@ -221,6 +225,14 @@ RadioWindow::RadioWindow(QWidget *parent)
         QSettings settings;
         m_fmFavorites = settings.value("radio/fmFavorites").toStringList();
         m_amFavorites = settings.value("radio/amFavorites").toStringList();
+        auto sortFreqs = [](QStringList &list) {
+            list.removeDuplicates();
+            std::sort(list.begin(), list.end(), [](const QString &a, const QString &b) {
+                return a.toDouble() < b.toDouble();
+            });
+        };
+        sortFreqs(m_fmFavorites);
+        sortFreqs(m_amFavorites);
     }
 
     // 尝试打开硬件设备
@@ -245,6 +257,7 @@ RadioWindow::RadioWindow(QWidget *parent)
             // 硬件未返回频率，主动写入当前默认频率
             setFrequencyHz(m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency));
         }
+        rebuildStationStrip();
     }
 
     updateFrequencyView();
@@ -376,6 +389,38 @@ bool RadioWindow::eventFilter(QObject *obj, QEvent *event)
                     QTimer::singleShot(300, this, [this]() { updateTunerStatus(); });
                 }
                 updateFrequencyView();
+                return true;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+
+    if (m_stationList && obj == m_stationList->viewport()) {
+        QMouseEvent *me = static_cast<QMouseEvent *>(event);
+        switch (event->type()) {
+        case QEvent::MouseButtonPress:
+            if (me->button() == Qt::LeftButton) {
+                m_stationDragging = true;
+                m_stationDragStartX = me->x();
+                m_stationDragStartScroll = m_stationList->horizontalScrollBar()->value();
+                m_stationList->viewport()->setCursor(Qt::ClosedHandCursor);
+                return true;
+            }
+            break;
+        case QEvent::MouseMove:
+            if (m_stationDragging) {
+                const int delta = m_stationDragStartX - me->x();
+                QScrollBar *sb = m_stationList->horizontalScrollBar();
+                sb->setValue(qBound(0, m_stationDragStartScroll + delta, sb->maximum()));
+                return true;
+            }
+            break;
+        case QEvent::MouseButtonRelease:
+            if (m_stationDragging && me->button() == Qt::LeftButton) {
+                m_stationDragging = false;
+                m_stationList->viewport()->setCursor(Qt::OpenHandCursor);
                 return true;
             }
             break;
@@ -793,6 +838,8 @@ void RadioWindow::setupUI() {
         "QListWidget{background:transparent;border:none;outline:none;padding:0;}"
         "QScrollBar:horizontal{height:0px;background:transparent;border:none;}"
         "QScrollBar:vertical{width:0px;background:transparent;border:none;}");
+    m_stationList->viewport()->installEventFilter(this);
+    m_stationList->viewport()->setCursor(Qt::OpenHandCursor);
     rebuildStationStrip();
 
     connect(m_stationList, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
@@ -801,8 +848,6 @@ void RadioWindow::setupUI() {
         setFrequencyHz(fhz);
         updateFrequencyView();
     });
-
-    switchBand(true);
 }
 
 void RadioWindow::updateFrequencyView() {
@@ -938,6 +983,10 @@ void RadioWindow::onToggleFavorite() {
         favs.removeAll(key);
     else
         favs.append(key);
+    favs.removeDuplicates();
+    std::sort(favs.begin(), favs.end(), [](const QString &a, const QString &b) {
+        return a.toDouble() < b.toDouble();
+    });
     // 保存收藏到本地设置
     {
         QSettings settings;
