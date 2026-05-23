@@ -16,6 +16,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPushButton>
 #include <QScreen>
@@ -44,6 +45,92 @@ static inline quint32 mhzToV4l2(double mhz) { return static_cast<quint32>(mhz * 
 static inline quint32 khzToV4l2(double khz) { return static_cast<quint32>(khz * 16.0); }
 static inline double  v4l2ToMhz(quint32 v)  { return v / 16000.0; }
 static inline double  v4l2ToKhz(quint32 v)  { return v / 16.0; }
+
+static void showRadioNoticeDialog(QWidget *parent, const QString &title, const QString &message)
+{
+    QDialog dialog(parent);
+    dialog.setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    dialog.setAttribute(Qt::WA_TranslucentBackground);
+    dialog.setModal(true);
+    dialog.setFixedSize(1280, 720);
+    dialog.setStyleSheet("background:transparent;");
+
+    QWidget *overlay = new QWidget(&dialog);
+    overlay->setGeometry(0, 0, 1280, 720);
+    overlay->setStyleSheet("background:rgba(0,0,0,0.55);");
+
+    QWidget *panel = new QWidget(&dialog);
+    panel->setFixedSize(740, 300);
+    panel->move((1280 - panel->width()) / 2, (720 - panel->height()) / 2);
+    panel->setStyleSheet(
+        "QWidget{background:rgba(12,18,32,0.98);border:1px solid rgba(0,104,255,0.55);border-radius:36px;}"
+    );
+
+    QWidget *accent = new QWidget(panel);
+    accent->setGeometry(0, 0, panel->width(), 6);
+    accent->setStyleSheet(
+        "QWidget{background:qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, "
+        "stop:0 #009CFF, stop:1 #00F0FF);border-top-left-radius:36px;border-top-right-radius:36px;}"
+    );
+
+    QVBoxLayout *panelLayout = new QVBoxLayout(panel);
+    panelLayout->setContentsMargins(34, 26, 34, 24);
+    panelLayout->setSpacing(16);
+    panelLayout->setStretch(0, 0);
+    panelLayout->setStretch(1, 1);
+    panelLayout->setStretch(2, 0);
+
+    QWidget *header = new QWidget(panel);
+    QHBoxLayout *headerLayout = new QHBoxLayout(header);
+    headerLayout->setContentsMargins(0, 0, 0, 0);
+    headerLayout->setSpacing(14);
+
+    QLabel *icon = new QLabel(header);
+    icon->setFixedSize(56, 56);
+    icon->setText("!");
+    icon->setAlignment(Qt::AlignCenter);
+    icon->setStyleSheet(
+        "QLabel{color:#FFFFFF;background:#00A8FF;border-radius:28px;"
+        "font-size:34px;font-weight:900;box-shadow:0 0 18px rgba(0,168,255,0.45);}"
+    );
+    headerLayout->addWidget(icon);
+
+    QLabel *titleLabel = new QLabel(title, header);
+    titleLabel->setStyleSheet("color:#FFFFFF;font-size:34px;font-weight:800;background:transparent;");
+    titleLabel->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
+    headerLayout->addWidget(titleLabel);
+    headerLayout->addStretch();
+
+    panelLayout->addWidget(header);
+
+    QLabel *messageLabel = new QLabel(message, panel);
+    messageLabel->setWordWrap(true);
+    messageLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    messageLabel->setStyleSheet("color:#DDE8FF;font-size:30px;line-height:44px;background:transparent;");
+    panelLayout->addWidget(messageLabel, 1);
+
+    QPushButton *confirmBtn = new QPushButton(parent->tr("我知道了"), panel);
+    confirmBtn->setCursor(Qt::PointingHandCursor);
+    confirmBtn->setFixedSize(240, 64);
+    confirmBtn->setStyleSheet(
+        "QPushButton{border:none;background:#0068FF;color:#FFFFFF;"
+        "font-size:32px;font-weight:700;border-radius:32px;}"
+        "QPushButton:hover{background:#1A8EFF;}"
+        "QPushButton:pressed{background:#005EC0;}"
+    );
+
+    QWidget *buttonWrap = new QWidget(panel);
+    QHBoxLayout *buttonLayout = new QHBoxLayout(buttonWrap);
+    buttonLayout->setContentsMargins(0, 0, 0, 0);
+    buttonLayout->setSpacing(0);
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(confirmBtn);
+    buttonLayout->addStretch();
+    panelLayout->addWidget(buttonWrap);
+
+    QObject::connect(confirmBtn, &QPushButton::clicked, &dialog, &QDialog::accept);
+    dialog.exec();
+}
 
 static void findBarScaleBounds(const QPixmap &pixmap, int &scaleStart, int &scaleEnd)
 {
@@ -222,21 +309,33 @@ RadioWindow::RadioWindow(QWidget *parent)
 
     setupUI();
     
+    auto sortFavorites = [](QStringList &list) {
+        std::sort(list.begin(), list.end(), [](const QString &a, const QString &b) {
+            bool ok1 = false;
+            bool ok2 = false;
+            double v1 = a.toDouble(&ok1);
+            double v2 = b.toDouble(&ok2);
+            if (ok1 && ok2)
+                return v1 < v2;
+            return a < b;
+        });
+    };
+    auto normalizeFavorites = [&](QStringList &list) {
+        QStringList normalized;
+        normalized.reserve(list.size());
+        for (const QString &item : qAsConst(list)) {
+            if (!normalized.contains(item))
+                normalized.append(item);
+        }
+        sortFavorites(normalized);
+        while (normalized.size() > 30)
+            normalized.removeLast();
+        list = std::move(normalized);
+    };
     {
         QSettings settings;
         m_fmFavorites = settings.value("radio/fmFavorites").toStringList();
         m_amFavorites = settings.value("radio/amFavorites").toStringList();
-        auto normalizeFavorites = [](QStringList &list) {
-            QStringList normalized;
-            normalized.reserve(list.size());
-            for (const QString &item : qAsConst(list)) {
-                if (!normalized.contains(item))
-                    normalized.append(item);
-            }
-            while (normalized.size() > 30)
-                normalized.removeFirst();
-            list = std::move(normalized);
-        };
         normalizeFavorites(m_fmFavorites);
         normalizeFavorites(m_amFavorites);
     }
@@ -997,9 +1096,22 @@ void RadioWindow::onToggleFavorite() {
     if (favs.contains(key)) {
         favs.removeAll(key);
     } else {
+        const int maxFavorites = 30;
+        if (favs.size() >= maxFavorites) {
+            showRadioNoticeDialog(this, tr("收藏已满"),
+                                  tr("当前收藏已达到 %1 个，请先删除旧收藏后再添加新频率。").arg(maxFavorites));
+            return;
+        }
         favs.append(key);
-        while (favs.size() > 30)
-            favs.removeFirst();
+        std::sort(favs.begin(), favs.end(), [](const QString &a, const QString &b) {
+            bool ok1 = false;
+            bool ok2 = false;
+            double v1 = a.toDouble(&ok1);
+            double v2 = b.toDouble(&ok2);
+            if (ok1 && ok2)
+                return v1 < v2;
+            return a < b;
+        });
     }
     // 保存收藏到本地设置
     {
