@@ -26,6 +26,7 @@
 #include <QTime>
 #include <QVBoxLayout>
 #include <QDir>
+#include <QPainter>
 #include <QRegExp>
 #include <QFileInfo>
 #include <QListWidget>
@@ -1313,7 +1314,7 @@ void DiagnosticWindow::onOpenPdfJumpPage()
 
 void DiagnosticWindow::onConfirmPdfSearch()
 {
-    if (!m_searchInput) {
+    if (!m_searchInput || !m_pdfDocument || !m_pdfDocument->isOpen()) {
         return;
     }
 
@@ -1322,18 +1323,34 @@ void DiagnosticWindow::onConfirmPdfSearch()
         return;
     }
 
-    m_resultIndex = 1;
-    m_resultTotal = 8;
+    m_pdfSearchKeyword = keyword;
+    m_pdfSearchMatches.clear();
+    const auto hits = m_pdfDocument->searchDocument(keyword);
+    m_pdfSearchMatches.reserve(hits.size());
+    for (const auto &hit : hits) {
+        m_pdfSearchMatches.append({ hit.pageIndex, hit.bbox });
+    }
+    m_resultTotal = m_pdfSearchMatches.size();
+    m_resultIndex = (m_resultTotal > 0 ? 1 : 0);
 
     if (m_pdfSearchKeywordLabel) {
         m_pdfSearchKeywordLabel->setText(keyword);
     }
+
+    if (m_resultIndex > 0) {
+        const int resultPage = m_pdfSearchMatches.at(0).pageIndex;
+        m_pdfPage = qBound(1, resultPage + 1, m_pdfTotal);
+    }
+
+    updatePdfHeader();
     updateSearchResultHeader();
 
     if (m_pdfBottomNormal && m_pdfBottomSearch) {
         m_pdfBottomNormal->hide();
         m_pdfBottomSearch->show();
     }
+
+    updatePdfView();
     openPage(3);
 }
 
@@ -1341,7 +1358,11 @@ void DiagnosticWindow::onPrevSearchResult()
 {
     if (m_resultIndex > 1) {
         --m_resultIndex;
+        const int resultPage = m_pdfSearchMatches.at(m_resultIndex - 1).pageIndex;
+        m_pdfPage = qBound(1, resultPage + 1, m_pdfTotal);
+        updatePdfHeader();
         updateSearchResultHeader();
+        updatePdfView();
     }
 }
 
@@ -1349,7 +1370,11 @@ void DiagnosticWindow::onNextSearchResult()
 {
     if (m_resultIndex < m_resultTotal) {
         ++m_resultIndex;
+        const int resultPage = m_pdfSearchMatches.at(m_resultIndex - 1).pageIndex;
+        m_pdfPage = qBound(1, resultPage + 1, m_pdfTotal);
+        updatePdfHeader();
         updateSearchResultHeader();
+        updatePdfView();
     }
 }
 
@@ -1422,9 +1447,72 @@ void DiagnosticWindow::updatePdfView()
     const int width = m_pdfRenderLabel->width();
     const int height = m_pdfRenderLabel->height();
     QImage pageImage = m_pdfDocument->renderPage(m_pdfPage - 1, width, height);
-    if (!pageImage.isNull()) {
-        m_pdfRenderLabel->setPixmap(QPixmap::fromImage(pageImage).scaled(m_pdfRenderLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    if (pageImage.isNull()) {
+        return;
     }
+
+    const QSize labelSize = m_pdfRenderLabel->size();
+    const QImage scaledImage = pageImage.scaled(labelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    const qreal scaleX = qreal(scaledImage.width()) / qreal(pageImage.width());
+    const qreal scaleY = qreal(scaledImage.height()) / qreal(pageImage.height());
+    const QPoint offset((labelSize.width() - scaledImage.width()) / 2,
+                        (labelSize.height() - scaledImage.height()) / 2);
+
+    QPixmap canvas(labelSize);
+    canvas.fill(Qt::transparent);
+    QPainter painter(&canvas);
+    painter.drawImage(offset, scaledImage);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    if (!m_pdfSearchMatches.isEmpty()) {
+        const int displayedPageIndex = m_pdfPage - 1;
+        const int selectedIndex = (m_resultIndex > 0 ? m_resultIndex - 1 : -1);
+        const QRectF pageBounds = m_pdfDocument->pageBounds(displayedPageIndex);
+        const qreal pageOriginX = pageBounds.left();
+        const qreal pageOriginY = pageBounds.top();
+        const qreal pageHeight = pageBounds.height();
+
+        for (int i = 0; i < m_pdfSearchMatches.size(); ++i) {
+            const auto &hit = m_pdfSearchMatches.at(i);
+            if (hit.pageIndex != displayedPageIndex) {
+                continue;
+            }
+
+            const QRectF pdfRect = hit.rect.normalized();
+            QRectF imageRect = m_pdfDocument->mapPdfRectToImage(displayedPageIndex, pdfRect, pageImage.width(), pageImage.height());
+            if (imageRect.isNull() || imageRect.isEmpty()) {
+                const qreal scaleImageX = pageImage.width() / pageBounds.width();
+                const qreal scaleImageY = pageImage.height() / pageBounds.height();
+                const qreal left = (pdfRect.left() - pageOriginX) * scaleImageX;
+                const qreal right = (pdfRect.right() - pageOriginX) * scaleImageX;
+                const qreal top = (pdfRect.top() - pageOriginY) * scaleImageY;
+                const qreal bottom = (pdfRect.bottom() - pageOriginY) * scaleImageY;
+                imageRect = QRectF(QPointF(left, top), QPointF(right, bottom)).normalized();
+            }
+            QRectF displayRect(
+                QPointF(imageRect.left() * scaleX, imageRect.top() * scaleY),
+                QSizeF(imageRect.width() * scaleX, imageRect.height() * scaleY)
+            );
+            displayRect.translate(offset);
+
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(255, 255, 0, 140));
+            painter.drawRect(displayRect);
+
+            if (i == selectedIndex) {
+                painter.setBrush(Qt::NoBrush);
+                painter.setPen(QPen(QColor(255, 50, 50), 4));
+                painter.drawRect(displayRect);
+            } else {
+                painter.setBrush(Qt::NoBrush);
+                painter.setPen(QPen(QColor(255, 165, 0), 2));
+                painter.drawRect(displayRect);
+            }
+        }
+    }
+
+    painter.end();
+    m_pdfRenderLabel->setPixmap(canvas);
 }
 
 void DiagnosticWindow::updateSearchResultHeader()
@@ -1432,7 +1520,8 @@ void DiagnosticWindow::updateSearchResultHeader()
     if (!m_pdfSearchResultLabel) {
         return;
     }
-    m_pdfSearchResultLabel->setText(QStringLiteral("%1/%2").arg(m_resultIndex).arg(m_resultTotal));
+    const int displayIndex = (m_resultTotal > 0 ? qMax(1, m_resultIndex) : 0);
+    m_pdfSearchResultLabel->setText(QStringLiteral("%1/%2").arg(displayIndex).arg(m_resultTotal));
 }
 
 void DiagnosticWindow::keyPressEvent(QKeyEvent *event)

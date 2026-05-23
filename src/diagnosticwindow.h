@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QMap>
 #include <QVector>
+#include <QRectF>
 #include <QString>
 #include "mcuserialreader.h"
 
@@ -77,6 +78,13 @@ private:
     int m_pdfTotal;
     int m_resultIndex;
     int m_resultTotal;
+
+    struct PdfSearchMatch {
+        int pageIndex;
+        QRectF rect;
+    };
+    QString m_pdfSearchKeyword;
+    QVector<PdfSearchMatch> m_pdfSearchMatches;
 
     // 故障诊断实时数据
     McuSerialReader                      *m_reader;
