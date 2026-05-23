@@ -103,6 +103,7 @@ private:
     int     m_barDragStartX;
     int     m_barDragStartScroll;
     bool    m_stationDragging;
+    bool    m_stationDragActive;
     int     m_stationDragStartX;
     int     m_stationDragStartScroll;
 };

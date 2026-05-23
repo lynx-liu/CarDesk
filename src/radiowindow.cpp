@@ -204,6 +204,7 @@ RadioWindow::RadioWindow(QWidget *parent)
     , m_barDragStartX(0)
     , m_barDragStartScroll(0)
     , m_stationDragging(false)
+    , m_stationDragActive(false)
     , m_stationDragStartX(0)
     , m_stationDragStartScroll(0) {
 
@@ -225,14 +226,19 @@ RadioWindow::RadioWindow(QWidget *parent)
         QSettings settings;
         m_fmFavorites = settings.value("radio/fmFavorites").toStringList();
         m_amFavorites = settings.value("radio/amFavorites").toStringList();
-        auto sortFreqs = [](QStringList &list) {
-            list.removeDuplicates();
-            std::sort(list.begin(), list.end(), [](const QString &a, const QString &b) {
-                return a.toDouble() < b.toDouble();
-            });
+        auto normalizeFavorites = [](QStringList &list) {
+            QStringList normalized;
+            normalized.reserve(list.size());
+            for (const QString &item : qAsConst(list)) {
+                if (!normalized.contains(item))
+                    normalized.append(item);
+            }
+            while (normalized.size() > 30)
+                normalized.removeFirst();
+            list = std::move(normalized);
         };
-        sortFreqs(m_fmFavorites);
-        sortFreqs(m_amFavorites);
+        normalizeFavorites(m_fmFavorites);
+        normalizeFavorites(m_amFavorites);
     }
 
     // 尝试打开硬件设备
@@ -403,15 +409,20 @@ bool RadioWindow::eventFilter(QObject *obj, QEvent *event)
         case QEvent::MouseButtonPress:
             if (me->button() == Qt::LeftButton) {
                 m_stationDragging = true;
+                m_stationDragActive = false;
                 m_stationDragStartX = me->x();
                 m_stationDragStartScroll = m_stationList->horizontalScrollBar()->value();
                 m_stationList->viewport()->setCursor(Qt::ClosedHandCursor);
-                return true;
+                return false; // allow item click to be delivered unless a drag gesture starts
             }
             break;
         case QEvent::MouseMove:
             if (m_stationDragging) {
                 const int delta = m_stationDragStartX - me->x();
+                if (!m_stationDragActive && qAbs(delta) < 6) {
+                    return false;
+                }
+                m_stationDragActive = true;
                 QScrollBar *sb = m_stationList->horizontalScrollBar();
                 sb->setValue(qBound(0, m_stationDragStartScroll + delta, sb->maximum()));
                 return true;
@@ -421,7 +432,11 @@ bool RadioWindow::eventFilter(QObject *obj, QEvent *event)
             if (m_stationDragging && me->button() == Qt::LeftButton) {
                 m_stationDragging = false;
                 m_stationList->viewport()->setCursor(Qt::OpenHandCursor);
-                return true;
+                if (m_stationDragActive) {
+                    m_stationDragActive = false;
+                    return true;
+                }
+                return false;
             }
             break;
         default:
@@ -979,14 +994,13 @@ void RadioWindow::onToggleFavorite() {
     const QString key = m_isFM ? QString::number(m_frequency, 'f', 1)
                                 : QString::number(qRound(m_frequency));
     QStringList &favs = m_isFM ? m_fmFavorites : m_amFavorites;
-    if (favs.contains(key))
+    if (favs.contains(key)) {
         favs.removeAll(key);
-    else
+    } else {
         favs.append(key);
-    favs.removeDuplicates();
-    std::sort(favs.begin(), favs.end(), [](const QString &a, const QString &b) {
-        return a.toDouble() < b.toDouble();
-    });
+        while (favs.size() > 30)
+            favs.removeFirst();
+    }
     // 保存收藏到本地设置
     {
         QSettings settings;
@@ -1348,7 +1362,9 @@ void RadioWindow::onOpenListDialog() {
         const QStringList &src = (currentTab == 0)
             ? (m_isFM ? m_fmFavorites : m_amFavorites)
             : (m_isFM ? m_fmStations  : m_amStations);
-        for (const QString &s : src) {
+        const int maxItems = 30;
+        const QStringList srcLimited = src.mid(0, qMin(src.size(), maxItems));
+        for (const QString &s : srcLimited) {
             QListWidgetItem *it = new QListWidgetItem(list);
             it->setData(Qt::UserRole, s);
             it->setSizeHint(QSize(212, 212));
@@ -1419,8 +1435,10 @@ void RadioWindow::rebuildStationStrip() {
     }
     m_stationList->clear();
     const QStringList stations = m_isFM ? m_fmFavorites : m_amFavorites;
-    for (const QString &s : stations) {
-        QListWidgetItem *it = new QListWidgetItem(s, m_stationList);
+    const int maxItems = 30;
+    const int count = qMin(stations.size(), maxItems);
+    for (int i = 0; i < count; ++i) {
+        QListWidgetItem *it = new QListWidgetItem(stations.at(i), m_stationList);
         it->setSizeHint(QSize(150, 118));
         m_stationList->addItem(it);
     }
