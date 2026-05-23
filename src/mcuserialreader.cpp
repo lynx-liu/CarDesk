@@ -239,7 +239,7 @@ void McuSerialReader::parseVistTextLine(const QString &name, const QString &kv)
             qDebug() << "[TXRX TEXT] TCO1 speed=" << speed;
             emit AppSignals::instance()->vehicleSpeedChanged(speed);
         }
-    } else if (name == QLatin1String("TD_VIST")) {
+    } else if (name == QLatin1String("TD_VIST") || name == QLatin1String("TD_OTHER")) {
         // 解析 TEXT 格式时间: 例如 "2025-04-0003 14:53"（容错解析）
         static const QRegularExpression tr(QStringLiteral("(\\d{4})-(\\d{1,2})-(\\d{1,4})\\s+(\\d{1,2}):(\\d{1,2})"));
         const QRegularExpressionMatch tm = tr.match(kv);
@@ -250,11 +250,11 @@ void McuSerialReader::parseVistTextLine(const QString &name, const QString &kv)
             const int hour = tm.captured(4).toInt();
             const int minute = tm.captured(5).toInt();
             // 若 day 看起来超出正常范围，尝试截取最低8位
-            if (day > 31) day = day % 100; 
-            qDebug() << "[TXRX TEXT] TD_VIST" << year << month << day << hour << minute << " raw=" << kv;
+            if (day > 31) day = day % 100;
+            qDebug() << "[TXRX TEXT]" << name << year << month << day << hour << minute << " raw=" << kv;
             emit tdReceived(year, month, day, hour, minute);
         } else {
-            qDebug() << "[TXRX TEXT] TD_VIST parse failed raw=" << kv;
+            qDebug() << "[TXRX TEXT]" << name << "parse failed raw=" << kv;
         }
     }
     // TD 时间日期在 TEXT 模式下暂未规定，依赖 JSON 模式处理
