@@ -94,7 +94,7 @@ check_dependencies() {
 
 # 仅保留 make 错误输出：隐藏子仓库的警告与编译信息，但保留错误信息
 filter_make_errors() {
-    grep -E --line-buffered 'error:|undefined reference|fatal error|ld:|collect2:|Project ERROR:|make: \*\*\*'
+    grep -E --line-buffered 'error:|undefined reference|fatal error|ld:|collect2:|Project ERROR:|make: \*\*\*|错误'
 }
 
 build_mupdf_host() {
@@ -271,8 +271,10 @@ build_t507() {
         return 1
     fi
     local _rc=0
-    make -j$(nproc) 2>&1 | filter_make_errors || true
+    set -o pipefail
+    make -j$(nproc) 2>&1 | filter_make_errors
     _rc=${PIPESTATUS[0]}
+    set +o pipefail
     [[ $_rc -eq 0 ]] || { print_error "make failed (exit $_rc)"; return $_rc; }
 
     local arm_bin="$PROJECT_DIR/build/arm64/CarDesk"

@@ -1,9 +1,12 @@
 #include "drivingimagewindow.h"
+#include "ahdpreviewwidget.h"
 #include "devicedetect.h"
 #include "mainwindow.h"
 #include "mediamanager.h"
 
 #include <QApplication>
+#include <QDebug>
+#include <QProcessEnvironment>
 #include <QCloseEvent>
 #include <QDateTime>
 #include <QFrame>
@@ -22,7 +25,6 @@ DrivingImageWindow::DrivingImageWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_previewWrap(nullptr)
     , m_exitHintLabel(nullptr)
-    , m_ahdManager(new AhdManager(360, this))
     , m_singleClickTimer(new QTimer(this))
     , m_returning(false)
     , m_previewLoading(true)
@@ -58,7 +60,6 @@ DrivingImageWindow::DrivingImageWindow(QWidget *parent)
     }
 
     setupUI();
-    bindAhdSignals();
 
     m_singleClickTimer->setSingleShot(true);
     connect(m_singleClickTimer, &QTimer::timeout, this, [this]() {
@@ -66,21 +67,30 @@ DrivingImageWindow::DrivingImageWindow(QWidget *parent)
     });
 }
 
+AhdManager *DrivingImageWindow::ahdManager()
+{
+    if (!m_ahdManager) {
+        m_ahdManager = new AhdManager(360, this);
+        bindAhdSignals();
+    }
+    return m_ahdManager;
+}
+
 void DrivingImageWindow::bindAhdSignals()
 {
-    connect(m_ahdManager, &AhdManager::previewStarted, this, [this]() {
+    connect(ahdManager(), &AhdManager::previewStarted, this, [this]() {
         if (!m_exitInProgress && isVisible()) {
             setLoadingState(false);
         }
     });
-    connect(m_ahdManager, &AhdManager::previewStopped, this, [this]() {
+    connect(ahdManager(), &AhdManager::previewStopped, this, [this]() {
         if (!m_exitInProgress && isVisible() && m_previewLoading) {
             m_exitHintLabel->setText(QStringLiteral("加载中..."));
             layoutCenterHint();
             m_exitHintLabel->show();
         }
     });
-    connect(m_ahdManager, &AhdManager::cameraError, this, [this](const QString &message) {
+    connect(ahdManager(), &AhdManager::cameraError, this, [this](const QString &message) {
         if (m_exitInProgress) {
             return;
         }
@@ -108,7 +118,14 @@ void DrivingImageWindow::hideEvent(QHideEvent *event)
     m_isFullscreen = false;
     m_fullscreenCameraId = -1;
     m_lastClickMs = 0;
-    stopPreview();
+    if (m_exitInProgress) {
+        QMainWindow::hideEvent(event);
+        return;
+    }
+    if (m_ahdManager) {
+        m_ahdManager->stopPreview();
+        m_ahdManager->stopCamera();
+    }
     QMainWindow::hideEvent(event);
 }
 
@@ -121,11 +138,17 @@ void DrivingImageWindow::returnToMainSafely()
     m_returning = true;
     m_exitInProgress = true;
     setLoadingState(true);
-    stopPreview();
+
+    if (m_ahdManager) {
+        m_ahdManager->stopPreview();
+    }
     hide();
-    // 用 singleShot(0) 让事件循环处理 hide() 的屏幕刷新，再通知主窗口返回
-    // 避免同步 emit 导致主窗口立即重绘时摄像头窗口还在屏幕上
+
+    // 先隐藏 UI，再在下一拍关闭 SDK，避免退出时回调与析构竞态
     QTimer::singleShot(0, this, [this]() {
+        if (m_ahdManager) {
+            m_ahdManager->stopCamera();
+        }
         m_exitInProgress = false;
         m_returning = false;
         emit requestReturnToMain();
@@ -283,19 +306,40 @@ void DrivingImageWindow::layoutCenterHint()
     m_exitHintLabel->raise();
 }
 
+void DrivingImageWindow::updatePreviewLayout()
+{
+    if (!m_ahdManager) {
+        return;
+    }
+    m_ahdManager->setLayoutMode(m_cameraMode);
+    m_ahdManager->setPreviewCameraIndex(m_isFullscreen ? m_fullscreenCameraId : -1);
+}
+
 void DrivingImageWindow::startPreviewIfNeeded()
 {
     if (m_exitInProgress || !isVisible()) {
         return;
     }
 
-    // 先 kill 旧进程，确保标签不会叠加在仍在输出的视频上
-    m_ahdManager->stopPreview();
-    m_ahdManager->stopCamera();
-    m_ahdManager->setCameraId(m_cameraMode);
-    m_ahdManager->setPreviewCameraIndex(m_isFullscreen ? m_fullscreenCameraId : -1);
+    if (qEnvironmentVariableIsSet("CARDESK_SKIP_AHD")) {
+        qWarning() << "[Driving] CARDESK_SKIP_AHD=1, skip camera preview (debug)";
+        if (m_exitHintLabel) {
+            m_exitHintLabel->setText(QStringLiteral("调试: 已跳过摄像头"));
+            layoutCenterHint();
+            m_exitHintLabel->show();
+        }
+        setLoadingState(false);
+        return;
+    }
 
+    qDebug() << "[Driving] startPreviewIfNeeded: opening cameras";
+    updatePreviewLayout();
     m_previewLoading = true;
+    if (m_exitHintLabel) {
+        m_exitHintLabel->setText(QStringLiteral("加载中..."));
+        layoutCenterHint();
+        m_exitHintLabel->show();
+    }
 
     const QRect rect = previewRectOnScreen();
     if (rect.width() <= 0 || rect.height() <= 0) {
@@ -305,14 +349,7 @@ void DrivingImageWindow::startPreviewIfNeeded()
         return;
     }
 
-    // Startup loading text is not shown here.
-
-    if (!m_ahdManager->startCamera()) {
-        m_exitHintLabel->setText(QStringLiteral("摄像头启动失败"));
-        layoutCenterHint();
-        return;
-    }
-    if (!m_ahdManager->startPreview(rect.x(), rect.y(), rect.width(), rect.height())) {
+    if (!ahdManager()->startPreview(m_previewWrap, rect.x(), rect.y(), rect.width(), rect.height())) {
         m_exitHintLabel->setText(QStringLiteral("预览启动失败"));
         layoutCenterHint();
     }
@@ -328,12 +365,17 @@ void DrivingImageWindow::stopPreview()
 
 void DrivingImageWindow::setDrivingMode(int mode)
 {
-    if (mode == m_cameraMode) {
+    if (mode == m_cameraMode && !m_isFullscreen) {
         return;
     }
     m_cameraMode = mode;
+    m_isFullscreen = false;
+    m_fullscreenCameraId = -1;
     if (isVisible()) {
-        startPreviewIfNeeded();
+        updatePreviewLayout();
+        if (m_ahdManager && m_ahdManager->isCameraReady()) {
+            startPreviewIfNeeded();
+        }
     }
 }
 
@@ -383,6 +425,7 @@ void DrivingImageWindow::keyPressEvent(QKeyEvent *event)
 
 void DrivingImageWindow::showEvent(QShowEvent *event)
 {
+    qDebug() << "[Driving] showEvent begin";
     QMainWindow::showEvent(event);
 
     const DeviceDetect &device = DeviceDetect::instance();
@@ -408,17 +451,23 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
     setLoadingState(true);
     if (!m_startScheduled) {
         m_startScheduled = true;
-        QTimer::singleShot(0, this, [this]() {
+        QTimer::singleShot(100, this, [this]() {
             m_startScheduled = false;
+            qDebug() << "[Driving] showEvent timer: startPreviewIfNeeded";
             startPreviewIfNeeded();
         });
     }
+    qDebug() << "[Driving] showEvent end";
 }
 
 void DrivingImageWindow::resizeEvent(QResizeEvent *event)
 {
     QMainWindow::resizeEvent(event);
     layoutCenterHint();
+    if (m_ahdManager && m_ahdManager->isPreviewActive() && m_previewWrap) {
+        const QRect rect = previewRectOnScreen();
+        m_ahdManager->startPreview(m_previewWrap, rect.x(), rect.y(), rect.width(), rect.height());
+    }
 }
 
 void DrivingImageWindow::setLoadingState(bool loading)

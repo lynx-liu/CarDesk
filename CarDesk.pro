@@ -1,7 +1,7 @@
 TEMPLATE = app
 TARGET = CarDesk
 
-QT += core gui widgets multimedia multimediawidgets serialport concurrent
+QT += core gui widgets multimedia multimediawidgets serialport concurrent opengl
 
 CONFIG += c++11
 
@@ -52,11 +52,11 @@ contains(CONFIG, arm_build)|contains(CONFIG, arm64_build) {
     DEFINES += WATERMARK CDX_V27 SUPPORT_NEW_DRIVER
     DEFINES += _GNU_SOURCE CONFIG_CHIP=7 CONFIG_PRODUCT=2
     DEFINES += VE_PHY_OFFSET=0x40000000 CONFIG_LOG_LEVEL=0
+    # 不定义 DMAFD_TEST，避免 SDK PreviewWindow 与 Qt EGL 同时消费同一 dma 缓冲
 
     LIBS += -L$$SDK_LIB/lib64
     LIBS += -L$$SDK_LIB/cedarx/lib
-    LIBS += -L$$T507_SYSROOT/usr/lib/aarch64-linux-gnu
-    LIBS += -L$$T507_SYSROOT/lib/aarch64-linux-gnu
+    # 勿链接 sysroot 的 EGL/GLES/mali：会引入 GLIBC_2.27+，车机运行时 libm 仅 2.17
     LIBS += -lsdk_camera -lsdk_g2d -lsdk_dvr -lsdk_player
     LIBS += -lsdk_log -lsdk_memory -lsdk_sound -lsdk_storage
     LIBS += -lsdk_audenc -lsdk_cfg -lsdk_ctrl -lsdk_egl -lsdk_misc -lsdk_compose
@@ -65,6 +65,15 @@ contains(CONFIG, arm_build)|contains(CONFIG, arm64_build) {
     LIBS += -lvdecoder -lvencoder -lVE -lvideoengine -lxmetadataretriever -lxplayer
     LIBS += -lvenc_base -lvenc_codec -lcdx_ion -lasound -ldbus-1
     LIBS += -lrt -Wl,--no-as-needed -lsdk_disp -Wl,--as-needed -lpthread
+    # 与 sdktest 一致链接 Mali，供 libsdk_camera 内部 EGL/G2D 使用
+    exists($$T507_SYSROOT/usr/lib/libmali.so) {
+        LIBS += $$T507_SYSROOT/usr/lib/libmali.so
+    } else:exists($$T507_SYSROOT/usr/lib64/libmali.so) {
+        LIBS += $$T507_SYSROOT/usr/lib64/libmali.so
+    }
+    exists($$PWD/scripts/glibc217_math.ver) {
+        QMAKE_LFLAGS += -Wl,--version-script=$$PWD/scripts/glibc217_math.ver
+    }
 } else {
     DEFINES += CAR_DESK_DEVICE_PC
     message("Building for x86/x64 (PC)")
@@ -115,6 +124,9 @@ HEADERS += \
     src/imageviewingwindow.h \
     src/t507sdkbridge.h \
     src/ahdmanager.h \
+    src/ahdlayout.h \
+    src/ahdcamerapool.h \
+    src/ahdpreviewwidget.h \
     src/otamanager.h \
     src/progressmonitor.h \
     src/appsignals.h \
@@ -142,6 +154,9 @@ SOURCES += \
     src/imageviewingwindow.cpp \
     src/t507sdkbridge.cpp \
     src/ahdmanager.cpp \
+    src/ahdlayout.cpp \
+    src/ahdcamerapool.cpp \
+    src/ahdpreviewwidget.cpp \
     src/otamanager.cpp \
     src/progressmonitor.cpp \
     src/appsignals.cpp \

@@ -53,13 +53,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     // 启动即后台预热：解码背景图 + 预创建所有子页面窗口，
     // 确保用户首次点击时无需等待构建控件树。
-    m_drivingImageWindow = new DrivingImageWindow();
-    m_drivingImageWindow->setAttribute(Qt::WA_DeleteOnClose);
     QTimer::singleShot(0, this, [this]() {
         PageBgWidget::prewarm();
-        if (m_drivingImageWindow) {
-            m_drivingImageWindow->warmupCamera();
-        }
         ensurePhoneWindow();
         // RadioWindow 构造函数会打开硬件设备并切换声道，不能后台预创建
         ensureDiagnosticWindow();
@@ -501,11 +496,18 @@ void MainWindow::onSystemSettingsClicked() {
 }
 
 void MainWindow::onDrivingImageClicked() {
-    qDebug() << "Driving image button clicked";
+    qDebug() << "[Driving] step1: button clicked";
+
+    if (m_mediaManager) {
+        m_mediaManager->pausePlaybackForOcclusion();
+    }
+    qDebug() << "[Driving] step2: after pausePlaybackForOcclusion";
 
     if (!m_drivingImageWindow) {
+        qDebug() << "[Driving] step3: creating DrivingImageWindow";
         m_drivingImageWindow = new DrivingImageWindow();
         m_drivingImageWindow->setAttribute(Qt::WA_DeleteOnClose);
+        qDebug() << "[Driving] step4: DrivingImageWindow created";
     }
 
     connect(m_drivingImageWindow, &DrivingImageWindow::requestReturnToMain, this, [this]() {
@@ -520,17 +522,15 @@ void MainWindow::onDrivingImageClicked() {
         }
     }, Qt::UniqueConnection);
 
-    if (m_mediaManager) {
-        m_mediaManager->pausePlaybackForOcclusion();
-    }
-
-    // 手动从主界面进入行车影像时，统一恢复到默认四分屏模式。
     m_drivingImageWindow->setDrivingMode(360);
+    qDebug() << "[Driving] step5: before show()";
 
-    // 现在行车影像改为 Qt 内部自己绘制，不再依赖外部视频硬件层。
     m_drivingImageWindow->show();
+    qDebug() << "[Driving] step6: after show()";
+
     m_drivingImageWindow->raise();
     m_drivingImageWindow->activateWindow();
+    qDebug() << "[Driving] step7: window raised";
 }
 
 QWidget *MainWindow::findCurrentVisibleNonPhoneWindow() const {

@@ -39,13 +39,15 @@ private:
     void layoutCenterHint();
     void handleConfirmedSingleClick(const QPoint &globalPos);
     void startPreviewIfNeeded();
+    void updatePreviewLayout();
     void stopPreview();
     QRect previewRectOnScreen() const;
     void setLoadingState(bool loading);
 
     QFrame *m_previewWrap;
     QLabel *m_exitHintLabel;
-    AhdManager *m_ahdManager;
+    AhdManager *m_ahdManager = nullptr;
+    AhdManager *ahdManager();
     QTimer *m_singleClickTimer;
     bool m_returning;
     bool m_previewLoading;

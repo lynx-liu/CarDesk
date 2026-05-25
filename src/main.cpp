@@ -40,6 +40,7 @@
 #include "devicedetect.h"
 #include "appsignals.h"
 #include "mcuserialreader.h"
+#include "ahdmanager.h"
 
 // ── 背光控制（POWER 键关/亮屏，SLEEP 键关机，具体 dispdbg 操作在 backlight.cpp）─
 static MainWindow *findMainWindow();
@@ -1095,6 +1096,10 @@ int main(int argc, char *argv[]) {
 
     QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
+#ifdef CAR_DESK_USE_T507_SDK
+    AhdManager::globalInit();
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, []() { AhdManager::globalCleanup(); });
+#endif
     // 设备 buildroot 默认 LANG=C，强制 UTF-8 避免中文文件名乱码
     QTextCodec::setCodecForLocale(QTextCodec::codecForName("UTF-8"));
     const DeviceDetect &device = DeviceDetect::instance();
