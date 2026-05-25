@@ -505,10 +505,7 @@ QWidget *DiagnosticWindow::createPdfPage()
         "QPushButton:focus{outline:none;}"
     );
     connect(closeResultBtn, &QPushButton::clicked, this, [this]() {
-        if (m_pdfBottomNormal && m_pdfBottomSearch) {
-            m_pdfBottomNormal->show();
-            m_pdfBottomSearch->hide();
-        }
+        resetPdfSearchState();
     });
 
     m_pdfSearchKeywordLabel = new QLabel(QStringLiteral("维修"), m_pdfBottomSearch);
@@ -1265,6 +1262,27 @@ QWidget *DiagnosticWindow::createFaultDetailPage()
     return page;
 }
 
+void DiagnosticWindow::resetPdfSearchState()
+{
+    if (m_searchInput) {
+        m_searchInput->setText(QString());
+    }
+    m_pdfSearchKeyword.clear();
+    m_pdfSearchMatches.clear();
+    m_resultTotal = 0;
+    m_resultIndex = 0;
+    if (m_pdfSearchResultLabel) {
+        m_pdfSearchResultLabel->setText(QStringLiteral("0/0"));
+    }
+    if (m_pdfSearchKeywordLabel) {
+        m_pdfSearchKeywordLabel->setText(QStringLiteral("维修"));
+    }
+    if (m_pdfBottomNormal && m_pdfBottomSearch) {
+        m_pdfBottomNormal->show();
+        m_pdfBottomSearch->hide();
+    }
+}
+
 void DiagnosticWindow::onOpenFaultDetailPage()
 {
     showFaultDetail(QStringLiteral("ABS"));
@@ -1282,10 +1300,7 @@ void DiagnosticWindow::onOpenMaintenanceBookPage()
 
 void DiagnosticWindow::onOpenPdfView()
 {
-    if (m_pdfBottomNormal && m_pdfBottomSearch) {
-        m_pdfBottomNormal->show();
-        m_pdfBottomSearch->hide();
-    }
+    resetPdfSearchState();
 
     if (!m_currentPdfFilePath.isEmpty() && m_pdfDocument) {
         if (m_pdfDocument->openFile(m_currentPdfFilePath)) {

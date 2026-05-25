@@ -38,6 +38,7 @@ private slots:
     void onOpenPdfJumpPage();
     void onConfirmPdfSearch();
     void onPrevSearchResult();
+    void resetPdfSearchState();
     void onNextSearchResult();
     void onConfirmPdfJump();
     void onPrevPage();
