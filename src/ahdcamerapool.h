@@ -63,7 +63,8 @@ private slots:
 private:
 #ifdef CAR_DESK_USE_T507_SDK
     static bool ensureDvrManagerInit();
-    void destroyAllFactories();
+    bool canResumeFactories(const QVector<int> &cameraIds) const;
+    bool resumePreview(const QVector<int> &cameraIds);
     void scheduleHideHwOverlay(int cameraId);
     void applyHideHwOverlayOnly(int cameraId);
 

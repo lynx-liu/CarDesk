@@ -34,7 +34,6 @@ namespace {
 
 static constexpr int kChannelStartDelayMs = 300;
 static constexpr int kHwOverlayHideDelayMs = 2500;
-static constexpr int kFactoryTeardownMs = 1200;
 static constexpr int kColdStartWarmupMs = 1500;
 static constexpr int kFactoryCreateRetries = 3;
 static constexpr int kFactoryRetryDelayMs = 1000;
@@ -238,18 +237,6 @@ void softStopDvrChannel(dvr_factory *dvr, bool previewOn, bool recordOn)
     }
 }
 
-void destroyDvrFactory(dvr_factory *dvr, bool previewOn, bool recordOn)
-{
-    if (!dvr) {
-        return;
-    }
-    qDebug() << "[Ahd] destroyDvrFactory" << dvr << "cameraId" << dvr->mCameraId;
-    softStopDvrChannel(dvr, previewOn, recordOn);
-    dvr->stop();
-    QThread::msleep(kFactoryTeardownMs);
-    delete dvr;
-}
-
 } // namespace
 
 bool AhdCameraPool::uses360QuadrantCrop(int width, int height)
@@ -283,7 +270,7 @@ void AhdCameraPool::globalInit()
 void AhdCameraPool::globalCleanup()
 {
     if (s_activePool) {
-        s_activePool->destroyAllFactories();
+        s_activePool->stopAll();
     }
     clearAhdSessionMarker();
     g_uncleanHardwareRecovery = false;
@@ -299,62 +286,55 @@ AhdCameraPool::AhdCameraPool(QObject *parent)
 
 AhdCameraPool::~AhdCameraPool()
 {
-    destroyAllFactories();
+    stopAll();
     if (s_activePool == this) {
         s_activePool = nullptr;
     }
 }
 
-void AhdCameraPool::destroyAllFactories()
+bool AhdCameraPool::canResumeFactories(const QVector<int> &cameraIds) const
 {
-    bool hadFactory = false;
-    for (int i = 0; i < kChannelCount; ++i) {
-        if (m_channels[i].dvr) {
-            hadFactory = true;
-            break;
+    for (int n = 0; n < cameraIds.size(); ++n) {
+        const int cameraId = cameraIds.at(n);
+        const int slot = poolSlotForCameraId(cameraId);
+        if (slot < 0 || slot >= kChannelCount) {
+            return false;
+        }
+        auto *dvr = static_cast<dvr_factory *>(m_channels[slot].dvr);
+        if (!dvr || m_channels[slot].cameraId != cameraId || !isFactoryReady(dvr, cameraId)) {
+            return false;
         }
     }
-    if (!hadFactory && !m_running) {
-        return;
-    }
+    return !cameraIds.isEmpty();
+}
 
-    qDebug() << "[Ahd] destroyAllFactories";
-    m_shuttingDown = true;
-    m_running = false;
-    if (s_activePool == this) {
-        s_activePool = nullptr;
-    }
+bool AhdCameraPool::resumePreview(const QVector<int> &cameraIds)
+{
+    struct view_info vv = {0, 0, 1280, 720};
 
-    if (QCoreApplication::instance()) {
-        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 80);
-    }
-
-    for (int i = 0; i < kChannelCount; ++i) {
-        ChannelState &ch = m_channels[i];
-        if (!ch.dvr) {
-            continue;
-        }
+    for (int n = 0; n < cameraIds.size(); ++n) {
+        const int cameraId = cameraIds.at(n);
+        const int slot = poolSlotForCameraId(cameraId);
+        ChannelState &ch = m_channels[slot];
         auto *dvr = static_cast<dvr_factory *>(ch.dvr);
-        destroyDvrFactory(dvr, ch.previewOn, ch.recordOn);
-        ch = ChannelState();
-    }
-
-    if (g_displayInited) {
-        glRelease();
-        gldestory();
-        g_displayInited = false;
-    }
-
-    {
-        QMutexLocker lock(&m_frameMutex);
-        for (int i = 0; i < kChannelCount; ++i) {
-            m_frames[i] = FrameSlot();
+        if (!dvr) {
+            return false;
         }
+
+        qDebug() << "[Ahd] resume camera" << cameraId << dvr;
+        if (cameraId != 360 && dvr->start() < 0) {
+            return false;
+        }
+        if (dvr->startPriview(vv) != 0) {
+            return false;
+        }
+        ch.previewOn = true;
     }
 
-    m_activeChannelCount = 0;
-    m_uses360Compose = false;
-    m_shuttingDown = false;
+    if (!cameraIds.isEmpty()) {
+        scheduleHideHwOverlay(cameraIds.first());
+    }
+    return true;
 }
 
 void AhdCameraPool::applyHideHwOverlayOnly(int cameraId)
@@ -411,8 +391,21 @@ bool AhdCameraPool::startAll()
 
     m_uses360Compose = cameraIds.contains(360);
 
-    // 上次软退出残留的 dvr_factory 必须 delete，否则再次 new 会 malloc 堆损坏
-    destroyAllFactories();
+    if (canResumeFactories(cameraIds)) {
+        m_shuttingDown = false;
+        s_activePool = this;
+        if (resumePreview(cameraIds)) {
+            m_running = true;
+            markAhdSessionActive();
+            noteHardwareRecoveryDone();
+            qDebug() << "[Ahd] startAll resumed (no delete, avoid SDK ~dvr_factory crash)";
+            return true;
+        }
+        if (s_activePool == this) {
+            s_activePool = nullptr;
+        }
+        qWarning() << "[Ahd] resume failed, need new dvr_factory (orphan old, no delete)";
+    }
 
     m_activeChannelCount = 0;
 
@@ -432,6 +425,13 @@ bool AhdCameraPool::startAll()
 
         ChannelState &ch = m_channels[slot];
 
+        if (ch.dvr) {
+            qWarning() << "[Ahd] orphan old dvr_factory slot" << slot << "(intentional leak, no delete)";
+            auto *old = static_cast<dvr_factory *>(ch.dvr);
+            softStopDvrChannel(old, ch.previewOn, ch.recordOn);
+            ch = ChannelState();
+        }
+
         dvr_factory *dvr = nullptr;
         for (int attempt = 0; attempt < kFactoryCreateRetries; ++attempt) {
             qDebug() << "[Ahd] phase1 new dvr_factory(" << cameraId << ") slot" << slot
@@ -441,17 +441,14 @@ bool AhdCameraPool::startAll()
                 qDebug() << "[Ahd] phase1 dvr_factory(" << cameraId << ") ok" << dvr;
                 break;
             }
-            qWarning() << "[Ahd] dvr_factory(" << cameraId << ") init incomplete, retry";
-            if (dvr) {
-                destroyDvrFactory(dvr, false, false);
-                dvr = nullptr;
-            }
+            qWarning() << "[Ahd] dvr_factory(" << cameraId << ") init incomplete, retry (leak partial)";
+            dvr = nullptr;
             QThread::msleep(kFactoryRetryDelayMs);
         }
 
         if (!dvr) {
-            destroyAllFactories();
             emit poolError(QStringLiteral("创建 dvr_factory(%1) 失败（设备可能被占用）").arg(cameraId));
+            stopAll();
             return false;
         }
 
@@ -533,11 +530,17 @@ bool AhdCameraPool::startAll()
 
 void AhdCameraPool::stopAll()
 {
-    if (!m_running) {
+    bool needsStop = m_running;
+    for (int i = 0; i < kChannelCount && !needsStop; ++i) {
+        if (m_channels[i].dvr && (m_channels[i].previewOn || m_channels[i].recordOn)) {
+            needsStop = true;
+        }
+    }
+    if (!needsStop) {
         return;
     }
 
-    qDebug() << "[Ahd] stopAll (stop preview only; delete on next startAll)";
+    qDebug() << "[Ahd] stopAll (stopPriview only, keep dvr_factory — never delete)";
     m_shuttingDown = true;
     m_running = false;
     if (s_activePool == this) {

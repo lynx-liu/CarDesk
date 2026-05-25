@@ -77,7 +77,7 @@ void AhdManager::applyLayoutSpec()
 
 bool AhdManager::startCamera()
 {
-    if (m_camReady) {
+    if (m_camReady && m_pool->isRunning()) {
         return true;
     }
 
@@ -121,7 +121,9 @@ bool AhdManager::startPreview(QWidget *parentWidget, int x, int y, int w, int h)
 
     attachPreviewWidget(parentWidget, rect.width(), rect.height());
     if (m_previewWidget) {
+        if (!m_pool->hasPersistedFactories()) {
             m_previewWidget->clearChannelCache();
+        }
         m_previewWidget->update();
     }
 
