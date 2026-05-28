@@ -281,7 +281,6 @@ void AhdCameraPool::globalCleanup()
 AhdCameraPool::AhdCameraPool(QObject *parent)
     : QObject(parent)
 {
-    s_activePool = this;
 }
 
 AhdCameraPool::~AhdCameraPool()
@@ -459,14 +458,13 @@ bool AhdCameraPool::startAll()
         dvr->SetDataCB(poolUsrDataCb, dvr);
         dvr->setCallbacks(poolNotifyCallback, poolDataCallback, poolDataCallbackTimestamp, dvr);
 
-        qDebug() << "[Ahd] phase1 recordInit camera" << cameraId;
-        if (dvr->recordInit() != 0) {
-            emit poolError(QStringLiteral("摄像头 %1 recordInit 失败").arg(cameraId));
-            stopAll();
-            return false;
-        }
-
         if (qEnvironmentVariableIsSet("CARDESK_AHD_RECORD")) {
+            qDebug() << "[Ahd] phase1 recordInit camera" << cameraId;
+            if (dvr->recordInit() != 0) {
+                emit poolError(QStringLiteral("摄像头 %1 recordInit 失败").arg(cameraId));
+                stopAll();
+                return false;
+            }
             dvr->startRecord();
             ch.recordOn = true;
         }

@@ -115,11 +115,12 @@ bool AhdManager::startPreview(QWidget *parentWidget, int x, int y, int w, int h)
     const bool rectChanged = (m_lastRect != rect);
     m_lastRect = rect;
 
+    // 先创建 GL 预览控件再打开 SDK，避免首帧回调时无有效绘制上下文导致堆损坏
+    attachPreviewWidget(parentWidget, rect.width(), rect.height());
+
     if (!m_camReady && !startCamera()) {
         return false;
     }
-
-    attachPreviewWidget(parentWidget, rect.width(), rect.height());
     if (m_previewWidget) {
         if (!m_pool->hasPersistedFactories()) {
             m_previewWidget->clearChannelCache();

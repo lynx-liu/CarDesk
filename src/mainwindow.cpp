@@ -523,14 +523,19 @@ void MainWindow::onDrivingImageClicked() {
     }, Qt::UniqueConnection);
 
     m_drivingImageWindow->setDrivingMode(360);
-    qDebug() << "[Driving] step5: before show()";
+    qDebug() << "[Driving] step5: schedule show (defer SDK until media paused)";
 
-    m_drivingImageWindow->show();
-    qDebug() << "[Driving] step6: after show()";
-
-    m_drivingImageWindow->raise();
-    m_drivingImageWindow->activateWindow();
-    qDebug() << "[Driving] step7: window raised";
+    QPointer<DrivingImageWindow> win = m_drivingImageWindow;
+    QTimer::singleShot(150, this, [this, win]() {
+        if (!win) {
+            return;
+        }
+        win->show();
+        qDebug() << "[Driving] step6: after show()";
+        win->raise();
+        win->activateWindow();
+        qDebug() << "[Driving] step7: window raised";
+    });
 }
 
 QWidget *MainWindow::findCurrentVisibleNonPhoneWindow() const {
