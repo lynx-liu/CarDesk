@@ -60,6 +60,13 @@ MainWindow::MainWindow(QWidget *parent)
         ensureDiagnosticWindow();
         ensureSystemSettingWindow();
         ensureImageViewingWindow();
+        ensureDrivingImageWindow();
+    });
+    // 摄像头 SDK 初始化较重，主界面首帧显示后再后台打开
+    QTimer::singleShot(400, this, [this]() {
+        if (m_drivingImageWindow) {
+            m_drivingImageWindow->warmupCamera();
+        }
     });
 }
 
@@ -495,6 +502,26 @@ void MainWindow::onSystemSettingsClicked() {
     m_systemSettingWindow->activateWindow();
 }
 
+void MainWindow::ensureDrivingImageWindow()
+{
+    if (!m_drivingImageWindow) {
+        qDebug() << "[Driving] ensureDrivingImageWindow: pre-create";
+        m_drivingImageWindow = new DrivingImageWindow();
+        m_drivingImageWindow->setAttribute(Qt::WA_DeleteOnClose);
+        connect(m_drivingImageWindow, &DrivingImageWindow::requestReturnToMain, this, [this]() {
+            if (m_mediaManager) {
+                m_mediaManager->resumePlaybackAfterInterruption();
+            }
+        }, Qt::UniqueConnection);
+        connect(m_drivingImageWindow, &QObject::destroyed, this, [this]() {
+            m_drivingImageWindow = nullptr;
+            if (m_mediaManager) {
+                m_mediaManager->resumePlaybackAfterInterruption();
+            }
+        }, Qt::UniqueConnection);
+    }
+}
+
 void MainWindow::onDrivingImageClicked() {
     qDebug() << "[Driving] step1: button clicked";
 
@@ -503,24 +530,8 @@ void MainWindow::onDrivingImageClicked() {
     }
     qDebug() << "[Driving] step2: after pausePlaybackForOcclusion";
 
-    if (!m_drivingImageWindow) {
-        qDebug() << "[Driving] step3: creating DrivingImageWindow";
-        m_drivingImageWindow = new DrivingImageWindow();
-        m_drivingImageWindow->setAttribute(Qt::WA_DeleteOnClose);
-        qDebug() << "[Driving] step4: DrivingImageWindow created";
-    }
-
-    connect(m_drivingImageWindow, &DrivingImageWindow::requestReturnToMain, this, [this]() {
-        if (m_mediaManager) {
-            m_mediaManager->resumePlaybackAfterInterruption();
-        }
-    }, Qt::UniqueConnection);
-    connect(m_drivingImageWindow, &QObject::destroyed, this, [this]() {
-        m_drivingImageWindow = nullptr;
-        if (m_mediaManager) {
-            m_mediaManager->resumePlaybackAfterInterruption();
-        }
-    }, Qt::UniqueConnection);
+    ensureDrivingImageWindow();
+    qDebug() << "[Driving] step3: DrivingImageWindow ready";
 
     m_drivingImageWindow->setDrivingMode(360);
     qDebug() << "[Driving] step5: schedule show (defer SDK until media paused)";

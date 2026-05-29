@@ -64,6 +64,7 @@ private:
     void ensureDiagnosticWindow();
     void ensureSystemSettingWindow();
     void ensureImageViewingWindow();
+    void ensureDrivingImageWindow();
     QWidget *findCurrentVisibleNonPhoneWindow() const;
     void restorePreviousWindow();
 

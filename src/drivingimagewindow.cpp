@@ -114,7 +114,29 @@ void DrivingImageWindow::bindAhdSignals()
     });
 }
 
-void DrivingImageWindow::warmupCamera() {}
+void DrivingImageWindow::warmupCamera()
+{
+    if (qEnvironmentVariableIsSet("CARDESK_SKIP_AHD")) {
+        qWarning() << "[Driving] CARDESK_SKIP_AHD=1, skip camera warmup";
+        return;
+    }
+
+    m_cameraMode = 360;
+    updatePreviewLayout();
+
+    AhdManager *mgr = ahdManager();
+    if (mgr->isCameraReady()) {
+        qDebug() << "[Driving] warmupCamera: already ready";
+        return;
+    }
+
+    qDebug() << "[Driving] warmupCamera: startCamera mode" << m_cameraMode;
+    if (!mgr->startCamera()) {
+        qWarning() << "[Driving] warmupCamera: startCamera failed";
+        return;
+    }
+    mgr->enableSafetyWatermark(QStringLiteral("请注意周边安全"));
+}
 
 void DrivingImageWindow::closeEvent(QCloseEvent *event)
 {
