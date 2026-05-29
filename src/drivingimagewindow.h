@@ -48,7 +48,6 @@ private:
     void updatePreviewLayout();
     void stopPreview();
     QRect previewRectOnScreen() const;
-    void setLoadingState(bool loading);
     void showPage(int index); // 0=预览 1=设置 2=回放
     QWidget *createPreviewPage();
 
@@ -67,7 +66,6 @@ private:
     AhdManager *ahdManager();
     QTimer *m_singleClickTimer;
     bool m_returning;
-    bool m_previewLoading;
     bool m_exitInProgress;
     bool m_startScheduled;
     bool m_isFullscreen;

@@ -34,7 +34,6 @@ DrivingImageWindow::DrivingImageWindow(QWidget *parent)
     , m_exitHintLabel(nullptr)
     , m_singleClickTimer(new QTimer(this))
     , m_returning(false)
-    , m_previewLoading(true)
     , m_exitInProgress(false)
     , m_startScheduled(false)
     , m_isFullscreen(false)
@@ -87,22 +86,16 @@ void DrivingImageWindow::bindAhdSignals()
 {
     connect(ahdManager(), &AhdManager::previewStarted, this, [this]() {
         if (!m_exitInProgress && isVisible()) {
-            setLoadingState(false);
+            if (m_exitHintLabel) {
+                m_exitHintLabel->hide();
+            }
             layoutNavBar();
-        }
-    });
-    connect(ahdManager(), &AhdManager::previewStopped, this, [this]() {
-        if (!m_exitInProgress && isVisible() && m_previewLoading) {
-            m_exitHintLabel->setText(QStringLiteral("加载中..."));
-            layoutCenterHint();
-            m_exitHintLabel->show();
         }
     });
     connect(ahdManager(), &AhdManager::cameraError, this, [this](const QString &message) {
         if (m_exitInProgress) {
             return;
         }
-        m_previewLoading = false;
         if (m_exitHintLabel) {
             const QString faultText = message.isEmpty()
                                           ? QStringLiteral("影像功能出现故障")
@@ -169,7 +162,6 @@ void DrivingImageWindow::returnToMainSafely()
 
     m_returning = true;
     m_exitInProgress = true;
-    setLoadingState(true);
 
     if (m_ahdManager) {
         m_ahdManager->stopPreview();
@@ -373,7 +365,7 @@ QWidget *DrivingImageWindow::createPreviewPage()
         QStringLiteral("QLabel{color:#E3D948;background:transparent;border:none;font-size:28px;"
                        "font-weight:700;}"));
 
-    m_exitHintLabel = new QLabel(QStringLiteral("加载中..."), m_previewWrap);
+    m_exitHintLabel = new QLabel(m_previewWrap);
     m_exitHintLabel->setAlignment(Qt::AlignCenter);
     m_exitHintLabel->setStyleSheet(
         QStringLiteral("QLabel{background:rgba(0,0,0,0.45);color:#ffffff;border:1px solid #00A9FF;"
@@ -498,17 +490,13 @@ void DrivingImageWindow::startPreviewIfNeeded()
             layoutCenterHint();
             m_exitHintLabel->show();
         }
-        setLoadingState(false);
         return;
     }
 
     qDebug() << "[Driving] startPreviewIfNeeded: opening cameras";
     updatePreviewLayout();
-    m_previewLoading = true;
     if (m_exitHintLabel) {
-        m_exitHintLabel->setText(QStringLiteral("加载中..."));
-        layoutCenterHint();
-        m_exitHintLabel->show();
+        m_exitHintLabel->hide();
     }
 
     const QRect rect = previewRectOnScreen();
@@ -526,6 +514,9 @@ void DrivingImageWindow::startPreviewIfNeeded()
         layoutCenterHint();
         m_exitHintLabel->show();
     } else {
+        if (m_exitHintLabel) {
+            m_exitHintLabel->hide();
+        }
         layoutTextOverlays();
         layoutCenterHint();
     }
@@ -632,7 +623,6 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
     m_exitInProgress = false;
     m_isFullscreen = false;
     m_fullscreenCameraId = -1;
-    setLoadingState(true);
     if ((!m_stack || m_stack->currentIndex() == 0) && !m_startScheduled) {
         m_startScheduled = true;
         QTimer::singleShot(100, this, [this]() {
@@ -661,17 +651,5 @@ void DrivingImageWindow::resizeEvent(QResizeEvent *event)
         const QRect rect = previewRectOnScreen();
         m_ahdManager->startPreview(m_previewWrap, rect.x(), rect.y(), rect.width(), rect.height());
         layoutNavBar();
-    }
-}
-
-void DrivingImageWindow::setLoadingState(bool loading)
-{
-    m_previewLoading = loading;
-    if (!m_exitHintLabel) {
-        return;
-    }
-
-    if (!loading) {
-        m_exitHintLabel->hide();
     }
 }
