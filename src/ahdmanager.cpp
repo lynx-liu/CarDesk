@@ -2,6 +2,7 @@
 
 #include "ahdcamerapool.h"
 #include "ahdpreviewwidget.h"
+#include "ahdsettings.h"
 
 #include <QProcessEnvironment>
 #include <QRect>
@@ -126,7 +127,7 @@ bool AhdManager::startPreview(QWidget *parentWidget, int x, int y, int w, int h)
         if (!m_pool->hasPersistedFactories()) {
             m_previewWidget->clearChannelCache();
         }
-        m_previewWidget->setShowRecordingBadge(qEnvironmentVariableIsSet("CARDESK_AHD_RECORD"));
+        m_previewWidget->setShowRecordingBadge(AhdSettings::instance().recordingEnabled());
         m_previewWidget->update();
     }
 
@@ -149,7 +150,9 @@ void AhdManager::attachPreviewWidget(QWidget *parentWidget, int w, int h)
     } else if (parentWidget && m_previewWidget->parentWidget() != parentWidget) {
         m_previewWidget->setParent(parentWidget);
     }
-    m_previewWidget->setGeometry(0, 0, w, h);
+    const int pw = (w > 0) ? w : (parentWidget ? parentWidget->width() : 0);
+    const int ph = (h > 0) ? h : (parentWidget ? parentWidget->height() : 0);
+    m_previewWidget->setGeometry(0, 0, pw, ph);
     m_previewWidget->show();
     m_previewWidget->raise();
 }
@@ -194,3 +197,14 @@ void AhdManager::enableSafetyWatermark(const QString &text)
 }
 
 void AhdManager::clearWatermark() {}
+
+void AhdManager::syncRecordingWithSettings()
+{
+    if (m_pool) {
+        m_pool->syncRecordingState();
+    }
+    if (m_previewWidget) {
+        m_previewWidget->setShowRecordingBadge(AhdSettings::instance().recordingEnabled());
+        m_previewWidget->update();
+    }
+}

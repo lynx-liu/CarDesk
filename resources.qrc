@@ -146,6 +146,12 @@
         <file alias="music_musiclist_file_down.png">ui/images/music_musiclist_file_down.png</file>
         <file alias="music_musiclist_up.png">ui/images/music_musiclist_up.png</file>
         <file alias="butt_driving_image_playback_folder_up.png">ui/images/butt_driving_image_playback_folder_up.png</file>
+        <file alias="butt_driving_image_video_up.png">ui/images/butt_driving_image_video_up.png</file>
+        <file alias="butt_driving_image_video_down.png">ui/images/butt_driving_image_video_down.png</file>
+        <file alias="butt_driving_image_setting_up.png">ui/images/butt_driving_image_setting_up.png</file>
+        <file alias="butt_driving_image_setting_down.png">ui/images/butt_driving_image_setting_down.png</file>
+        <file alias="butt_driving_image_playback_up.png">ui/images/butt_driving_image_playback_up.png</file>
+        <file alias="butt_driving_image_playback_down.png">ui/images/butt_driving_image_playback_down.png</file>
         <file alias="pict_driving_image_tips_icon.png">ui/images/pict_driving_image_tips_icon.png</file>
         <file alias="pict_driving_image_video_recording.png">ui/images/pict_driving_image_video_recording.png</file>
         <file alias="pict_popalert_fault_icon.png">ui/images/pict_popalert_fault_icon.png</file>
@@ -160,6 +166,11 @@
         <file alias="butt_setting_choose_right.png">ui/images/butt_setting_choose_right.png</file>
         <file alias="butt_setting_open.png">ui/images/butt_setting_open.png</file>
         <file alias="butt_setting_close.png">ui/images/butt_setting_close.png</file>
+        <file alias="butt_setting_check_up.png">ui/images/butt_setting_check_up.png</file>
+        <file alias="butt_setting_check_down.png">ui/images/butt_setting_check_down.png</file>
+        <file alias="pic_driving_image_setting_direction_behind.png">ui/images/pic_driving_image_setting_direction_behind.png</file>
+        <file alias="pic_driving_image_setting_direction_side.png">ui/images/pic_driving_image_setting_direction_side.png</file>
+        <file alias="butt_driving_image_playback_filelist_up.png">ui/images/butt_driving_image_playback_filelist_up.png</file>
         <file alias="butt_setting_sound_field_up.png">ui/images/butt_setting_sound_field_up.png</file>
         <file alias="butt_setting_sound_field_down.png">ui/images/butt_setting_sound_field_down.png</file>
         <file alias="pict_brightness_low.png">ui/images/pict_brightness_low.png</file>

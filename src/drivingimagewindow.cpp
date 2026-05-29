@@ -1,5 +1,10 @@
 #include "drivingimagewindow.h"
 #include "ahdpreviewwidget.h"
+#include "ahdsettings.h"
+#include "pagebgwidget.h"
+#include "drivingimagenavbar.h"
+#include "drivingimageplaybackpage.h"
+#include "drivingimagesettingspage.h"
 #include "devicedetect.h"
 #include "mainwindow.h"
 #include "mediamanager.h"
@@ -20,6 +25,7 @@
 #include <QShowEvent>
 #include <QTimer>
 #include <QPixmap>
+#include <QStackedWidget>
 #include <QVBoxLayout>
 
 DrivingImageWindow::DrivingImageWindow(QWidget *parent)
@@ -82,6 +88,7 @@ void DrivingImageWindow::bindAhdSignals()
     connect(ahdManager(), &AhdManager::previewStarted, this, [this]() {
         if (!m_exitInProgress && isVisible()) {
             setLoadingState(false);
+            layoutNavBar();
         }
     });
     connect(ahdManager(), &AhdManager::previewStopped, this, [this]() {
@@ -217,8 +224,17 @@ void DrivingImageWindow::mousePressEvent(QMouseEvent *event)
 
 void DrivingImageWindow::handleConfirmedSingleClick(const QPoint &globalPos)
 {
+    if (m_stack && m_stack->currentIndex() != 0) {
+        return;
+    }
     if (m_exitInProgress || !isVisible() || !m_previewWrap) {
         return;
+    }
+    if (m_navBar && m_navBar->isVisible()) {
+        const QPoint navLocal = m_navBar->mapFromGlobal(globalPos);
+        if (m_navBar->rect().contains(navLocal)) {
+            return;
+        }
     }
 
     if (m_isFullscreen) {
@@ -257,28 +273,75 @@ void DrivingImageWindow::handleConfirmedSingleClick(const QPoint &globalPos)
 
 void DrivingImageWindow::setupUI()
 {
-    auto *central = new QWidget(this);
-    central->setStyleSheet("background:#000000;");
-    central->setAttribute(Qt::WA_OpaquePaintEvent, true);
-    central->setAutoFillBackground(true);
+    auto *central = new PageBgWidget(this);
+    central->setObjectName(QStringLiteral("drivingImageCentral"));
     setCentralWidget(central);
 
     auto *root = new QVBoxLayout(central);
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
-    auto *previewWrap = new QFrame(central);
-    m_previewWrap = previewWrap;
-    previewWrap->setStyleSheet("QFrame{background:#000000;border:none;}");
+    m_stack = new QStackedWidget(central);
+    m_stack->setMinimumHeight(0);
+    m_stack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    m_stack->setStyleSheet(
+        QStringLiteral("QStackedWidget{background:transparent;border:none;}"));
+    m_previewPage = createPreviewPage();
+    m_stack->addWidget(m_previewPage);
+    m_settingsPage = new DrivingImageSettingsPage(ahdManager(), m_stack);
+    m_stack->addWidget(m_settingsPage);
+    m_playbackPage = new DrivingImagePlaybackPage(m_stack);
+    m_stack->addWidget(m_playbackPage);
+    root->addWidget(m_stack, 1);
 
-    auto *previewLayout = new QVBoxLayout(previewWrap);
-    previewLayout->setContentsMargins(0, 0, 0, 0);
-    previewLayout->setSpacing(0);
+    // 预览全屏 720px，底栏叠在画面上（原型 .video_play_bottom position:absolute）
+    m_navBar = new DrivingImageNavBar(central);
+    m_navBar->setFixedHeight(108);
+    m_navBar->hide();
 
-    auto *previewSurface = new QFrame(previewWrap);
-    previewSurface->setStyleSheet("QFrame{background:#000000;border:none;}");
+    connect(m_navBar, &DrivingImageNavBar::tabSelected, this, [this](DrivingImageNavBar::Tab tab) {
+        showPage(static_cast<int>(tab));
+    });
 
-    m_safetyTipFrame = new QFrame(previewWrap);
+    connect(m_settingsPage, &DrivingImageSettingsPage::recordingToggled, this, [this](bool) {
+        if (m_ahdManager) {
+            m_ahdManager->syncRecordingWithSettings();
+        }
+    });
+    connect(m_settingsPage, &DrivingImageSettingsPage::requestReturnToMain, this, [this]() {
+        returnToMainSafely();
+    });
+    connect(m_settingsPage, &DrivingImageSettingsPage::requestApplyDrivingMode, this,
+            [this](int mode) {
+                setDrivingMode(mode);
+                showPage(0);
+            });
+    connect(m_playbackPage, &DrivingImagePlaybackPage::requestReturnToPreview, this, [this]() {
+        showPage(0);
+    });
+    connect(m_playbackPage, &DrivingImagePlaybackPage::requestReturnToMain, this, [this]() {
+        returnToMainSafely();
+    });
+    showPage(0);
+}
+
+QWidget *DrivingImageWindow::createPreviewPage()
+{
+    auto *page = new QWidget();
+    page->setMinimumSize(0, 0);
+    page->setStyleSheet(QStringLiteral("background:transparent;border:none;"));
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0);
+
+    m_previewWrap = new QFrame(page);
+    m_previewWrap->setStyleSheet(QStringLiteral("QFrame{background:#000000;border:none;}"));
+    layout->addWidget(m_previewWrap, 1);
+
+    auto *previewSurface = new QFrame(m_previewWrap);
+    previewSurface->setStyleSheet(QStringLiteral("QFrame{background:#000000;border:none;}"));
+    previewSurface->setGeometry(m_previewWrap->rect());
+
+    m_safetyTipFrame = new QFrame(m_previewWrap);
     m_safetyTipFrame->setStyleSheet(
         QStringLiteral("QFrame{background:rgba(0,0,0,128);border:none;}"));
     m_safetyTipIcon = new QLabel(m_safetyTipFrame);
@@ -290,18 +353,58 @@ void DrivingImageWindow::setupUI()
     m_safetyTipText->setWordWrap(true);
     m_safetyTipText->setStyleSheet(
         QStringLiteral("QLabel{color:#E3D948;background:transparent;border:none;font-size:28px;"
-                       "font-weight:700;line-height:34px;}"));
+                       "font-weight:700;}"));
 
-    m_exitHintLabel = new QLabel(QStringLiteral("加载中..."), previewWrap);
+    m_exitHintLabel = new QLabel(QStringLiteral("加载中..."), m_previewWrap);
     m_exitHintLabel->setAlignment(Qt::AlignCenter);
-    m_exitHintLabel->setStyleSheet("QLabel{background:rgba(0,0,0,0.45);color:#ffffff;border:1px solid #00A9FF;border-radius:10px;padding:8px 14px;font-size:28px;font-weight:700;}");
-    m_exitHintLabel->raise();
+    m_exitHintLabel->setStyleSheet(
+        QStringLiteral("QLabel{background:rgba(0,0,0,0.45);color:#ffffff;border:1px solid #00A9FF;"
+                       "border-radius:10px;padding:8px 14px;font-size:28px;font-weight:700;}"));
     m_exitHintLabel->hide();
 
-    previewLayout->addWidget(previewSurface, 1);
-    root->addWidget(previewWrap, 1);
-    layoutCenterHint();
-    layoutTextOverlays();
+    return page;
+}
+
+void DrivingImageWindow::layoutNavBar()
+{
+    QWidget *host = centralWidget();
+    if (!m_navBar || !host) {
+        return;
+    }
+    const int navH = m_navBar->height() > 0 ? m_navBar->height() : 108;
+    const int w = host->width();
+    const int h = host->height();
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    m_navBar->setGeometry(0, h - navH, w, navH);
+    m_navBar->show();
+    m_navBar->raise();
+}
+
+void DrivingImageWindow::showPage(int index)
+{
+    if (!m_stack) {
+        return;
+    }
+    m_stack->setCurrentIndex(index);
+    if (m_navBar) {
+        m_navBar->setActiveTab(static_cast<DrivingImageNavBar::Tab>(index));
+        m_navBar->setVisible(true);
+        layoutNavBar();
+        m_navBar->raise();
+    }
+
+    if (index == 0) {
+        layoutTextOverlays();
+        layoutCenterHint();
+        startPreviewIfNeeded();
+    } else if (m_ahdManager) {
+        m_ahdManager->stopPreview();
+        if (index == 2 && m_playbackPage) {
+            m_playbackPage->reloadDates();
+        }
+    }
 }
 
 void DrivingImageWindow::layoutTextOverlays()
@@ -404,7 +507,11 @@ void DrivingImageWindow::startPreviewIfNeeded()
         m_exitHintLabel->setText(QStringLiteral("影像功能出现故障"));
         layoutCenterHint();
         m_exitHintLabel->show();
+    } else {
+        layoutTextOverlays();
+        layoutCenterHint();
     }
+    layoutNavBar();
 }
 
 void DrivingImageWindow::stopPreview()
@@ -438,23 +545,25 @@ int DrivingImageWindow::drivingMode() const
 
 QRect DrivingImageWindow::previewRectOnScreen() const
 {
-    const DeviceDetect &device = DeviceDetect::instance();
-    if (device.getDeviceType() == DeviceDetect::DEVICE_TYPE_CARUNIT && QApplication::primaryScreen()) {
-        return QApplication::primaryScreen()->geometry();
+    QWidget *host = centralWidget();
+    if (host && host->width() > 0 && host->height() > 0) {
+        const QPoint topLeft = host->mapToGlobal(QPoint(0, 0));
+        return QRect(topLeft, host->size());
     }
 
     QWidget *target = m_previewWrap ? static_cast<QWidget *>(m_previewWrap)
                                     : const_cast<DrivingImageWindow *>(this);
-    if (!target) {
+    if (!target || target->width() <= 0 || target->height() <= 0) {
+        const DeviceDetect &device = DeviceDetect::instance();
+        if (device.getDeviceType() == DeviceDetect::DEVICE_TYPE_CARUNIT
+            && QApplication::primaryScreen()) {
+            return QApplication::primaryScreen()->geometry();
+        }
         return QRect();
     }
 
-    const QPoint inWindowPos = target->mapTo(const_cast<DrivingImageWindow *>(this), QPoint(0, 0));
-    const QPoint winGlobal = const_cast<DrivingImageWindow *>(this)->mapToGlobal(QPoint(0, 0));
-    return QRect(winGlobal.x() + inWindowPos.x(),
-                 winGlobal.y() + inWindowPos.y(),
-                 target->width(),
-                 target->height());
+    const QPoint topLeft = target->mapToGlobal(QPoint(0, 0));
+    return QRect(topLeft, target->size());
 }
 
 void DrivingImageWindow::keyPressEvent(QKeyEvent *event)
@@ -494,9 +603,11 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
     raise();
     activateWindow();
 
+    layoutNavBar();
     layoutCenterHint();
     layoutTextOverlays();
     QTimer::singleShot(0, this, [this]() {
+        layoutNavBar();
         layoutCenterHint();
         layoutTextOverlays();
     });
@@ -505,13 +616,18 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
     m_isFullscreen = false;
     m_fullscreenCameraId = -1;
     setLoadingState(true);
-    if (!m_startScheduled) {
+    if ((!m_stack || m_stack->currentIndex() == 0) && !m_startScheduled) {
         m_startScheduled = true;
         QTimer::singleShot(100, this, [this]() {
             m_startScheduled = false;
             qDebug() << "[Driving] showEvent timer: startPreviewIfNeeded";
-            startPreviewIfNeeded();
+            if (!m_stack || m_stack->currentIndex() == 0) {
+                startPreviewIfNeeded();
+            }
         });
+    }
+    if (m_ahdManager) {
+        m_ahdManager->syncRecordingWithSettings();
     }
     qDebug() << "[Driving] showEvent end";
 }
@@ -519,11 +635,15 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
 void DrivingImageWindow::resizeEvent(QResizeEvent *event)
 {
     QMainWindow::resizeEvent(event);
-    layoutTextOverlays();
-    layoutCenterHint();
+    layoutNavBar();
+    if (m_stack && m_stack->currentIndex() == 0) {
+        layoutTextOverlays();
+        layoutCenterHint();
+    }
     if (m_ahdManager && m_ahdManager->isPreviewActive() && m_previewWrap) {
         const QRect rect = previewRectOnScreen();
         m_ahdManager->startPreview(m_previewWrap, rect.x(), rect.y(), rect.width(), rect.height());
+        layoutNavBar();
     }
 }
 

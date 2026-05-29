@@ -41,6 +41,7 @@ public:
 
     void enableSafetyWatermark(const QString &text = QStringLiteral("请注意周边安全"));
     void clearWatermark();
+    void syncRecordingWithSettings();
 
 signals:
     void cameraError(const QString &msg);

@@ -121,6 +121,12 @@ HEADERS += \
     src/diagnosticwindow.h \
     src/systemsettingwindow.h \
     src/drivingimagewindow.h \
+    src/drivingimagenavbar.h \
+    src/drivingimagesubtopbar.h \
+    src/drivingimagesettingspage.h \
+    src/drivingimageplaybackpage.h \
+    src/ahdsettings.h \
+    src/ahdrecordstore.h \
     src/imageviewingwindow.h \
     src/t507sdkbridge.h \
     src/ahdmanager.h \
@@ -151,6 +157,12 @@ SOURCES += \
     src/diagnosticwindow.cpp \
     src/systemsettingwindow.cpp \
     src/drivingimagewindow.cpp \
+    src/drivingimagenavbar.cpp \
+    src/drivingimagesubtopbar.cpp \
+    src/drivingimagesettingspage.cpp \
+    src/drivingimageplaybackpage.cpp \
+    src/ahdsettings.cpp \
+    src/ahdrecordstore.cpp \
     src/imageviewingwindow.cpp \
     src/t507sdkbridge.cpp \
     src/ahdmanager.cpp \

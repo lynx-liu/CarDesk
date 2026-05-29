@@ -47,6 +47,7 @@ public:
     bool copyLatestFrame(int channelIndex, FrameSlot *out) const;
 
     void applySafetyWatermarks(const QString &text);
+    void syncRecordingState();
 
 #ifdef CAR_DESK_USE_T507_SDK
     void onPreviewFrameFromSdk(void *dvrUser, char *dataPtr);

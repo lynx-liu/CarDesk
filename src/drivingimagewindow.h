@@ -10,7 +10,11 @@ class QHideEvent;
 class QLabel;
 class QResizeEvent;
 class QShowEvent;
+class QStackedWidget;
 class QTimer;
+class DrivingImageNavBar;
+class DrivingImageSettingsPage;
+class DrivingImagePlaybackPage;
 
 class DrivingImageWindow : public QMainWindow {
     Q_OBJECT
@@ -38,12 +42,21 @@ private:
     void bindAhdSignals();
     void layoutCenterHint();
     void layoutTextOverlays();
+    void layoutNavBar();
     void handleConfirmedSingleClick(const QPoint &globalPos);
     void startPreviewIfNeeded();
     void updatePreviewLayout();
     void stopPreview();
     QRect previewRectOnScreen() const;
     void setLoadingState(bool loading);
+    void showPage(int index); // 0=预览 1=设置 2=回放
+    QWidget *createPreviewPage();
+
+    QStackedWidget *m_stack = nullptr;
+    QWidget *m_previewPage = nullptr;
+    DrivingImageSettingsPage *m_settingsPage = nullptr;
+    DrivingImagePlaybackPage *m_playbackPage = nullptr;
+    DrivingImageNavBar *m_navBar = nullptr;
 
     QFrame *m_previewWrap;
     QFrame *m_safetyTipFrame;
