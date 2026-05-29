@@ -66,6 +66,22 @@ void layoutSingle(AhdViewport out[AhdLayoutSpec::kChannelCount], int channel)
 
 } // namespace
 
+QString AhdLayoutSpec::channelLabel(int channel)
+{
+    switch (channel) {
+    case 0:
+        return QStringLiteral("前");
+    case 1:
+        return QStringLiteral("后");
+    case 2:
+        return QStringLiteral("左");
+    case 3:
+        return QStringLiteral("右");
+    default:
+        return QString();
+    }
+}
+
 void AhdLayoutSpec::viewports(AhdViewport out[kChannelCount]) const
 {
     if (fullscreenChannel >= 0 && fullscreenChannel < kChannelCount) {

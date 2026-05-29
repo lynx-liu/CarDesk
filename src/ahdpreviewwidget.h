@@ -16,6 +16,7 @@ public:
     explicit AhdPreviewGLWidget(AhdCameraPool *pool, QWidget *parent = nullptr);
 
     void setLayoutSpec(const AhdLayoutSpec &spec);
+    void setShowRecordingBadge(bool show);
     void clearChannelCache();
     bool hasDisplayableCache() const;
 
@@ -32,11 +33,13 @@ private:
 
     bool ensureChannelImage(int cacheIndex, const AhdCameraPool::FrameSlot &frame);
     void drawViewport(QPainter *painter, const AhdViewport &vp, int channelIndex);
+    void drawChannelOverlays(QPainter *painter);
     static QRect sourceRectFor360Quadrant(const QImage &image, int channelIndex);
 
     AhdCameraPool *m_pool;
     AhdLayoutSpec m_layout;
     QVector<ChannelImage> m_channelImages;
+    bool m_showRecordingBadge = false;
 };
 
 #endif // AHDPREVIEWWIDGET_H

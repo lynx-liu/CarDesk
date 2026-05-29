@@ -19,6 +19,7 @@
 #include <QScreen>
 #include <QShowEvent>
 #include <QTimer>
+#include <QPixmap>
 #include <QVBoxLayout>
 
 DrivingImageWindow::DrivingImageWindow(QWidget *parent)
@@ -96,7 +97,10 @@ void DrivingImageWindow::bindAhdSignals()
         }
         m_previewLoading = false;
         if (m_exitHintLabel) {
-            m_exitHintLabel->setText(message);
+            const QString faultText = message.isEmpty()
+                                          ? QStringLiteral("影像功能出现故障")
+                                          : message;
+            m_exitHintLabel->setText(faultText);
             layoutCenterHint();
             m_exitHintLabel->show();
         }
@@ -274,6 +278,20 @@ void DrivingImageWindow::setupUI()
     auto *previewSurface = new QFrame(previewWrap);
     previewSurface->setStyleSheet("QFrame{background:#000000;border:none;}");
 
+    m_safetyTipFrame = new QFrame(previewWrap);
+    m_safetyTipFrame->setStyleSheet(
+        QStringLiteral("QFrame{background:rgba(0,0,0,128);border:none;}"));
+    m_safetyTipIcon = new QLabel(m_safetyTipFrame);
+    m_safetyTipIcon->setPixmap(QPixmap(QStringLiteral(":/images/pict_driving_image_tips_icon.png")));
+    m_safetyTipIcon->setAlignment(Qt::AlignCenter);
+    m_safetyTipIcon->setScaledContents(true);
+    m_safetyTipText = new QLabel(QStringLiteral("请注意周边安全"), m_safetyTipFrame);
+    m_safetyTipText->setAlignment(Qt::AlignCenter);
+    m_safetyTipText->setWordWrap(true);
+    m_safetyTipText->setStyleSheet(
+        QStringLiteral("QLabel{color:#E3D948;background:transparent;border:none;font-size:28px;"
+                       "font-weight:700;line-height:34px;}"));
+
     m_exitHintLabel = new QLabel(QStringLiteral("加载中..."), previewWrap);
     m_exitHintLabel->setAlignment(Qt::AlignCenter);
     m_exitHintLabel->setStyleSheet("QLabel{background:rgba(0,0,0,0.45);color:#ffffff;border:1px solid #00A9FF;border-radius:10px;padding:8px 14px;font-size:28px;font-weight:700;}");
@@ -283,6 +301,37 @@ void DrivingImageWindow::setupUI()
     previewLayout->addWidget(previewSurface, 1);
     root->addWidget(previewWrap, 1);
     layoutCenterHint();
+    layoutTextOverlays();
+}
+
+void DrivingImageWindow::layoutTextOverlays()
+{
+    if (!m_previewWrap || !m_safetyTipFrame) {
+        return;
+    }
+
+    if (m_previewWrap->width() < 120 || m_previewWrap->height() < 80) {
+        QTimer::singleShot(0, this, [this]() { layoutTextOverlays(); });
+        return;
+    }
+
+    const int w = m_previewWrap->width();
+    const int h = m_previewWrap->height();
+    const int tipW = qMax(48, w * 60 / 1280);
+    const int tipTop = h * 173 / 720;
+    const int tipH = qMax(120, h * 374 / 720);
+    m_safetyTipFrame->setGeometry(0, tipTop, tipW, tipH);
+    m_safetyTipFrame->raise();
+
+    const int iconSide = qMin(tipW - 8, qMax(24, tipW * 4 / 5));
+    const int textH = tipH - iconSide - 24;
+    m_safetyTipIcon->setGeometry((tipW - iconSide) / 2, 12, iconSide, iconSide);
+    m_safetyTipText->setGeometry(4, 12 + iconSide + 8, tipW - 8, qMax(40, textH));
+    m_safetyTipFrame->show();
+
+    if (m_exitHintLabel) {
+        m_exitHintLabel->raise();
+    }
 }
 
 void DrivingImageWindow::layoutCenterHint()
@@ -349,9 +398,12 @@ void DrivingImageWindow::startPreviewIfNeeded()
         return;
     }
 
+    ahdManager()->enableSafetyWatermark(QStringLiteral("请注意周边安全"));
+
     if (!ahdManager()->startPreview(m_previewWrap, rect.x(), rect.y(), rect.width(), rect.height())) {
-        m_exitHintLabel->setText(QStringLiteral("预览启动失败"));
+        m_exitHintLabel->setText(QStringLiteral("影像功能出现故障"));
         layoutCenterHint();
+        m_exitHintLabel->show();
     }
 }
 
@@ -443,7 +495,11 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
     activateWindow();
 
     layoutCenterHint();
-    QTimer::singleShot(0, this, [this]() { layoutCenterHint(); });
+    layoutTextOverlays();
+    QTimer::singleShot(0, this, [this]() {
+        layoutCenterHint();
+        layoutTextOverlays();
+    });
     m_returning = false;
     m_exitInProgress = false;
     m_isFullscreen = false;
@@ -463,6 +519,7 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
 void DrivingImageWindow::resizeEvent(QResizeEvent *event)
 {
     QMainWindow::resizeEvent(event);
+    layoutTextOverlays();
     layoutCenterHint();
     if (m_ahdManager && m_ahdManager->isPreviewActive() && m_previewWrap) {
         const QRect rect = previewRectOnScreen();

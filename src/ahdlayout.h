@@ -2,6 +2,7 @@
 #define AHDLAYOUT_H
 
 #include <QRectF>
+#include <QString>
 
 // 行车影像显示布局（1280x720 设计稿归一化坐标）
 struct AhdViewport {
@@ -17,6 +18,10 @@ struct AhdLayoutSpec {
     int fullscreenChannel = -1; // 0..3 单路放大，-1 使用 mode 布局
 
     void viewports(AhdViewport out[kChannelCount]) const;
+
+    // 通道 0..3 → 前/后/左/右（对齐 M93 规范与 ui/driving_image_play*.html）
+    static QString channelLabel(int channel);
+    static bool isRearChannel(int channel) { return channel == 1; }
 };
 
 #endif // AHDLAYOUT_H

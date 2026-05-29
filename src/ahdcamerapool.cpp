@@ -9,6 +9,7 @@
 #include <QProcessEnvironment>
 #include <QThread>
 #include <QVector>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <new>
@@ -235,6 +236,20 @@ void softStopDvrChannel(dvr_factory *dvr, bool previewOn, bool recordOn)
     if (recordOn) {
         dvr->stopRecord();
     }
+}
+
+void applySdkWatermark(dvr_factory *dvr, const QString &line1, const QString &line2)
+{
+    if (!dvr) {
+        return;
+    }
+    dvr->enableWaterMark();
+    const QByteArray l1 = line1.toUtf8();
+    const QByteArray l2 = line2.toUtf8();
+    char bufname[512];
+    snprintf(bufname, sizeof(bufname), "64,64,0,64,150,%s,64,250,%s", l1.constData(),
+             l2.isEmpty() ? "ALLWINNER" : l2.constData());
+    dvr->setWaterMarkMultiple(bufname);
 }
 
 } // namespace
@@ -520,6 +535,9 @@ bool AhdCameraPool::startAll()
     if (!opened.isEmpty()) {
         scheduleHideHwOverlay(opened.first().cameraId);
     }
+
+    applySafetyWatermarks(QStringLiteral("请注意周边安全"));
+
     markAhdSessionActive();
     noteHardwareRecoveryDone();
     qDebug() << "[Ahd] startAll done, cameras:" << cameraIds << "compose360=" << m_uses360Compose;
@@ -667,6 +685,21 @@ void AhdCameraPool::deliverPreviewFrame(int channelIndex, QByteArray nv21, int w
     emit framesUpdated();
 }
 
+void AhdCameraPool::applySafetyWatermarks(const QString &text)
+{
+    const QString tip = text.isEmpty() ? QStringLiteral("请注意周边安全") : text;
+    for (int i = 0; i < kChannelCount; ++i) {
+        if (!m_channels[i].dvr) {
+            continue;
+        }
+        auto *dvr = static_cast<dvr_factory *>(m_channels[i].dvr);
+        const int slot = poolSlotForCameraId(m_channels[i].cameraId);
+        const QString channelName =
+            (slot >= 0 && slot < kChannelCount) ? AhdLayoutSpec::channelLabel(slot) : QString();
+        applySdkWatermark(dvr, channelName.isEmpty() ? tip : channelName, QStringLiteral("CarDesk"));
+    }
+}
+
 bool AhdCameraPool::copyLatestFrame(int channelIndex, FrameSlot *out) const
 {
     if (!out || channelIndex < 0 || channelIndex >= kChannelCount) {
@@ -719,6 +752,11 @@ bool AhdCameraPool::copyLatestFrame(int channelIndex, FrameSlot *out) const
     Q_UNUSED(channelIndex);
     Q_UNUSED(out);
     return false;
+}
+
+void AhdCameraPool::applySafetyWatermarks(const QString &text)
+{
+    Q_UNUSED(text);
 }
 
 #endif // CAR_DESK_USE_T507_SDK

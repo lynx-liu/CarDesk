@@ -2,6 +2,7 @@
 
 #include <QPainter>
 #include <QPaintEvent>
+#include <QPixmap>
 
 namespace {
 
@@ -55,6 +56,15 @@ AhdPreviewGLWidget::AhdPreviewGLWidget(AhdCameraPool *pool, QWidget *parent)
 void AhdPreviewGLWidget::setLayoutSpec(const AhdLayoutSpec &spec)
 {
     m_layout = spec;
+    update();
+}
+
+void AhdPreviewGLWidget::setShowRecordingBadge(bool show)
+{
+    if (m_showRecordingBadge == show) {
+        return;
+    }
+    m_showRecordingBadge = show;
     update();
 }
 
@@ -171,6 +181,56 @@ void AhdPreviewGLWidget::drawViewport(QPainter *painter, const AhdViewport &vp, 
     }
 }
 
+void AhdPreviewGLWidget::drawChannelOverlays(QPainter *painter)
+{
+    if (!painter) {
+        return;
+    }
+
+    AhdViewport viewports[AhdLayoutSpec::kChannelCount];
+    m_layout.viewports(viewports);
+
+    QFont font = painter->font();
+    font.setPixelSize(qMax(22, height() * 30 / 720));
+    font.setBold(true);
+    painter->setFont(font);
+
+    static const QPixmap recIcon(QStringLiteral(":/images/pict_driving_image_video_recording.png"));
+
+    for (int i = 0; i < AhdLayoutSpec::kChannelCount; ++i) {
+        const AhdViewport &vp = viewports[i];
+        if (!vp.visible || vp.channel < 0) {
+            continue;
+        }
+
+        const QString label = AhdLayoutSpec::channelLabel(vp.channel);
+        if (label.isEmpty()) {
+            continue;
+        }
+
+        const QRect dest(static_cast<int>(vp.norm.left() * width()),
+                         static_cast<int>(vp.norm.top() * height()),
+                         static_cast<int>(vp.norm.width() * width()),
+                         static_cast<int>(vp.norm.height() * height()));
+        if (dest.width() < 8 || dest.height() < 8) {
+            continue;
+        }
+
+        const int badge = qMax(36, height() * 48 / 720);
+        QRect badgeRect(dest.right() - badge + 1, dest.top(), badge, badge);
+        painter->fillRect(badgeRect, QColor(0, 0, 0, 128));
+        painter->setPen(Qt::white);
+        painter->drawText(badgeRect, Qt::AlignCenter, label);
+
+        if (m_showRecordingBadge && AhdLayoutSpec::isRearChannel(vp.channel) && !recIcon.isNull()) {
+            const int iconSide = qMax(24, badge * 2 / 3);
+            const QRect iconRect(badgeRect.left() - iconSide - 6, badgeRect.top() + 6, iconSide, iconSide);
+            painter->drawPixmap(iconRect, recIcon.scaled(iconSide, iconSide, Qt::KeepAspectRatio,
+                                                         Qt::SmoothTransformation));
+        }
+    }
+}
+
 void AhdPreviewGLWidget::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
@@ -185,4 +245,5 @@ void AhdPreviewGLWidget::paintEvent(QPaintEvent *event)
     for (int i = 0; i < AhdLayoutSpec::kChannelCount; ++i) {
         drawViewport(&painter, viewports[i], viewports[i].channel);
     }
+    drawChannelOverlays(&painter);
 }

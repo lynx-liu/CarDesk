@@ -37,6 +37,7 @@ private:
     void setupUI();
     void bindAhdSignals();
     void layoutCenterHint();
+    void layoutTextOverlays();
     void handleConfirmedSingleClick(const QPoint &globalPos);
     void startPreviewIfNeeded();
     void updatePreviewLayout();
@@ -45,6 +46,9 @@ private:
     void setLoadingState(bool loading);
 
     QFrame *m_previewWrap;
+    QFrame *m_safetyTipFrame;
+    QLabel *m_safetyTipIcon;
+    QLabel *m_safetyTipText;
     QLabel *m_exitHintLabel;
     AhdManager *m_ahdManager = nullptr;
     AhdManager *ahdManager();

@@ -3,6 +3,7 @@
 #include "ahdcamerapool.h"
 #include "ahdpreviewwidget.h"
 
+#include <QProcessEnvironment>
 #include <QRect>
 #include <QWidget>
 
@@ -125,6 +126,7 @@ bool AhdManager::startPreview(QWidget *parentWidget, int x, int y, int w, int h)
         if (!m_pool->hasPersistedFactories()) {
             m_previewWidget->clearChannelCache();
         }
+        m_previewWidget->setShowRecordingBadge(qEnvironmentVariableIsSet("CARDESK_AHD_RECORD"));
         m_previewWidget->update();
     }
 
@@ -186,7 +188,9 @@ AhdPreviewGLWidget *AhdManager::previewWidget() const
 
 void AhdManager::enableSafetyWatermark(const QString &text)
 {
-    Q_UNUSED(text);
+    if (m_pool) {
+        m_pool->applySafetyWatermarks(text);
+    }
 }
 
 void AhdManager::clearWatermark() {}

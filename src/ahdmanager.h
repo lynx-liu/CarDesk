@@ -39,7 +39,7 @@ public:
 
     AhdPreviewGLWidget *previewWidget() const;
 
-    void enableSafetyWatermark(const QString &text = QStringLiteral("CAUTION"));
+    void enableSafetyWatermark(const QString &text = QStringLiteral("请注意周边安全"));
     void clearWatermark();
 
 signals:
