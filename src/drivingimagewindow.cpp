@@ -135,7 +135,6 @@ void DrivingImageWindow::hideEvent(QHideEvent *event)
     }
     if (m_ahdManager) {
         m_ahdManager->stopPreview();
-        m_ahdManager->stopCamera();
     }
     QMainWindow::hideEvent(event);
 }
@@ -155,11 +154,8 @@ void DrivingImageWindow::returnToMainSafely()
     }
     hide();
 
-    // 先隐藏 UI，再在下一拍关闭 SDK，避免退出时回调与析构竞态
+    // 与切到「设置/回放」一致：仅隐藏 Qt 预览，摄像头保持运行便于再次进入
     QTimer::singleShot(0, this, [this]() {
-        if (m_ahdManager) {
-            m_ahdManager->stopCamera();
-        }
         m_exitInProgress = false;
         m_returning = false;
         emit requestReturnToMain();
@@ -518,7 +514,6 @@ void DrivingImageWindow::stopPreview()
 {
     if (m_ahdManager) {
         m_ahdManager->stopPreview();
-        m_ahdManager->stopCamera();
     }
 }
 
