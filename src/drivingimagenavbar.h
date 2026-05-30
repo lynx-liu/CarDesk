@@ -16,6 +16,9 @@ public:
 
     void setActiveTab(Tab tab);
 
+protected:
+    void paintEvent(QPaintEvent *event) override;
+
 signals:
     void tabSelected(DrivingImageNavBar::Tab tab);
 

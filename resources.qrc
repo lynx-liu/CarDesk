@@ -153,6 +153,8 @@
         <file alias="butt_driving_image_playback_up.png">ui/images/butt_driving_image_playback_up.png</file>
         <file alias="butt_driving_image_playback_down.png">ui/images/butt_driving_image_playback_down.png</file>
         <file alias="pict_driving_image_tips_icon.png">ui/images/pict_driving_image_tips_icon.png</file>
+        <file alias="pict_driving_image_bottom.png">ui/images/pict_driving_image_bottom.png</file>
+        <file alias="video_play_top.png">ui/images/video_play_top.png</file>
         <file alias="pict_driving_image_video_recording.png">ui/images/pict_driving_image_video_recording.png</file>
         <file alias="pict_popalert_fault_icon.png">ui/images/pict_popalert_fault_icon.png</file>
         <file alias="image_imagellist_up.png">ui/images/image_imagellist_up.png</file>

@@ -122,6 +122,7 @@ HEADERS += \
     src/systemsettingwindow.h \
     src/drivingimagewindow.h \
     src/drivingimagenavbar.h \
+    src/drivingimagepreviewtopbar.h \
     src/drivingimagesubtopbar.h \
     src/drivingimagesettingspage.h \
     src/drivingimageplaybackpage.h \
@@ -160,6 +161,7 @@ SOURCES += \
     src/systemsettingwindow.cpp \
     src/drivingimagewindow.cpp \
     src/drivingimagenavbar.cpp \
+    src/drivingimagepreviewtopbar.cpp \
     src/drivingimagesubtopbar.cpp \
     src/drivingimagesettingspage.cpp \
     src/drivingimageplaybackpage.cpp \

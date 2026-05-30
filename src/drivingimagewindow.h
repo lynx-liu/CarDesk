@@ -13,6 +13,7 @@ class QShowEvent;
 class QStackedWidget;
 class QTimer;
 class DrivingImageNavBar;
+class DrivingImagePreviewTopBar;
 class DrivingImageSettingsPage;
 class DrivingImagePlaybackPage;
 
@@ -34,6 +35,7 @@ protected:
     void showEvent(QShowEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
 
 private:
@@ -43,6 +45,11 @@ private:
     void layoutCenterHint();
     void layoutTextOverlays();
     void layoutNavBar();
+    void layoutLongPressHint();
+    void layoutPreviewTopBar();
+    void updatePreviewChrome();
+    bool canStartPreviewLongPress(const QPoint &globalPos) const;
+    void onLongPressTimeout();
     void handleConfirmedSingleClick(const QPoint &globalPos);
     void startPreviewIfNeeded();
     void updatePreviewLayout();
@@ -56,15 +63,20 @@ private:
     DrivingImageSettingsPage *m_settingsPage = nullptr;
     DrivingImagePlaybackPage *m_playbackPage = nullptr;
     DrivingImageNavBar *m_navBar = nullptr;
+    DrivingImagePreviewTopBar *m_previewTopBar = nullptr;
 
     QFrame *m_previewWrap;
     QFrame *m_safetyTipFrame;
     QLabel *m_safetyTipIcon;
     QLabel *m_safetyTipText;
     QLabel *m_exitHintLabel;
+    QLabel *m_longPressHintLabel = nullptr;
     AhdManager *m_ahdManager = nullptr;
     AhdManager *ahdManager();
     QTimer *m_singleClickTimer;
+    QTimer *m_longPressTimer = nullptr;
+    bool m_previewChromeVisible = false;
+    bool m_longPressTriggered = false;
     bool m_returning;
     bool m_exitInProgress;
     bool m_startScheduled;

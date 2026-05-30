@@ -6,6 +6,7 @@
 #include "drivingimagenavbar.h"
 #include "drivingimageplaybackpage.h"
 #include "drivingimagesettingspage.h"
+#include "drivingimagepreviewtopbar.h"
 #include "devicedetect.h"
 #include "mainwindow.h"
 #include "mediamanager.h"
@@ -72,6 +73,11 @@ DrivingImageWindow::DrivingImageWindow(QWidget *parent)
     connect(m_singleClickTimer, &QTimer::timeout, this, [this]() {
         handleConfirmedSingleClick(m_pendingClickGlobalPos);
     });
+
+    m_longPressTimer = new QTimer(this);
+    m_longPressTimer->setSingleShot(true);
+    m_longPressTimer->setInterval(2000);
+    connect(m_longPressTimer, &QTimer::timeout, this, &DrivingImageWindow::onLongPressTimeout);
 }
 
 AhdManager *DrivingImageWindow::ahdManager()
@@ -90,7 +96,7 @@ void DrivingImageWindow::bindAhdSignals()
             if (m_exitHintLabel) {
                 m_exitHintLabel->hide();
             }
-            layoutNavBar();
+            updatePreviewChrome();
         }
     });
     connect(ahdManager(), &AhdManager::cameraError, this, [this](const QString &message) {
@@ -142,6 +148,14 @@ void DrivingImageWindow::hideEvent(QHideEvent *event)
 {
     m_startScheduled = false;
     m_singleClickTimer->stop();
+    if (m_longPressTimer) {
+        m_longPressTimer->stop();
+    }
+    m_previewChromeVisible = false;
+    if (m_longPressTimer) {
+        m_longPressTimer->stop();
+    }
+    m_longPressTriggered = false;
     m_isFullscreen = false;
     m_fullscreenCameraId = -1;
     m_lastClickMs = 0;
@@ -227,6 +241,10 @@ void DrivingImageWindow::mousePressEvent(QMouseEvent *event)
     if ((nowMs - m_lastClickMs) < dblInterval && closeEnough) {
         // 双击：取消已排队的单击动作，直接退出
         m_singleClickTimer->stop();
+        if (m_longPressTimer) {
+            m_longPressTimer->stop();
+        }
+        m_longPressTriggered = false;
         m_lastClickMs = 0; // 重置，避免三击误触发
         if (!m_exitInProgress) {
             returnToMainSafely();
@@ -237,7 +255,66 @@ void DrivingImageWindow::mousePressEvent(QMouseEvent *event)
     m_lastClickMs = nowMs;
     m_lastClickPos = gpos;
     m_pendingClickGlobalPos = gpos;
-    m_singleClickTimer->start(dblInterval);
+
+    m_longPressTriggered = false;
+    if (canStartPreviewLongPress(gpos) && m_longPressTimer) {
+        m_longPressTimer->start();
+    }
+}
+
+void DrivingImageWindow::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton) {
+        if (m_longPressTimer && m_longPressTimer->isActive()) {
+            m_longPressTimer->stop();
+        }
+        if (!m_longPressTriggered && m_stack && m_stack->currentIndex() == 0 && !m_exitInProgress) {
+            m_singleClickTimer->start(qMax(QApplication::doubleClickInterval(), 400));
+        }
+        m_longPressTriggered = false;
+    }
+    QMainWindow::mouseReleaseEvent(event);
+}
+
+bool DrivingImageWindow::canStartPreviewLongPress(const QPoint &globalPos) const
+{
+    if (m_exitInProgress || !isVisible()) {
+        return false;
+    }
+    if (!m_stack || m_stack->currentIndex() != 0) {
+        return false;
+    }
+    if (m_cameraMode != 360 || m_previewChromeVisible) {
+        return false;
+    }
+    if (m_navBar && m_navBar->isVisible()) {
+        const QPoint navLocal = m_navBar->mapFromGlobal(globalPos);
+        if (m_navBar->rect().contains(navLocal)) {
+            return false;
+        }
+    }
+    if (m_previewTopBar && m_previewTopBar->isVisible()) {
+        const QPoint topLocal = m_previewTopBar->mapFromGlobal(globalPos);
+        if (m_previewTopBar->rect().contains(topLocal)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void DrivingImageWindow::onLongPressTimeout()
+{
+    if (m_cameraMode != 360 || m_previewChromeVisible) {
+        return;
+    }
+    if (!m_stack || m_stack->currentIndex() != 0) {
+        return;
+    }
+    m_longPressTriggered = true;
+    m_singleClickTimer->stop();
+    m_lastClickMs = 0;
+    m_previewChromeVisible = true;
+    updatePreviewChrome();
 }
 
 void DrivingImageWindow::handleConfirmedSingleClick(const QPoint &globalPos)
@@ -322,6 +399,12 @@ void DrivingImageWindow::setupUI()
     m_navBar->setFixedHeight(108);
     m_navBar->hide();
 
+    m_previewTopBar = new DrivingImagePreviewTopBar(central);
+    m_previewTopBar->setTitle(QStringLiteral("行车影像"));
+    m_previewTopBar->hide();
+    connect(m_previewTopBar, &DrivingImagePreviewTopBar::backClicked, this,
+            &DrivingImageWindow::returnToMainSafely);
+
     connect(m_navBar, &DrivingImageNavBar::tabSelected, this, [this](DrivingImageNavBar::Tab tab) {
         showPage(static_cast<int>(tab));
     });
@@ -380,6 +463,14 @@ QWidget *DrivingImageWindow::createPreviewPage()
                        "border-radius:10px;padding:8px 14px;font-size:28px;font-weight:700;}"));
     m_exitHintLabel->hide();
 
+    m_longPressHintLabel = new QLabel(QStringLiteral("长按屏幕呼出状态栏"), m_previewWrap);
+    m_longPressHintLabel->setAlignment(Qt::AlignCenter);
+    m_longPressHintLabel->setWordWrap(true);
+    m_longPressHintLabel->setStyleSheet(
+        QStringLiteral("QLabel{color:#E3D948;background:rgba(0,0,0,128);border:none;"
+                       "font-size:30px;line-height:34px;font-weight:700;padding:8px;}"));
+    m_longPressHintLabel->hide();
+
     return page;
 }
 
@@ -396,8 +487,102 @@ void DrivingImageWindow::layoutNavBar()
         return;
     }
     m_navBar->setGeometry(0, h - navH, w, navH);
-    m_navBar->show();
     m_navBar->raise();
+}
+
+void DrivingImageWindow::layoutLongPressHint()
+{
+    if (!m_previewWrap || !m_longPressHintLabel) {
+        return;
+    }
+    const int w = m_previewWrap->width();
+    const int h = m_previewWrap->height();
+    if (w < 120 || h < 80) {
+        return;
+    }
+    const int tipW = qMax(48, w * 60 / 1280);
+    const int tipTop = h * 173 / 720;
+    const int tipH = qMax(120, h * 374 / 720);
+    m_longPressHintLabel->setGeometry(w - tipW, tipTop, tipW, tipH);
+    m_longPressHintLabel->raise();
+}
+
+void DrivingImageWindow::layoutPreviewTopBar()
+{
+    QWidget *host = centralWidget();
+    if (!m_previewTopBar || !host) {
+        return;
+    }
+    const int w = host->width();
+    if (w <= 0) {
+        return;
+    }
+    const int topH = qMax(48, host->height() * 72 / 720);
+    m_previewTopBar->setFixedSize(w, topH);
+    m_previewTopBar->setGeometry(0, 0, w, topH);
+    m_previewTopBar->raise();
+}
+
+void DrivingImageWindow::updatePreviewChrome()
+{
+    const bool onPreview = m_stack && m_stack->currentIndex() == 0;
+    const bool quadMode = m_cameraMode == 360;
+
+    if (!onPreview) {
+        if (m_longPressHintLabel) {
+            m_longPressHintLabel->hide();
+        }
+        if (m_previewTopBar) {
+            m_previewTopBar->hide();
+        }
+        if (m_navBar) {
+            layoutNavBar();
+            m_navBar->show();
+            m_navBar->raise();
+        }
+        return;
+    }
+
+    if (!quadMode) {
+        if (m_longPressHintLabel) {
+            m_longPressHintLabel->hide();
+        }
+        if (m_previewTopBar) {
+            m_previewTopBar->hide();
+        }
+        if (m_navBar) {
+            m_navBar->hide();
+        }
+        return;
+    }
+
+    if (m_previewChromeVisible) {
+        if (m_longPressHintLabel) {
+            m_longPressHintLabel->hide();
+        }
+        layoutPreviewTopBar();
+        if (m_previewTopBar) {
+            m_previewTopBar->show();
+            m_previewTopBar->raise();
+        }
+        layoutNavBar();
+        if (m_navBar) {
+            m_navBar->show();
+            m_navBar->raise();
+        }
+    } else {
+        if (m_previewTopBar) {
+            m_previewTopBar->hide();
+        }
+        if (m_navBar) {
+            m_navBar->hide();
+        }
+        layoutLongPressHint();
+        if (m_longPressHintLabel) {
+            m_longPressHintLabel->show();
+            m_longPressHintLabel->raise();
+        }
+    }
 }
 
 void DrivingImageWindow::showPage(int index)
@@ -408,12 +593,10 @@ void DrivingImageWindow::showPage(int index)
     m_stack->setCurrentIndex(index);
     if (m_navBar) {
         m_navBar->setActiveTab(static_cast<DrivingImageNavBar::Tab>(index));
-        m_navBar->setVisible(true);
-        layoutNavBar();
-        m_navBar->raise();
     }
 
     if (index == 0) {
+        m_previewChromeVisible = false;
         setDrivingMode(automotiveLayoutForUserOpen());
         layoutTextOverlays();
         layoutCenterHint();
@@ -424,6 +607,7 @@ void DrivingImageWindow::showPage(int index)
             m_playbackPage->reloadDates();
         }
     }
+    updatePreviewChrome();
 }
 
 void DrivingImageWindow::layoutTextOverlays()
@@ -453,6 +637,9 @@ void DrivingImageWindow::layoutTextOverlays()
 
     if (m_exitHintLabel) {
         m_exitHintLabel->raise();
+    }
+    if (m_longPressHintLabel && m_longPressHintLabel->isVisible()) {
+        layoutLongPressHint();
     }
 }
 
@@ -529,7 +716,7 @@ void DrivingImageWindow::startPreviewIfNeeded()
         layoutTextOverlays();
         layoutCenterHint();
     }
-    layoutNavBar();
+    updatePreviewChrome();
 }
 
 void DrivingImageWindow::stopPreview()
@@ -541,18 +728,24 @@ void DrivingImageWindow::stopPreview()
 
 void DrivingImageWindow::setDrivingMode(int mode)
 {
+    const bool modeChanged = mode != m_cameraMode;
     if (mode == m_cameraMode && !m_isFullscreen) {
+        updatePreviewChrome();
         return;
     }
     m_cameraMode = mode;
     m_isFullscreen = false;
     m_fullscreenCameraId = -1;
+    if (modeChanged) {
+        m_previewChromeVisible = false;
+    }
     if (isVisible()) {
         updatePreviewLayout();
         if (m_ahdManager && m_ahdManager->isCameraReady()) {
             startPreviewIfNeeded();
         }
     }
+    updatePreviewChrome();
 }
 
 int DrivingImageWindow::drivingMode() const
@@ -593,6 +786,9 @@ void DrivingImageWindow::keyPressEvent(QKeyEvent *event)
             m_singleClickTimer->stop();
             m_lastClickMs = 0;
         }
+        if (m_longPressTimer && m_longPressTimer->isActive()) {
+            m_longPressTimer->stop();
+        }
         event->accept();
         returnToMainSafely();
         break;
@@ -620,11 +816,11 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
     raise();
     activateWindow();
 
-    layoutNavBar();
+    updatePreviewChrome();
     layoutCenterHint();
     layoutTextOverlays();
     QTimer::singleShot(0, this, [this]() {
-        layoutNavBar();
+        updatePreviewChrome();
         layoutCenterHint();
         layoutTextOverlays();
     });
@@ -651,7 +847,7 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
 void DrivingImageWindow::resizeEvent(QResizeEvent *event)
 {
     QMainWindow::resizeEvent(event);
-    layoutNavBar();
+    updatePreviewChrome();
     if (m_stack && m_stack->currentIndex() == 0) {
         layoutTextOverlays();
         layoutCenterHint();
@@ -659,6 +855,6 @@ void DrivingImageWindow::resizeEvent(QResizeEvent *event)
     if (m_ahdManager && m_ahdManager->isPreviewActive() && m_previewWrap) {
         const QRect rect = previewRectOnScreen();
         m_ahdManager->startPreview(m_previewWrap, rect.x(), rect.y(), rect.width(), rect.height());
-        layoutNavBar();
+        updatePreviewChrome();
     }
 }
