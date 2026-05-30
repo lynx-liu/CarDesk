@@ -145,10 +145,16 @@ QVector<int> cameraIdsForLayout(const AhdLayoutSpec &spec)
         ids.append(180);
         break;
     case 270:
+        ids << (AhdCameraPool::kTvdDevIdStart + 1) << (AhdCameraPool::kTvdDevIdStart + 2)
+            << (AhdCameraPool::kTvdDevIdStart + 3);
+        break;
     case 271:
+        ids << (AhdCameraPool::kTvdDevIdStart + 2) << (AhdCameraPool::kTvdDevIdStart + 0)
+            << (AhdCameraPool::kTvdDevIdStart + 3);
+        break;
     case 272:
-        ids << (AhdCameraPool::kTvdDevIdStart + 0) << (AhdCameraPool::kTvdDevIdStart + 1)
-            << (AhdCameraPool::kTvdDevIdStart + 2);
+        ids << (AhdCameraPool::kTvdDevIdStart + 0) << (AhdCameraPool::kTvdDevIdStart + 2)
+            << (AhdCameraPool::kTvdDevIdStart + 3);
         break;
     case 2:
     case 3:
