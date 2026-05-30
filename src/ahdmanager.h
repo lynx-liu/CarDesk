@@ -28,6 +28,7 @@ public:
     void setPreviewCameraIndex(int previewCameraIndex);
 
     bool startCamera();
+    bool warmupHardware();
     void stopCamera();
 
     bool startPreview(QWidget *parentWidget, int x, int y, int w, int h);

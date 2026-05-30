@@ -330,7 +330,7 @@ bool AhdCameraPool::canResumeFactories(const QVector<int> &cameraIds) const
     return !cameraIds.isEmpty();
 }
 
-bool AhdCameraPool::resumePreview(const QVector<int> &cameraIds)
+bool AhdCameraPool::resumePreview(const QVector<int> &cameraIds, bool hideHwOverlayImmediately)
 {
     struct view_info vv = {0, 0, 1280, 720};
 
@@ -351,10 +351,23 @@ bool AhdCameraPool::resumePreview(const QVector<int> &cameraIds)
             return false;
         }
         ch.previewOn = true;
+        if (hideHwOverlayImmediately) {
+            applyHideHwOverlayOnly(cameraId);
+        }
     }
 
     if (!cameraIds.isEmpty()) {
-        scheduleHideHwOverlay(cameraIds.first());
+        if (hideHwOverlayImmediately) {
+            applyHideAllHwOverlays();
+            QTimer::singleShot(0, this, [this]() {
+                if (!m_running || m_shuttingDown) {
+                    return;
+                }
+                applyHideAllHwOverlays();
+            });
+        } else {
+            scheduleHideHwOverlay(cameraIds.first());
+        }
     }
     return true;
 }
@@ -380,6 +393,18 @@ void AhdCameraPool::applyHideHwOverlayOnly(int cameraId)
     }
 }
 
+void AhdCameraPool::applyHideAllHwOverlays()
+{
+#ifdef CAR_DESK_USE_T507_SDK
+    for (int i = 0; i < kChannelCount; ++i) {
+        if (!m_channels[i].dvr) {
+            continue;
+        }
+        applyHideHwOverlayOnly(m_channels[i].cameraId);
+    }
+#endif
+}
+
 void AhdCameraPool::scheduleHideHwOverlay(int cameraId)
 {
     QTimer::singleShot(kHwOverlayHideDelayMs, this, [this, cameraId]() {
@@ -390,13 +415,17 @@ void AhdCameraPool::scheduleHideHwOverlay(int cameraId)
     });
 }
 
-bool AhdCameraPool::startAll()
+bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
 {
     if (m_running) {
+        if (hideHwOverlayImmediately) {
+            applyHideAllHwOverlays();
+        }
         return true;
     }
 
-    qDebug() << "[Ahd] startAll: layout mode" << m_layoutSpec.mode;
+    qDebug() << "[Ahd] startAll: layout mode" << m_layoutSpec.mode
+             << "hideHwOverlayImmediately=" << hideHwOverlayImmediately;
     prepareSdkRuntimeOnce();
     performHardwareRecovery("before open");
 
@@ -416,7 +445,7 @@ bool AhdCameraPool::startAll()
     if (canResumeFactories(cameraIds)) {
         m_shuttingDown = false;
         s_activePool = this;
-        if (resumePreview(cameraIds)) {
+        if (resumePreview(cameraIds, hideHwOverlayImmediately)) {
             m_running = true;
             markAhdSessionActive();
             noteHardwareRecoveryDone();
@@ -538,10 +567,23 @@ bool AhdCameraPool::startAll()
             return false;
         }
         ch.previewOn = true;
+        if (hideHwOverlayImmediately) {
+            applyHideHwOverlayOnly(e.cameraId);
+        }
     }
 
     if (!opened.isEmpty()) {
-        scheduleHideHwOverlay(opened.first().cameraId);
+        if (hideHwOverlayImmediately) {
+            applyHideAllHwOverlays();
+            QTimer::singleShot(0, this, [this]() {
+                if (!m_running || m_shuttingDown) {
+                    return;
+                }
+                applyHideAllHwOverlays();
+            });
+        } else {
+            scheduleHideHwOverlay(opened.first().cameraId);
+        }
     }
 
     applySafetyWatermarks(QStringLiteral("请注意周边安全"));
@@ -760,8 +802,9 @@ AhdCameraPool::AhdCameraPool(QObject *parent)
 
 AhdCameraPool::~AhdCameraPool() {}
 
-bool AhdCameraPool::startAll()
+bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
 {
+    Q_UNUSED(hideHwOverlayImmediately);
     m_running = true;
     return true;
 }

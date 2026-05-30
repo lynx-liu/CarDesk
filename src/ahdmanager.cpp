@@ -92,6 +92,21 @@ bool AhdManager::startCamera()
     return true;
 }
 
+bool AhdManager::warmupHardware()
+{
+    if (m_camReady && m_pool->isRunning()) {
+        return true;
+    }
+
+    if (!m_pool->startAll(true)) {
+        return false;
+    }
+
+    m_camReady = true;
+    applyLayoutSpec();
+    return true;
+}
+
 void AhdManager::stopCamera()
 {
     if (m_pool && (m_pool->isRunning() || m_camReady)) {

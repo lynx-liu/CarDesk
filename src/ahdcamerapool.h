@@ -24,7 +24,7 @@ public:
     static void globalInit();
     static void globalCleanup();
 
-    bool startAll();
+    bool startAll(bool hideHwOverlayImmediately = false);
     void stopAll();
 
     bool isRunning() const;
@@ -67,9 +67,10 @@ private:
 #ifdef CAR_DESK_USE_T507_SDK
     static bool ensureDvrManagerInit();
     bool canResumeFactories(const QVector<int> &cameraIds) const;
-    bool resumePreview(const QVector<int> &cameraIds);
+    bool resumePreview(const QVector<int> &cameraIds, bool hideHwOverlayImmediately);
     void scheduleHideHwOverlay(int cameraId);
     void applyHideHwOverlayOnly(int cameraId);
+    void applyHideAllHwOverlays();
 
     struct ChannelState {
         int cameraId = 0;

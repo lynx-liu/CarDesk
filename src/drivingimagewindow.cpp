@@ -123,9 +123,9 @@ void DrivingImageWindow::warmupCamera()
         return;
     }
 
-    qDebug() << "[Driving] warmupCamera: startCamera mode" << m_cameraMode;
-    if (!mgr->startCamera()) {
-        qWarning() << "[Driving] warmupCamera: startCamera failed";
+    qDebug() << "[Driving] warmupCamera: warmupHardware mode" << m_cameraMode;
+    if (!mgr->warmupHardware()) {
+        qWarning() << "[Driving] warmupCamera: warmupHardware failed";
         return;
     }
     mgr->enableSafetyWatermark(QStringLiteral("请注意周边安全"));
