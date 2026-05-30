@@ -40,6 +40,7 @@
 #include "devicedetect.h"
 #include "appsignals.h"
 #include "mcuserialreader.h"
+#include "automotivedriving.h"
 #include "ahdmanager.h"
 
 // ── 背光控制（POWER 键关/亮屏，SLEEP 键关机，具体 dispdbg 操作在 backlight.cpp）─
@@ -508,26 +509,6 @@ static bool playTouchClickSound() {
 }
 
 static bool s_debugMode = false;
-static void activateDrivingImageMode(int mode);
-static void deactivateDrivingImageMode(int mode);
-
-static void updateTurnState(int rTurn, int lTurn, int backup)
-{
-    qDebug() << "updateTurnState: rTurn=" << rTurn << "lTurn=" << lTurn << "backup=" << backup;
-    
-    if (backup) {
-        activateDrivingImageMode(270);
-    } else if (rTurn) {
-        activateDrivingImageMode(272);
-    } else if (lTurn) {
-        activateDrivingImageMode(271);
-    } else {
-        DrivingImageWindow *drive = findDrivingImageWindow();
-        if (drive && drive->isVisible()) {
-            deactivateDrivingImageMode(drive->drivingMode());
-        }
-    }
-}
 
 // 挂在 QApplication 上，能拦截所有窗口的 KeyPress，不依赖窗口焦点
 class GlobalKeyFilter : public QObject {
@@ -623,7 +604,7 @@ protected:
                 case Qt::Key_VolumeUp:
                     qDebug() << "[GlobalKey] => VolumeUp";
                     if (s_debugMode) {
-                        updateTurnState(1, 0, 0); // 测试：音量加键对应右转
+                        automotiveSetRightTurnSignal(true);
                     } else {
                         AppSignals::changeVolume(+1);
                         scheduleVolumeRead(m_overlay);
@@ -632,7 +613,7 @@ protected:
                 case Qt::Key_VolumeDown:
                     qDebug() << "[GlobalKey] => VolumeDown";
                     if (s_debugMode) {
-                        updateTurnState(0, 1, 0); // 测试：音量减键对应左转
+                        automotiveSetLeftTurnSignal(true);
                     } else {
                         AppSignals::changeVolume(-1);
                         scheduleVolumeRead(m_overlay);
@@ -1020,49 +1001,6 @@ static bool routeMediaKeyToBackground(int qtKey)
     return true;
 }
 
-static void activateDrivingImageMode(int mode)
-{
-    MainWindow *main = findMainWindow();
-    if (main && main->mediaManager()) {
-        main->mediaManager()->pausePlaybackForOcclusion();
-    }
-
-    if (DrivingImageWindow *drive = findDrivingImageWindow()) {
-        drive->setDrivingMode(mode);
-        if (!drive->isVisible()) {
-            drive->show();
-        }
-        drive->raise();
-        drive->activateWindow();
-        return;
-    }
-
-    if (main) {
-        QMetaObject::invokeMethod(main, "onDrivingImageClicked", Qt::DirectConnection);
-        if (DrivingImageWindow *drive = findDrivingImageWindow()) {
-            drive->setDrivingMode(mode);
-        }
-    }
-}
-
-static void deactivateDrivingImageMode(int mode)
-{
-    bool closedDrivingImage = false;
-    if (DrivingImageWindow *drive = findDrivingImageWindow()) {
-        if (drive->isVisible() && drive->drivingMode() == mode) {
-            drive->close();
-            closedDrivingImage = true;
-        }
-    }
-
-    if (closedDrivingImage) {
-        MainWindow *main = findMainWindow();
-        if (main && main->mediaManager()) {
-            main->mediaManager()->resumePlaybackAfterInterruption();
-        }
-    }
-}
-
 int main(int argc, char *argv[]) {
     QStringList rawArgs;
     rawArgs.reserve(qMax(0, argc - 1));
@@ -1209,36 +1147,36 @@ int main(int argc, char *argv[]) {
                         qtKey = Qt::Key_End;
                         break;
                     case KEY_A:
-                        qDebug() << "KEY_A => driving reverse mode";
-                        activateDrivingImageMode(270);
+                        qDebug() << "KEY_A => enter reverse (backup ON)";
+                        automotiveSetBackupSignal(true);
                         continue;
                     case KEY_B:
-                        qDebug() << "KEY_B => exit reverse mode";
-                        deactivateDrivingImageMode(270);
+                        qDebug() << "KEY_B => exit reverse (backup OFF)";
+                        automotiveSetBackupSignal(false);
                         continue;
                     case KEY_C:
-                        qDebug() << "KEY_C => enter left-turn mode";
-                        activateDrivingImageMode(271);
+                        qDebug() << "KEY_C => left turn signal ON";
+                        automotiveSetLeftTurnSignal(true);
                         continue;
                     case KEY_D:
-                        qDebug() << "KEY_D => exit left-turn mode";
-                        deactivateDrivingImageMode(271);
+                        qDebug() << "KEY_D => left turn signal OFF";
+                        automotiveSetLeftTurnSignal(false);
                         continue;
                     case KEY_K:
-                        qDebug() << "KEY_K => enter right-turn mode";
-                        activateDrivingImageMode(272);
+                        qDebug() << "KEY_K => right turn signal ON";
+                        automotiveSetRightTurnSignal(true);
                         continue;
                     case KEY_L:
-                        qDebug() << "KEY_L => exit right-turn mode";
-                        deactivateDrivingImageMode(272);
+                        qDebug() << "KEY_L => right turn signal OFF";
+                        automotiveSetRightTurnSignal(false);
                         continue;
                     case KEY_M:
-                        qDebug() << "KEY_M => enter illumination mode";
-                        activateDrivingImageMode(180);
+                        qDebug() << "KEY_M => cabin illumination ON";
+                        automotiveSetIllumination(true);
                         continue;
                     case KEY_N:
-                        qDebug() << "KEY_N => exit illumination mode";
-                        deactivateDrivingImageMode(180);
+                        qDebug() << "KEY_N => cabin illumination OFF";
+                        automotiveSetIllumination(false);
                         continue;
                     case KEY_SLEEP:
                         qDebug() << "KEY_SLEEP => blank screen";
@@ -1309,7 +1247,12 @@ int main(int argc, char *argv[]) {
         // LC 灯光指令 → 对应模式开/关（边沿触发，避免每 35ms 重复调用）
         QObject::connect(txrxReader, &McuSerialReader::lcReceived,
                          &app, [](int rTurn, int lTurn, int backup) {
-            updateTurnState(rTurn, lTurn, backup);
+            automotiveSyncCanSignals(rTurn, lTurn, backup);
+        });
+
+        QObject::connect(AppSignals::instance(), &AppSignals::vehicleSpeedChanged,
+                         &app, [](float speedKmh) {
+            automotiveUpdateVehicleSpeed(speedKmh);
         });
 
         // TD 时间日期 → 同步系统时钟（至多每分钟同步一次）

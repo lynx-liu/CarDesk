@@ -47,11 +47,11 @@ void layout271(AhdViewport out[AhdLayoutSpec::kChannelCount])
     setVp(&out[3], 0, 0.0f, 0.0f, 0.0f, 0.0f, false);
 }
 
-// 180：上下两路（2-in-1 占位布局，使用前两路）
+// 180：行车模式左右二分屏（左/右各半屏，对齐 driving_image_play_driving + 规范图10）
 void layout180(AhdViewport out[AhdLayoutSpec::kChannelCount])
 {
-    setVp(&out[0], 0, 0.0f, 0.0f, 1.0f, 0.5f, true);
-    setVp(&out[1], 1, 0.0f, 0.5f, 1.0f, 0.5f, true);
+    setVp(&out[0], 2, 0.0f, 0.0f, 0.5f, 1.0f, true);
+    setVp(&out[1], 3, 0.5f, 0.0f, 0.5f, 1.0f, true);
     setVp(&out[2], 0, 0.0f, 0.0f, 0.0f, 0.0f, false);
     setVp(&out[3], 0, 0.0f, 0.0f, 0.0f, 0.0f, false);
 }

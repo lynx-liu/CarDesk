@@ -29,6 +29,8 @@ public:
     ~MainWindow();
     MediaManager *mediaManager() const;
 
+    void showDrivingImageForAutomotive(int mode);
+
 private slots:
     void onBluetoothClicked();
     void onVideoListClicked();

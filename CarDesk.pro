@@ -138,6 +138,7 @@ HEADERS += \
     src/appsignals.h \
     src/topbarwidget.h \
     src/faultcodedb.h \
+    src/automotivedriving.h \
     src/mcuserialreader.h \
     src/backlight.h \
     src/mupdfdocument.h \
@@ -145,6 +146,7 @@ HEADERS += \
 
 SOURCES += \
     src/main.cpp \
+    src/automotivedriving.cpp \
     src/mainwindow.cpp \
     src/devicedetect.cpp \
     src/bluetoothmanager.cpp \

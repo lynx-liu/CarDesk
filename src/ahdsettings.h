@@ -13,7 +13,8 @@ public:
     bool recordingEnabled() const;
     void setRecordingEnabled(bool enabled);
 
-    // 行车模式偏好：270=后路布局 271=左右布局（AhdLayoutSpec::mode）
+    // 影像设置中的行车模式偏好（270=后视全屏，271=左右二分屏）：仅用于车速行车模式，
+    // 在进入车速行车模式或用户打开「行车影像」且处于车速行车模式时读取。
     int preferredDrivingMode() const;
     void setPreferredDrivingMode(int mode);
 

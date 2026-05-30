@@ -18,7 +18,6 @@ public:
 
 signals:
     void requestReturnToMain();
-    void requestApplyDrivingMode(int mode);
     void recordingToggled(bool enabled);
 
 private:

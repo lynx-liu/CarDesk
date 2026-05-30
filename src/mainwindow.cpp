@@ -8,6 +8,7 @@
 #include "radiowindow.h"
 #include "diagnosticwindow.h"
 #include "systemsettingwindow.h"
+#include "automotivedriving.h"
 #include "drivingimagewindow.h"
 #include "imageviewingwindow.h"
 #include "videolistwindow.h"
@@ -502,6 +503,21 @@ void MainWindow::onSystemSettingsClicked() {
     m_systemSettingWindow->activateWindow();
 }
 
+void MainWindow::showDrivingImageForAutomotive(int mode)
+{
+    if (m_mediaManager) {
+        m_mediaManager->pausePlaybackForOcclusion();
+    }
+    ensureDrivingImageWindow();
+    if (!m_drivingImageWindow) {
+        return;
+    }
+    m_drivingImageWindow->setDrivingMode(mode);
+    m_drivingImageWindow->show();
+    m_drivingImageWindow->raise();
+    m_drivingImageWindow->activateWindow();
+}
+
 void MainWindow::ensureDrivingImageWindow()
 {
     if (!m_drivingImageWindow) {
@@ -533,7 +549,8 @@ void MainWindow::onDrivingImageClicked() {
     ensureDrivingImageWindow();
     qDebug() << "[Driving] step3: DrivingImageWindow ready";
 
-    m_drivingImageWindow->setDrivingMode(360);
+    automotiveNotifyUserOpenedDrivingImage();
+    m_drivingImageWindow->setDrivingMode(automotiveLayoutForUserOpen());
     qDebug() << "[Driving] step5: schedule show (defer SDK until media paused)";
 
     QPointer<DrivingImageWindow> win = m_drivingImageWindow;

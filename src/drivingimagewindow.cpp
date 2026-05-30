@@ -1,4 +1,5 @@
 #include "drivingimagewindow.h"
+#include "automotivedriving.h"
 #include "ahdpreviewwidget.h"
 #include "ahdsettings.h"
 #include "pagebgwidget.h"
@@ -159,6 +160,13 @@ void DrivingImageWindow::returnToMainSafely()
     if (m_returning || m_exitInProgress) {
         return;
     }
+
+    if (!automotiveCanUserCloseDrivingImage()) {
+        qDebug() << "[Driving] returnToMain blocked: turn/reverse active";
+        return;
+    }
+
+    automotiveNotifyUserClosedDrivingImage();
 
     m_returning = true;
     m_exitInProgress = true;
@@ -321,11 +329,6 @@ void DrivingImageWindow::setupUI()
     connect(m_settingsPage, &DrivingImageSettingsPage::requestReturnToMain, this, [this]() {
         returnToMainSafely();
     });
-    connect(m_settingsPage, &DrivingImageSettingsPage::requestApplyDrivingMode, this,
-            [this](int mode) {
-                setDrivingMode(mode);
-                showPage(0);
-            });
     connect(m_playbackPage, &DrivingImagePlaybackPage::requestReturnToPreview, this, [this]() {
         showPage(0);
     });
@@ -406,6 +409,7 @@ void DrivingImageWindow::showPage(int index)
     }
 
     if (index == 0) {
+        setDrivingMode(automotiveLayoutForUserOpen());
         layoutTextOverlays();
         layoutCenterHint();
         startPreviewIfNeeded();

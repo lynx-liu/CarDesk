@@ -318,12 +318,10 @@ void DrivingImageSettingsPage::setupUI()
     connect(m_modeRear, &QPushButton::clicked, this, [this]() {
         AhdSettings::instance().setPreferredDrivingMode(270);
         refreshModeTiles();
-        emit requestApplyDrivingMode(270);
     });
     connect(m_modeLeftRight, &QPushButton::clicked, this, [this]() {
         AhdSettings::instance().setPreferredDrivingMode(271);
         refreshModeTiles();
-        emit requestApplyDrivingMode(271);
     });
 
     connect(formatBtn, &QPushButton::clicked, this, &DrivingImageSettingsPage::onFormatClicked);
