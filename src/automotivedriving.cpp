@@ -49,7 +49,7 @@ void activateDrivingImageMode(int mode)
     }
 
     if (DrivingImageWindow *drive = findDrivingImageWindow()) {
-        drive->setDrivingMode(mode);
+        drive->applyAutomotiveMode(mode);
         if (!drive->isVisible()) {
             drive->show();
         }

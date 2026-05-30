@@ -512,7 +512,7 @@ void MainWindow::showDrivingImageForAutomotive(int mode)
     if (!m_drivingImageWindow) {
         return;
     }
-    m_drivingImageWindow->setDrivingMode(mode);
+    m_drivingImageWindow->applyAutomotiveMode(mode);
     m_drivingImageWindow->show();
     m_drivingImageWindow->raise();
     m_drivingImageWindow->activateWindow();

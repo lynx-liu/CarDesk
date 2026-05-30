@@ -24,6 +24,7 @@ public:
     explicit DrivingImageWindow(QWidget *parent = nullptr);
     void warmupCamera();
     void setDrivingMode(int mode);
+    void applyAutomotiveMode(int mode);
     int drivingMode() const;
 
 signals:
@@ -55,7 +56,7 @@ private:
     void updatePreviewLayout();
     void stopPreview();
     QRect previewRectOnScreen() const;
-    void showPage(int index); // 0=预览 1=设置 2=回放
+    void showPage(int index, int drivingModeOverride = -1); // 0=预览 1=设置 2=回放
     QWidget *createPreviewPage();
 
     QStackedWidget *m_stack = nullptr;

@@ -634,7 +634,7 @@ void DrivingImageWindow::updatePreviewChrome()
     }
 }
 
-void DrivingImageWindow::showPage(int index)
+void DrivingImageWindow::showPage(int index, int drivingModeOverride)
 {
     if (!m_stack) {
         return;
@@ -646,7 +646,9 @@ void DrivingImageWindow::showPage(int index)
 
     if (index == 0) {
         m_previewChromeVisible = false;
-        setDrivingMode(automotiveLayoutForUserOpen());
+        const int mode =
+            drivingModeOverride >= 0 ? drivingModeOverride : automotiveLayoutForUserOpen();
+        setDrivingMode(mode);
         layoutTextOverlays();
         layoutCenterHint();
         startPreviewIfNeeded();
@@ -657,6 +659,21 @@ void DrivingImageWindow::showPage(int index)
         }
     }
     updatePreviewChrome();
+}
+
+void DrivingImageWindow::applyAutomotiveMode(int mode)
+{
+    if (!m_stack || m_stack->currentIndex() != 0) {
+        showPage(0, mode);
+        return;
+    }
+    setDrivingMode(mode);
+    if (isVisible()) {
+        layoutTextOverlays();
+        layoutCenterHint();
+        startPreviewIfNeeded();
+        updatePreviewChrome();
+    }
 }
 
 void DrivingImageWindow::layoutTextOverlays()
