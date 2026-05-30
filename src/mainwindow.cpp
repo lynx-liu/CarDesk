@@ -281,18 +281,66 @@ void MainWindow::onVideoListClicked() {
     m_mediaManager->openVideoList();
 
     if (auto *listWindow = m_mediaManager->videoListWindow()) {
-        connect(listWindow, &VideoListWindow::requestReturnToMain, this, [this]() {
-            this->show();
-            this->raise();
-            this->activateWindow();
-        }, Qt::UniqueConnection);
-        connect(listWindow, &QObject::destroyed, this, [this]() {
-            this->show();
-            this->raise();
-            this->activateWindow();
-        }, Qt::UniqueConnection);
+        connectVideoListReturnToMain(listWindow);
         this->hide();
     }
+}
+
+void MainWindow::connectVideoListReturnToMain(VideoListWindow *listWindow)
+{
+    if (!listWindow) {
+        return;
+    }
+    connect(listWindow, &VideoListWindow::requestReturnToMain, this, [this]() {
+        this->show();
+        this->raise();
+        this->activateWindow();
+    }, Qt::UniqueConnection);
+    connect(listWindow, &QObject::destroyed, this, [this]() {
+        this->show();
+        this->raise();
+        this->activateWindow();
+    }, Qt::UniqueConnection);
+}
+
+void MainWindow::openVideoPlayback(const QStringList &files, int currentIndex)
+{
+    if (!m_mediaManager || files.isEmpty() || currentIndex < 0 || currentIndex >= files.size()) {
+        return;
+    }
+
+    if (m_mediaManager->musicWindow()) {
+        m_mediaManager->musicWindow()->pauseForInterruption();
+    }
+    m_mediaManager->prepareForNonBluetoothAudio();
+    m_mediaManager->openVideoList();
+
+    auto *listWindow = m_mediaManager->videoListWindow();
+    if (!listWindow) {
+        return;
+    }
+
+    if (m_bluetoothManager) {
+        listWindow->setBluetoothManager(m_bluetoothManager);
+    }
+    if (m_mediaManager->musicWindow()) {
+        listWindow->setMusicWindow(m_mediaManager->musicWindow());
+    }
+    connectVideoListReturnToMain(listWindow);
+    listWindow->playVideoFiles(files, currentIndex);
+    this->hide();
+}
+
+void MainWindow::onDrivingRecordPlayRequested(const QStringList &files, int currentIndex)
+{
+    qDebug() << "[Driving] record playback via video list, files=" << files.size()
+             << "index=" << currentIndex;
+
+    if (m_drivingImageWindow && m_drivingImageWindow->isVisible()) {
+        m_drivingImageWindow->hide();
+    }
+
+    openVideoPlayback(files, currentIndex);
 }
 
 void MainWindow::onMusicUSBClicked() {
@@ -529,6 +577,8 @@ void MainWindow::ensureDrivingImageWindow()
                 m_mediaManager->resumePlaybackAfterInterruption();
             }
         }, Qt::UniqueConnection);
+        connect(m_drivingImageWindow, &DrivingImageWindow::requestPlayRecordVideo, this,
+                &MainWindow::onDrivingRecordPlayRequested, Qt::UniqueConnection);
         connect(m_drivingImageWindow, &QObject::destroyed, this, [this]() {
             m_drivingImageWindow = nullptr;
             if (m_mediaManager) {

@@ -2,11 +2,9 @@
 
 #include "ahdrecordstore.h"
 #include "drivingimagesubtopbar.h"
-#include "videoplaywindow.h"
 
 #include <QFileInfo>
 #include <QGridLayout>
-#include <QHideEvent>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
@@ -105,14 +103,6 @@ DrivingImagePlaybackPage::DrivingImagePlaybackPage(QWidget *parent)
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     setupUI();
     reloadDates();
-}
-
-DrivingImagePlaybackPage::~DrivingImagePlaybackPage()
-{
-    if (m_player) {
-        m_player->deleteLater();
-        m_player = nullptr;
-    }
 }
 
 void DrivingImagePlaybackPage::setupUI()
@@ -330,33 +320,13 @@ void DrivingImagePlaybackPage::playFile(const QString &path)
     if (path.isEmpty() || !QFileInfo::exists(path)) {
         return;
     }
-    if (!m_player) {
-        m_player = new VideoPlayWindow();
-        m_player->setAttribute(Qt::WA_DeleteOnClose);
-        connect(m_player, &VideoPlayWindow::requestReturnToMain, this, [this]() {
-            if (m_player) {
-                m_player->hide();
-            }
-            show();
-            raise();
-        });
-    }
+
     QStringList files = AhdRecordStore::listVideoFilesForDate(m_currentDate);
     int index = files.indexOf(path);
     if (index < 0) {
         files = QStringList(path);
         index = 0;
     }
-    m_player->setVideoFiles(files, index);
-    m_player->show();
-    m_player->raise();
-    m_player->activateWindow();
-}
 
-void DrivingImagePlaybackPage::hideEvent(QHideEvent *event)
-{
-    QWidget::hideEvent(event);
-    if (m_player && m_player->isVisible()) {
-        m_player->hide();
-    }
+    emit requestPlayVideo(files, index);
 }

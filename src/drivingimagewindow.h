@@ -2,6 +2,7 @@
 #define DRIVINGIMAGEWINDOW_H
 
 #include <QMainWindow>
+#include <QStringList>
 
 #include "ahdmanager.h"
 
@@ -29,6 +30,7 @@ public:
 
 signals:
     void requestReturnToMain();
+    void requestPlayRecordVideo(const QStringList &files, int currentIndex);
 
 protected:
     void closeEvent(QCloseEvent *event) override;

@@ -70,6 +70,7 @@ public:
     QWidget *videoPlayWindow() const;
     void setBluetoothManager(BluetoothManager *manager);
     void setMusicWindow(MusicPlayerWindow *musicWindow);
+    void playVideoFiles(const QStringList &videoList, int currentIdx);
 
 signals:
     void requestReturnToMain();

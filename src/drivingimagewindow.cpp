@@ -492,6 +492,8 @@ void DrivingImageWindow::setupUI()
     connect(m_playbackPage, &DrivingImagePlaybackPage::requestReturnToMain, this, [this]() {
         returnToMainSafely();
     });
+    connect(m_playbackPage, &DrivingImagePlaybackPage::requestPlayVideo, this,
+            &DrivingImageWindow::requestPlayRecordVideo);
     showPage(0);
 }
 

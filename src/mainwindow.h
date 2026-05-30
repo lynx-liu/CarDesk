@@ -11,6 +11,7 @@
 #include <QResizeEvent>
 #include <QPointer>
 #include <QVector>
+#include <QStringList>
 
 class BluetoothManager;
 class MediaManager;
@@ -20,6 +21,7 @@ class DiagnosticWindow;
 class SystemSettingWindow;
 class DrivingImageWindow;
 class ImageViewingWindow;
+class VideoListWindow;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -41,6 +43,7 @@ private slots:
     void onSystemSettingsClicked();
     void onDrivingImageClicked();
     void onImageViewingClicked();
+    void onDrivingRecordPlayRequested(const QStringList &files, int currentIndex);
     void onBluetoothCallStatusChanged(int status);
 
 protected:
@@ -67,6 +70,8 @@ private:
     void ensureSystemSettingWindow();
     void ensureImageViewingWindow();
     void ensureDrivingImageWindow();
+    void connectVideoListReturnToMain(VideoListWindow *listWindow);
+    void openVideoPlayback(const QStringList &files, int currentIndex);
     QWidget *findCurrentVisibleNonPhoneWindow() const;
     void restorePreviousWindow();
 

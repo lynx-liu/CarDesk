@@ -2,29 +2,26 @@
 #define DRIVINGIMAGEPLAYBACKPAGE_H
 
 #include <QWidget>
+#include <QStringList>
 
 class QGridLayout;
 class QLabel;
 class QPushButton;
 class QStackedWidget;
 class DrivingImageSubTopBar;
-class VideoPlayWindow;
 
 class DrivingImagePlaybackPage : public QWidget {
     Q_OBJECT
 
 public:
     explicit DrivingImagePlaybackPage(QWidget *parent = nullptr);
-    ~DrivingImagePlaybackPage() override;
 
     void reloadDates();
 
 signals:
     void requestReturnToMain();
     void requestReturnToPreview();
-
-protected:
-    void hideEvent(QHideEvent *event) override;
+    void requestPlayVideo(const QStringList &files, int currentIndex);
 
 private:
     void setupUI();
@@ -45,7 +42,6 @@ private:
     QLabel *m_emptyHint = nullptr;
     QPushButton *m_prevPageBtn = nullptr;
     QPushButton *m_nextPageBtn = nullptr;
-    VideoPlayWindow *m_player = nullptr;
     QString m_currentDate;
     QStringList m_allDates;
     QStringList m_allFiles;
