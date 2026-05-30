@@ -83,6 +83,7 @@ private:
         void *dvr = nullptr; // android::dvr_factory*
         bool previewOn = false;
         bool recordOn = false;
+        bool recordInited = false;
     };
     ChannelState m_channels[kChannelCount];
     int m_activeChannelCount = 0;
@@ -90,6 +91,7 @@ private:
 #endif
 
     mutable QMutex m_frameMutex;
+    mutable QMutex m_recordSyncMutex;
     FrameSlot m_frames[kChannelCount];
     AhdLayoutSpec m_layoutSpec;
     bool m_running = false;

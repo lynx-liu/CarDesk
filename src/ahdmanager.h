@@ -12,6 +12,8 @@ class QWidget;
 class AhdCameraPool;
 class AhdPreviewGLWidget;
 
+class QTimer;
+
 // 进程内 dvr_factory + Qt 窗口预览（对齐 sdktest 初始化顺序）
 class AhdManager : public QObject {
     Q_OBJECT
@@ -43,6 +45,7 @@ public:
     void enableSafetyWatermark(const QString &text = QStringLiteral("请注意周边安全"));
     void clearWatermark();
     void syncRecordingWithSettings();
+    void syncRecordingWithSettingsNow();
 
 signals:
     void cameraError(const QString &msg);
@@ -53,9 +56,11 @@ private:
     void applyLayoutSpec();
     void attachPreviewWidget(QWidget *parentWidget, int w, int h);
     void updateRecordingBadge();
+    void flushRecordingSync();
 
     AhdCameraPool *m_pool;
     AhdPreviewGLWidget *m_previewWidget;
+    QTimer *m_recordSyncTimer = nullptr;
     AhdLayoutSpec m_layout;
     bool m_camReady;
     bool m_prevActive;

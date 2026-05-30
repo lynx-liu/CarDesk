@@ -526,7 +526,12 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
                 stopAll();
                 return false;
             }
-            dvr->startRecord();
+            ch.recordInited = true;
+            if (dvr->startRecord() != 0) {
+                emit poolError(QStringLiteral("摄像头 %1 startRecord 失败").arg(cameraId));
+                stopAll();
+                return false;
+            }
             ch.recordOn = true;
         }
 
@@ -751,25 +756,42 @@ void AhdCameraPool::deliverPreviewFrame(int channelIndex, QByteArray nv21, int w
 
 void AhdCameraPool::syncRecordingState()
 {
+    if (m_shuttingDown) {
+        return;
+    }
+
+    QMutexLocker lock(&m_recordSyncMutex);
     const bool wasActive = isRecordingActive();
+    const bool want = recordingRequested();
+
     for (int i = 0; i < kChannelCount; ++i) {
         ChannelState &ch = m_channels[i];
         if (!ch.dvr) {
             continue;
         }
         auto *dvr = static_cast<dvr_factory *>(ch.dvr);
-        const bool want = recordingRequested();
+
         if (want && !ch.recordOn) {
-            if (dvr->recordInit() == 0 && dvr->startRecord() == 0) {
-                ch.recordOn = true;
-                qDebug() << "[Ahd] recording started camera" << ch.cameraId;
+            if (!ch.recordInited) {
+                if (dvr->recordInit() != 0) {
+                    qWarning() << "[Ahd] recordInit failed camera" << ch.cameraId;
+                    continue;
+                }
+                ch.recordInited = true;
             }
+            if (dvr->startRecord() != 0) {
+                qWarning() << "[Ahd] startRecord failed camera" << ch.cameraId;
+                continue;
+            }
+            ch.recordOn = true;
+            qDebug() << "[Ahd] recording started camera" << ch.cameraId;
         } else if (!want && ch.recordOn) {
             dvr->stopRecord();
             ch.recordOn = false;
             qDebug() << "[Ahd] recording stopped camera" << ch.cameraId;
         }
     }
+
     const bool nowActive = isRecordingActive();
     if (wasActive != nowActive) {
         emit recordingActiveChanged(nowActive);

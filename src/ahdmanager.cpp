@@ -6,6 +6,7 @@
 
 #include <QProcessEnvironment>
 #include <QRect>
+#include <QTimer>
 #include <QWidget>
 
 AhdManager::AhdManager(int layoutMode, QObject *parent)
@@ -145,7 +146,7 @@ bool AhdManager::startPreview(QWidget *parentWidget, int x, int y, int w, int h)
         if (!m_pool->hasPersistedFactories()) {
             m_previewWidget->clearChannelCache();
         }
-        syncRecordingWithSettings();
+        syncRecordingWithSettingsNow();
     }
 
     if (!m_prevActive) {
@@ -216,6 +217,25 @@ void AhdManager::enableSafetyWatermark(const QString &text)
 void AhdManager::clearWatermark() {}
 
 void AhdManager::syncRecordingWithSettings()
+{
+    if (!m_recordSyncTimer) {
+        m_recordSyncTimer = new QTimer(this);
+        m_recordSyncTimer->setSingleShot(true);
+        m_recordSyncTimer->setInterval(350);
+        connect(m_recordSyncTimer, &QTimer::timeout, this, &AhdManager::flushRecordingSync);
+    }
+    m_recordSyncTimer->start();
+}
+
+void AhdManager::syncRecordingWithSettingsNow()
+{
+    if (m_recordSyncTimer && m_recordSyncTimer->isActive()) {
+        m_recordSyncTimer->stop();
+    }
+    flushRecordingSync();
+}
+
+void AhdManager::flushRecordingSync()
 {
     if (m_pool) {
         m_pool->syncRecordingState();

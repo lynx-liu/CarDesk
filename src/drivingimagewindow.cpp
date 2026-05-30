@@ -1098,7 +1098,7 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
         });
     }
     if (m_ahdManager) {
-        m_ahdManager->syncRecordingWithSettings();
+        m_ahdManager->syncRecordingWithSettingsNow();
     }
     updateStorageState();
     if (m_storagePollTimer) {
