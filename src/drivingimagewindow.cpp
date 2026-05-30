@@ -30,6 +30,29 @@
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
+namespace {
+
+QString verticalTipChars(const QString &text)
+{
+    QString out;
+    for (const QChar &ch : text) {
+        out.append(ch);
+        out.append(QLatin1Char('\n'));
+    }
+    if (!out.isEmpty()) {
+        out.chop(1);
+    }
+    return out;
+}
+
+int verticalTipTextHeight(const QFont &font, int lineCount)
+{
+    const QFontMetrics fm(font);
+    return fm.lineSpacing() * lineCount + fm.descent();
+}
+
+} // namespace
+
 DrivingImageWindow::DrivingImageWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_previewWrap(nullptr)
@@ -442,6 +465,7 @@ QWidget *DrivingImageWindow::createPreviewPage()
     previewSurface->setStyleSheet(QStringLiteral("QFrame{background:#000000;border:none;}"));
     previewSurface->setGeometry(m_previewWrap->rect());
 
+    // 对齐 UI .video_play_tips：整条半透明底，图标 + 竖排文字同一容器
     m_safetyTipFrame = new QFrame(m_previewWrap);
     m_safetyTipFrame->setStyleSheet(
         QStringLiteral("QFrame{background:rgba(0,0,0,128);border:none;}"));
@@ -449,11 +473,12 @@ QWidget *DrivingImageWindow::createPreviewPage()
     m_safetyTipIcon->setPixmap(QPixmap(QStringLiteral(":/images/pict_driving_image_tips_icon.png")));
     m_safetyTipIcon->setAlignment(Qt::AlignCenter);
     m_safetyTipIcon->setScaledContents(true);
-    m_safetyTipText = new QLabel(QStringLiteral("请注意周边安全"), m_safetyTipFrame);
+    m_safetyTipIcon->setStyleSheet(QStringLiteral("background:transparent;border:none;"));
+    m_safetyTipText = new QLabel(verticalTipChars(QStringLiteral("请注意周边安全")), m_safetyTipFrame);
     m_safetyTipText->setAlignment(Qt::AlignCenter);
     m_safetyTipText->setWordWrap(true);
     m_safetyTipText->setStyleSheet(
-        QStringLiteral("QLabel{color:#E3D948;background:transparent;border:none;font-size:28px;"
+        QStringLiteral("QLabel{color:#E3D948;background:transparent;border:none;font-size:30px;"
                        "font-weight:700;}"));
 
     m_exitHintLabel = new QLabel(m_previewWrap);
@@ -463,12 +488,13 @@ QWidget *DrivingImageWindow::createPreviewPage()
                        "border-radius:10px;padding:8px 14px;font-size:28px;font-weight:700;}"));
     m_exitHintLabel->hide();
 
-    m_longPressHintLabel = new QLabel(QStringLiteral("长按屏幕呼出状态栏"), m_previewWrap);
+    m_longPressHintLabel = new QLabel(verticalTipChars(QStringLiteral("长按屏幕呼出状态栏")),
+                                      m_previewWrap);
     m_longPressHintLabel->setAlignment(Qt::AlignCenter);
     m_longPressHintLabel->setWordWrap(true);
     m_longPressHintLabel->setStyleSheet(
         QStringLiteral("QLabel{color:#E3D948;background:rgba(0,0,0,128);border:none;"
-                       "font-size:30px;line-height:34px;font-weight:700;padding:8px;}"));
+                       "font-size:30px;font-weight:700;padding:0px;}"));
     m_longPressHintLabel->hide();
 
     return page;
@@ -502,8 +528,31 @@ void DrivingImageWindow::layoutLongPressHint()
     }
     const int tipW = qMax(48, w * 60 / 1280);
     const int tipTop = h * 173 / 720;
-    const int tipH = qMax(120, h * 374 / 720);
+    const int tipH = qMax(132, h * 400 / 720);
     m_longPressHintLabel->setGeometry(w - tipW, tipTop, tipW, tipH);
+    const int padH = qMax(4, tipW * 8 / 60);
+    const int padTop = qMax(18, tipH * 22 / 400);
+    const int padBottom = qMax(8, tipH * 10 / 400);
+    const int textAvailH = tipH - padTop - padBottom;
+    int fontPx = qMax(18, tipW * 30 / 60);
+    QFont tipFont;
+    tipFont.setBold(true);
+    const int textLines = 9;
+    int textNeedH = 0;
+    do {
+        tipFont.setPixelSize(fontPx);
+        textNeedH = verticalTipTextHeight(tipFont, textLines);
+        if (textNeedH <= textAvailH || fontPx <= 16) {
+            break;
+        }
+        --fontPx;
+    } while (true);
+    m_longPressHintLabel->setFont(tipFont);
+    m_longPressHintLabel->setStyleSheet(
+        QStringLiteral("QLabel{color:#E3D948;background:rgba(0,0,0,128);border:none;padding:%1px %2px %3px %2px;}")
+            .arg(padTop)
+            .arg(padH)
+            .arg(padBottom));
     m_longPressHintLabel->raise();
 }
 
@@ -625,14 +674,37 @@ void DrivingImageWindow::layoutTextOverlays()
     const int h = m_previewWrap->height();
     const int tipW = qMax(48, w * 60 / 1280);
     const int tipTop = h * 173 / 720;
-    const int tipH = qMax(120, h * 374 / 720);
+    const int tipH = qMax(132, h * 400 / 720);
     m_safetyTipFrame->setGeometry(0, tipTop, tipW, tipH);
     m_safetyTipFrame->raise();
 
-    const int iconSide = qMin(tipW - 8, qMax(24, tipW * 4 / 5));
-    const int textH = tipH - iconSide - 24;
-    m_safetyTipIcon->setGeometry((tipW - iconSide) / 2, 12, iconSide, iconSide);
-    m_safetyTipText->setGeometry(4, 12 + iconSide + 8, tipW - 8, qMax(40, textH));
+    // 原型 padding 32px 8px；图标 40×40，略减间距为文字留出底部空间
+    const int padTop = tipH * 28 / 400;
+    const int padH = qMax(4, tipW * 8 / 60);
+    const int padBottom = tipH * 10 / 400;
+    const int iconSide = qMax(20, tipW * 40 / 60);
+    const int iconX = qMax(0, tipW * 10 / 60);
+    const int iconGap = tipH * 20 / 400;
+    m_safetyTipIcon->setGeometry(iconX, padTop, iconSide, iconSide);
+    const int textTop = padTop + iconSide + iconGap;
+    const int textAvailH = tipH - textTop - padBottom;
+    int fontPx = qMax(18, tipW * 30 / 60);
+    QFont tipFont;
+    tipFont.setBold(true);
+    const int textLines = 7;
+    int textNeedH = 0;
+    do {
+        tipFont.setPixelSize(fontPx);
+        textNeedH = verticalTipTextHeight(tipFont, textLines);
+        if (textNeedH <= textAvailH || fontPx <= 16) {
+            break;
+        }
+        --fontPx;
+    } while (true);
+    m_safetyTipText->setFont(tipFont);
+    m_safetyTipText->setGeometry(padH, textTop, tipW - 2 * padH, qMax(textNeedH, textAvailH));
+    m_safetyTipText->setStyleSheet(
+        QStringLiteral("QLabel{color:#E3D948;background:transparent;border:none;padding:0px;}"));
     m_safetyTipFrame->show();
 
     if (m_exitHintLabel) {
