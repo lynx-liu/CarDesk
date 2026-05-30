@@ -101,6 +101,12 @@ DrivingImageWindow::DrivingImageWindow(QWidget *parent)
     m_longPressTimer->setSingleShot(true);
     m_longPressTimer->setInterval(2000);
     connect(m_longPressTimer, &QTimer::timeout, this, &DrivingImageWindow::onLongPressTimeout);
+
+    m_previewChromeHideTimer = new QTimer(this);
+    m_previewChromeHideTimer->setSingleShot(true);
+    m_previewChromeHideTimer->setInterval(3000);
+    connect(m_previewChromeHideTimer, &QTimer::timeout, this,
+            &DrivingImageWindow::onPreviewChromeHideTimeout);
 }
 
 AhdManager *DrivingImageWindow::ahdManager()
@@ -174,10 +180,8 @@ void DrivingImageWindow::hideEvent(QHideEvent *event)
     if (m_longPressTimer) {
         m_longPressTimer->stop();
     }
+    cancelPreviewChromeAutoHide();
     m_previewChromeVisible = false;
-    if (m_longPressTimer) {
-        m_longPressTimer->stop();
-    }
     m_longPressTriggered = false;
     m_isFullscreen = false;
     m_fullscreenCameraId = -1;
@@ -252,6 +256,10 @@ void DrivingImageWindow::mousePressEvent(QMouseEvent *event)
     }
 
     event->accept();
+
+    if (m_previewChromeVisible) {
+        schedulePreviewChromeAutoHide();
+    }
 
     // 手动双击检测：触摸屏上 mouseDoubleClickEvent 不可靠
     // 两次点击间隔 < doubleClickInterval 且位移 < 60px → 视为双击
@@ -338,6 +346,37 @@ void DrivingImageWindow::onLongPressTimeout()
     m_lastClickMs = 0;
     m_previewChromeVisible = true;
     updatePreviewChrome();
+    schedulePreviewChromeAutoHide();
+}
+
+void DrivingImageWindow::schedulePreviewChromeAutoHide()
+{
+    if (!m_previewChromeVisible || !m_previewChromeHideTimer) {
+        return;
+    }
+    m_previewChromeHideTimer->start();
+}
+
+void DrivingImageWindow::cancelPreviewChromeAutoHide()
+{
+    if (m_previewChromeHideTimer) {
+        m_previewChromeHideTimer->stop();
+    }
+}
+
+void DrivingImageWindow::hidePreviewChrome()
+{
+    cancelPreviewChromeAutoHide();
+    if (!m_previewChromeVisible) {
+        return;
+    }
+    m_previewChromeVisible = false;
+    updatePreviewChrome();
+}
+
+void DrivingImageWindow::onPreviewChromeHideTimeout()
+{
+    hidePreviewChrome();
 }
 
 void DrivingImageWindow::handleConfirmedSingleClick(const QPoint &globalPos)
@@ -351,8 +390,15 @@ void DrivingImageWindow::handleConfirmedSingleClick(const QPoint &globalPos)
     if (m_navBar && m_navBar->isVisible()) {
         const QPoint navLocal = m_navBar->mapFromGlobal(globalPos);
         if (m_navBar->rect().contains(navLocal)) {
+            if (m_previewChromeVisible) {
+                schedulePreviewChromeAutoHide();
+            }
             return;
         }
+    }
+
+    if (m_previewChromeVisible) {
+        schedulePreviewChromeAutoHide();
     }
 
     // 仅四分屏(360)可单击切换单摄；不影响 CAN/按键触发的转向、倒车、行车布局切换
@@ -645,6 +691,7 @@ void DrivingImageWindow::showPage(int index, int drivingModeOverride)
     }
 
     if (index == 0) {
+        cancelPreviewChromeAutoHide();
         m_previewChromeVisible = false;
         const int mode =
             drivingModeOverride >= 0 ? drivingModeOverride : automotiveLayoutForUserOpen();
@@ -653,6 +700,8 @@ void DrivingImageWindow::showPage(int index, int drivingModeOverride)
         layoutCenterHint();
         startPreviewIfNeeded();
     } else if (m_ahdManager) {
+        cancelPreviewChromeAutoHide();
+        m_previewChromeVisible = false;
         m_ahdManager->stopPreview();
         if (index == 2 && m_playbackPage) {
             m_playbackPage->reloadDates();
@@ -826,6 +875,7 @@ void DrivingImageWindow::setDrivingMode(int mode)
     m_isFullscreen = false;
     m_fullscreenCameraId = -1;
     if (modeChanged) {
+        cancelPreviewChromeAutoHide();
         m_previewChromeVisible = false;
     }
     if (isVisible()) {

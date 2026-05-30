@@ -49,6 +49,10 @@ private:
     void layoutLongPressHint();
     void layoutPreviewTopBar();
     void updatePreviewChrome();
+    void schedulePreviewChromeAutoHide();
+    void cancelPreviewChromeAutoHide();
+    void hidePreviewChrome();
+    void onPreviewChromeHideTimeout();
     bool canStartPreviewLongPress(const QPoint &globalPos) const;
     void onLongPressTimeout();
     void handleConfirmedSingleClick(const QPoint &globalPos);
@@ -76,6 +80,7 @@ private:
     AhdManager *ahdManager();
     QTimer *m_singleClickTimer;
     QTimer *m_longPressTimer = nullptr;
+    QTimer *m_previewChromeHideTimer = nullptr;
     bool m_previewChromeVisible = false;
     bool m_longPressTriggered = false;
     bool m_returning;
