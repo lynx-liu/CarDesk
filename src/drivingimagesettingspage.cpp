@@ -379,13 +379,9 @@ bool DrivingImageSettingsPage::showPopAlert(QWidget *parent, const QString &titl
                        "border:none;"));
 
     auto *btnWrap = new QWidget(panel);
-    btnWrap->setFixedWidth(392);
     auto *btnRow = new QHBoxLayout(btnWrap);
     btnRow->setContentsMargins(0, 0, 0, 0);
     btnRow->setSpacing(0);
-    if (withCancel) {
-        btnRow->addStretch();
-    }
     auto *okBtn = new QPushButton(QStringLiteral("确认"), btnWrap);
     okBtn->setFixedSize(168, 64);
     okBtn->setFocusPolicy(Qt::NoFocus);
@@ -393,9 +389,12 @@ bool DrivingImageSettingsPage::showPopAlert(QWidget *parent, const QString &titl
         QStringLiteral("QPushButton{background:none;color:#ffffff;font-size:36px;"
                        "border:2px solid #0068FF;outline:none;}"
                        "QPushButton:hover{color:#00FAFF;border:2px solid #00FAFF;}"));
-    btnRow->addWidget(okBtn);
     QPushButton *cancelBtn = nullptr;
     if (withCancel) {
+        btnWrap->setFixedWidth(392);
+        btnRow->addStretch();
+        btnRow->addWidget(okBtn);
+        btnRow->addSpacing(56);
         cancelBtn = new QPushButton(QStringLiteral("取消"), btnWrap);
         cancelBtn->setFixedSize(168, 64);
         cancelBtn->setFocusPolicy(Qt::NoFocus);
@@ -406,6 +405,9 @@ bool DrivingImageSettingsPage::showPopAlert(QWidget *parent, const QString &titl
         btnRow->addWidget(cancelBtn);
         btnRow->addStretch();
     } else {
+        btnWrap->setFixedWidth(168);
+        btnRow->addStretch();
+        btnRow->addWidget(okBtn);
         btnRow->addStretch();
     }
 
