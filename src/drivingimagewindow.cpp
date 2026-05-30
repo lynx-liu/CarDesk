@@ -255,6 +255,11 @@ void DrivingImageWindow::handleConfirmedSingleClick(const QPoint &globalPos)
         }
     }
 
+    // 仅四分屏(360)可单击切换单摄；不影响 CAN/按键触发的转向、倒车、行车布局切换
+    if (m_cameraMode != 360) {
+        return;
+    }
+
     if (m_isFullscreen) {
         m_isFullscreen = false;
         m_fullscreenCameraId = -1;

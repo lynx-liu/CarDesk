@@ -17,6 +17,7 @@ static bool s_leftTurnOn = false;
 static bool s_rightTurnOn = false;
 static bool s_illuminationOn = false;
 static int s_activeSignalMode = 0;
+static int s_lastTurnSignalMode = 0; // 271/272，左右同时有效时取最近激活
 static bool s_userOpenedDrivingImage = false;
 static bool s_userDismissedDrivingImage = false;
 
@@ -91,13 +92,24 @@ void refreshActiveSignalMode()
 {
     if (s_backupOn) {
         s_activeSignalMode = 270;
-    } else if (s_rightTurnOn) {
-        s_activeSignalMode = 272;
-    } else if (s_leftTurnOn) {
-        s_activeSignalMode = 271;
-    } else {
-        s_activeSignalMode = 0;
+        return;
     }
+    if (s_leftTurnOn && s_rightTurnOn) {
+        s_activeSignalMode = (s_lastTurnSignalMode == 271 || s_lastTurnSignalMode == 272)
+                                 ? s_lastTurnSignalMode
+                                 : 272;
+        return;
+    }
+    if (s_rightTurnOn) {
+        s_activeSignalMode = 272;
+        return;
+    }
+    if (s_leftTurnOn) {
+        s_activeSignalMode = 271;
+        return;
+    }
+    s_activeSignalMode = 0;
+    s_lastTurnSignalMode = 0;
 }
 
 int resolveAutomotiveLayoutMode()
@@ -204,9 +216,17 @@ void updateVehicleSpeed(float speedKmh)
 
 void syncCanSignals(int rTurn, int lTurn, int backup)
 {
+    const bool newLeft = lTurn != 0;
+    const bool newRight = rTurn != 0;
+    if (newLeft && !s_leftTurnOn) {
+        s_lastTurnSignalMode = 271;
+    }
+    if (newRight && !s_rightTurnOn) {
+        s_lastTurnSignalMode = 272;
+    }
     s_backupOn = backup != 0;
-    s_leftTurnOn = lTurn != 0;
-    s_rightTurnOn = rTurn != 0;
+    s_leftTurnOn = newLeft;
+    s_rightTurnOn = newRight;
     updateSignalAndApply();
 }
 
@@ -218,12 +238,24 @@ void setBackupSignal(bool on)
 
 void setLeftTurnSignal(bool on)
 {
+    if (on) {
+        s_rightTurnOn = false;
+        s_lastTurnSignalMode = 271;
+    } else if (s_lastTurnSignalMode == 271) {
+        s_lastTurnSignalMode = s_rightTurnOn ? 272 : 0;
+    }
     s_leftTurnOn = on;
     updateSignalAndApply();
 }
 
 void setRightTurnSignal(bool on)
 {
+    if (on) {
+        s_leftTurnOn = false;
+        s_lastTurnSignalMode = 272;
+    } else if (s_lastTurnSignalMode == 272) {
+        s_lastTurnSignalMode = s_leftTurnOn ? 271 : 0;
+    }
     s_rightTurnOn = on;
     updateSignalAndApply();
 }
