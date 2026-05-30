@@ -49,9 +49,11 @@ private:
     void layoutCenterHint();
     void layoutTextOverlays();
     void layoutNavBar();
+    void layoutTfCardHint();
     void layoutLongPressHint();
     void layoutPreviewTopBar();
     void updatePreviewChrome();
+    void updateStorageState();
     void schedulePreviewChromeAutoHide();
     void cancelPreviewChromeAutoHide();
     void hidePreviewChrome();
@@ -79,11 +81,13 @@ private:
     QLabel *m_safetyTipText;
     QLabel *m_exitHintLabel;
     QLabel *m_longPressHintLabel = nullptr;
+    QLabel *m_tfCardHintLabel = nullptr;
     AhdManager *m_ahdManager = nullptr;
     AhdManager *ahdManager();
     QTimer *m_singleClickTimer;
     QTimer *m_longPressTimer = nullptr;
     QTimer *m_previewChromeHideTimer = nullptr;
+    QTimer *m_storagePollTimer = nullptr;
     bool m_previewChromeVisible = false;
     bool m_longPressTriggered = false;
     bool m_returning;

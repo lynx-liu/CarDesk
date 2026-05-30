@@ -1,6 +1,7 @@
 #include "drivingimagewindow.h"
 #include "automotivedriving.h"
 #include "ahdpreviewwidget.h"
+#include "ahdrecordstore.h"
 #include "ahdsettings.h"
 #include "pagebgwidget.h"
 #include "drivingimagenavbar.h"
@@ -107,6 +108,10 @@ DrivingImageWindow::DrivingImageWindow(QWidget *parent)
     m_previewChromeHideTimer->setInterval(3000);
     connect(m_previewChromeHideTimer, &QTimer::timeout, this,
             &DrivingImageWindow::onPreviewChromeHideTimeout);
+
+    m_storagePollTimer = new QTimer(this);
+    m_storagePollTimer->setInterval(2000);
+    connect(m_storagePollTimer, &QTimer::timeout, this, &DrivingImageWindow::updateStorageState);
 }
 
 AhdManager *DrivingImageWindow::ahdManager()
@@ -190,6 +195,9 @@ void DrivingImageWindow::hideEvent(QHideEvent *event)
         QMainWindow::hideEvent(event);
         return;
     }
+    if (m_storagePollTimer) {
+        m_storagePollTimer->stop();
+    }
     if (m_ahdManager) {
         m_ahdManager->stopPreview();
     }
@@ -255,6 +263,11 @@ void DrivingImageWindow::mousePressEvent(QMouseEvent *event)
         return;
     }
 
+    if (m_stack && m_stack->currentIndex() != 0) {
+        QMainWindow::mousePressEvent(event);
+        return;
+    }
+
     event->accept();
 
     if (m_previewChromeVisible) {
@@ -303,6 +316,10 @@ void DrivingImageWindow::mouseReleaseEvent(QMouseEvent *event)
             m_singleClickTimer->start(qMax(QApplication::doubleClickInterval(), 400));
         }
         m_longPressTriggered = false;
+    }
+    if (m_stack && m_stack->currentIndex() != 0) {
+        QMainWindow::mouseReleaseEvent(event);
+        return;
     }
     QMainWindow::mouseReleaseEvent(event);
 }
@@ -468,6 +485,11 @@ void DrivingImageWindow::setupUI()
     m_navBar->setFixedHeight(108);
     m_navBar->hide();
 
+    m_tfCardHintLabel = new QLabel(QStringLiteral("请插入TF卡"), central);
+    m_tfCardHintLabel->setAlignment(Qt::AlignCenter);
+    m_tfCardHintLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_tfCardHintLabel->hide();
+
     m_previewTopBar = new DrivingImagePreviewTopBar(central);
     m_previewTopBar->setTitle(QStringLiteral("行车影像"));
     m_previewTopBar->hide();
@@ -562,6 +584,65 @@ void DrivingImageWindow::layoutNavBar()
     }
     m_navBar->setGeometry(0, h - navH, w, navH);
     m_navBar->raise();
+    layoutTfCardHint();
+}
+
+void DrivingImageWindow::layoutTfCardHint()
+{
+    if (!m_tfCardHintLabel) {
+        return;
+    }
+    QWidget *host = centralWidget();
+    if (!host) {
+        return;
+    }
+    const int w = host->width();
+    const int h = host->height();
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+
+    const int navH =
+        (m_navBar && m_navBar->height() > 0) ? m_navBar->height() : 108;
+    const int gap = 12;
+    QFont tipFont;
+    tipFont.setBold(true);
+    tipFont.setPixelSize(30);
+    m_tfCardHintLabel->setFont(tipFont);
+    m_tfCardHintLabel->setStyleSheet(
+        QStringLiteral("QLabel{color:#E3D948;background:rgba(0,0,0,128);border:none;"
+                       "font-size:30px;font-weight:700;padding:8px 16px;}"));
+
+    const QFontMetrics fm(tipFont);
+    const int hintW = fm.horizontalAdvance(m_tfCardHintLabel->text()) + 32;
+    const int hintH = fm.height() + 16;
+    const int x = (w - hintW) / 2;
+    const int y = h - navH - gap - hintH;
+    m_tfCardHintLabel->setGeometry(x, y, hintW, hintH);
+    if (m_tfCardHintLabel->isVisible()) {
+        m_tfCardHintLabel->raise();
+    }
+}
+
+void DrivingImageWindow::updateStorageState()
+{
+    const bool hasTf = AhdRecordStore::hasRecordStorage();
+    const bool onPreview360 =
+        m_stack && m_stack->currentIndex() == 0 && m_cameraMode == 360;
+    const bool showHint = !hasTf && onPreview360;
+
+    if (m_tfCardHintLabel) {
+        if (showHint) {
+            layoutTfCardHint();
+            m_tfCardHintLabel->show();
+            m_tfCardHintLabel->raise();
+        } else {
+            m_tfCardHintLabel->hide();
+        }
+    }
+    if (m_settingsPage) {
+        m_settingsPage->refreshStorageState();
+    }
 }
 
 void DrivingImageWindow::layoutLongPressHint()
@@ -637,6 +718,10 @@ void DrivingImageWindow::updatePreviewChrome()
             m_navBar->show();
             m_navBar->raise();
         }
+        if (m_tfCardHintLabel) {
+            m_tfCardHintLabel->hide();
+        }
+        updateStorageState();
         return;
     }
 
@@ -649,6 +734,9 @@ void DrivingImageWindow::updatePreviewChrome()
         }
         if (m_navBar) {
             m_navBar->hide();
+        }
+        if (m_tfCardHintLabel) {
+            m_tfCardHintLabel->hide();
         }
         return;
     }
@@ -667,6 +755,7 @@ void DrivingImageWindow::updatePreviewChrome()
             m_navBar->show();
             m_navBar->raise();
         }
+        updateStorageState();
     } else {
         if (m_previewTopBar) {
             m_previewTopBar->hide();
@@ -679,6 +768,7 @@ void DrivingImageWindow::updatePreviewChrome()
             m_longPressHintLabel->show();
             m_longPressHintLabel->raise();
         }
+        updateStorageState();
     }
 }
 
@@ -1002,6 +1092,10 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
     if (m_ahdManager) {
         m_ahdManager->syncRecordingWithSettings();
     }
+    updateStorageState();
+    if (m_storagePollTimer) {
+        m_storagePollTimer->start();
+    }
     qDebug() << "[Driving] showEvent end";
 }
 
@@ -1013,6 +1107,7 @@ void DrivingImageWindow::resizeEvent(QResizeEvent *event)
         layoutTextOverlays();
         layoutCenterHint();
     }
+    updateStorageState();
     if (m_ahdManager && m_ahdManager->isPreviewActive() && m_previewWrap) {
         const QRect rect = previewRectOnScreen();
         m_ahdManager->startPreview(m_previewWrap, rect.x(), rect.y(), rect.width(), rect.height());

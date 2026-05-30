@@ -225,7 +225,8 @@ void DrivingImageSettingsPage::setupUI()
     m_recordingSwitch->setStyleSheet(
         QStringLiteral("QPushButton{border:none;background-image:url(:/images/butt_setting_close.png);"
                        "background-repeat:no-repeat;background-position:center;}"
-                       "QPushButton:checked{background-image:url(:/images/butt_setting_open.png);}"));
+                       "QPushButton:checked{background-image:url(:/images/butt_setting_open.png);}"
+                       "QPushButton:disabled{background-image:url(:/images/butt_setting_close.png);}"));
     recRowLayout->addWidget(recLabel);
     recRowLayout->addStretch();
     recRowLayout->addWidget(m_recordingSwitch);
@@ -292,7 +293,9 @@ void DrivingImageSettingsPage::setupUI()
         QStringLiteral("QPushButton{background:transparent;color:#fff;font-size:24px;"
                        "border:2px solid #0068FF;outline:none;}"
                        "QPushButton:hover{color:#00FAFF;border:2px solid #00FAFF;}"
+                       "QPushButton:disabled{color:#666666;border:2px solid #666666;}"
                        "QPushButton:focus,QPushButton:pressed{outline:none;border:2px solid #0068FF;}"));
+    m_formatBtn = formatBtn;
     formatLayout->addWidget(formatHint, 0, Qt::AlignHCenter);
     formatLayout->addSpacing(55);
     formatLayout->addWidget(formatBtn, 0, Qt::AlignHCenter);
@@ -313,6 +316,10 @@ void DrivingImageSettingsPage::setupUI()
     modeGroup->addButton(m_modeLeftRight);
 
     connect(m_recordingSwitch, &QPushButton::toggled, this, [this](bool on) {
+        if (!AhdRecordStore::hasRecordStorage()) {
+            refreshRecordingSwitch();
+            return;
+        }
         AhdSettings::instance().setRecordingEnabled(on);
         emit recordingToggled(on);
     });
@@ -329,6 +336,8 @@ void DrivingImageSettingsPage::setupUI()
     });
 
     connect(formatBtn, &QPushButton::clicked, this, &DrivingImageSettingsPage::onFormatClicked);
+
+    refreshStorageState();
 }
 
 bool DrivingImageSettingsPage::showPopAlert(QWidget *parent, const QString &title, bool withCancel)
@@ -454,8 +463,22 @@ void DrivingImageSettingsPage::refreshModeTiles()
     m_modeLeftRight->update();
 }
 
+void DrivingImageSettingsPage::refreshStorageState()
+{
+    const bool hasTf = AhdRecordStore::hasRecordStorage();
+    if (m_formatBtn) {
+        m_formatBtn->setEnabled(hasTf);
+    }
+    if (m_recordingSwitch) {
+        m_recordingSwitch->setEnabled(hasTf);
+    }
+}
+
 void DrivingImageSettingsPage::onFormatClicked()
 {
+    if (!AhdRecordStore::hasRecordStorage()) {
+        return;
+    }
     if (!showPopAlert(this, QStringLiteral("您确定执行此操作吗"), true)) {
         return;
     }

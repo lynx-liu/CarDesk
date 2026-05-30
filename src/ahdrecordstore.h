@@ -3,10 +3,11 @@
 
 #include <QStringList>
 
-// 扫描 SDK 录像目录（StorageManager MOUNT_POINT 及常见 TF 卡路径）
+// 扫描 SDK 录像目录：TF 卡挂载在 /mnt/sdcard/<volume>/ 下
 class AhdRecordStore {
 public:
     static QStringList recordRootPaths();
+    static bool hasRecordStorage();
 
     static QStringList listDateFolders();
     static QStringList listVideoFilesForDate(const QString &dateKey);

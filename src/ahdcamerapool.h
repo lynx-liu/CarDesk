@@ -30,7 +30,11 @@ public:
     bool isRunning() const;
     bool hasPersistedFactories() const;
     bool isShuttingDown() const { return m_shuttingDown; }
+#ifdef CAR_DESK_USE_T507_SDK
     bool uses360Compose() const { return m_uses360Compose; }
+#else
+    bool uses360Compose() const { return false; }
+#endif
     bool uses360QuadrantCrop() const;
 
     void setLayoutSpec(const AhdLayoutSpec &spec);

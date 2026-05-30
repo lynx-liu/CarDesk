@@ -11,23 +11,47 @@
 
 namespace {
 
-const char *kRecordRoots[] = {"/mnt/UDISK", "/mnt/sdcard/mmcblk1p1", "/mnt/sdcard"};
-
-QStringList existingRecordRoots()
-{
-    QStringList roots;
-    for (const char *path : kRecordRoots) {
-        const QFileInfo info(QString::fromUtf8(path));
-        if (info.exists() && info.isDir()) {
-            roots.append(info.absoluteFilePath());
-        }
-    }
-    return roots;
-}
+const char *kSdcardMountParent = "/mnt/sdcard";
+const char *kLegacyRecordRoots[] = {"/mnt/UDISK"};
 
 bool shouldSkipDirName(const QString &name)
 {
     return name.isEmpty() || name.startsWith(QLatin1Char('.'));
+}
+
+QStringList sdcardVolumeRoots()
+{
+    QStringList roots;
+    QDir parent(QString::fromUtf8(kSdcardMountParent));
+    if (!parent.exists()) {
+        return roots;
+    }
+    const QFileInfoList entries =
+        parent.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QFileInfo &fi : entries) {
+        if (shouldSkipDirName(fi.fileName())) {
+            continue;
+        }
+        roots.append(fi.absoluteFilePath());
+    }
+    return roots;
+}
+
+QStringList existingRecordRoots()
+{
+    QStringList roots = sdcardVolumeRoots();
+
+    for (const char *path : kLegacyRecordRoots) {
+        const QFileInfo info(QString::fromUtf8(path));
+        if (!info.exists() || !info.isDir()) {
+            continue;
+        }
+        const QString abs = info.absoluteFilePath();
+        if (!roots.contains(abs)) {
+            roots.append(abs);
+        }
+    }
+    return roots;
 }
 
 // SDK 录像名：{idx}-{yyyyMMdd}_{HHmmss}_{suffix}.mp4，例如 0-20240529_183024_front.mp4
@@ -98,6 +122,11 @@ QString dateKeyFromFileInfo(const QFileInfo &fi)
 QStringList AhdRecordStore::recordRootPaths()
 {
     return existingRecordRoots();
+}
+
+bool AhdRecordStore::hasRecordStorage()
+{
+    return !sdcardVolumeRoots().isEmpty();
 }
 
 QStringList AhdRecordStore::listDateFolders()

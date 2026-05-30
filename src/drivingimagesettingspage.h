@@ -16,6 +16,8 @@ class DrivingImageSettingsPage : public QWidget {
 public:
     explicit DrivingImageSettingsPage(AhdManager *manager, QWidget *parent = nullptr);
 
+    void refreshStorageState();
+
 signals:
     void requestReturnToMain();
     void recordingToggled(bool enabled);
@@ -34,6 +36,7 @@ private:
     QPushButton *m_recordingSwitch = nullptr;
     QPushButton *m_modeRear = nullptr;
     QPushButton *m_modeLeftRight = nullptr;
+    QPushButton *m_formatBtn = nullptr;
 };
 
 #endif // DRIVINGIMAGESETTINGSPAGE_H
