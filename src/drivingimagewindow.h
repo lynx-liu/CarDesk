@@ -27,6 +27,7 @@ public:
     void setDrivingMode(int mode);
     void applyAutomotiveMode(int mode);
     int drivingMode() const;
+    void showPlaybackPage();
 
 signals:
     void requestReturnToMain();

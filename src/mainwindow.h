@@ -12,6 +12,7 @@
 #include <QPointer>
 #include <QVector>
 #include <QStringList>
+#include <functional>
 
 class BluetoothManager;
 class MediaManager;
@@ -71,7 +72,8 @@ private:
     void ensureImageViewingWindow();
     void ensureDrivingImageWindow();
     void connectVideoListReturnToMain(VideoListWindow *listWindow);
-    void openVideoPlayback(const QStringList &files, int currentIndex);
+    void openVideoPlayback(const QStringList &files, int currentIndex,
+                           const std::function<void()> &returnToList = {});
     QWidget *findCurrentVisibleNonPhoneWindow() const;
     void restorePreviousWindow();
 

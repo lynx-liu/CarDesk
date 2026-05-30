@@ -303,7 +303,8 @@ void MainWindow::connectVideoListReturnToMain(VideoListWindow *listWindow)
     }, Qt::UniqueConnection);
 }
 
-void MainWindow::openVideoPlayback(const QStringList &files, int currentIndex)
+void MainWindow::openVideoPlayback(const QStringList &files, int currentIndex,
+                                   const std::function<void()> &returnToList)
 {
     if (!m_mediaManager || files.isEmpty() || currentIndex < 0 || currentIndex >= files.size()) {
         return;
@@ -327,7 +328,7 @@ void MainWindow::openVideoPlayback(const QStringList &files, int currentIndex)
         listWindow->setMusicWindow(m_mediaManager->musicWindow());
     }
     connectVideoListReturnToMain(listWindow);
-    listWindow->playVideoFiles(files, currentIndex);
+    listWindow->playVideoFiles(files, currentIndex, returnToList);
     this->hide();
 }
 
@@ -336,11 +337,17 @@ void MainWindow::onDrivingRecordPlayRequested(const QStringList &files, int curr
     qDebug() << "[Driving] record playback via video list, files=" << files.size()
              << "index=" << currentIndex;
 
+    ensureDrivingImageWindow();
+
     if (m_drivingImageWindow && m_drivingImageWindow->isVisible()) {
         m_drivingImageWindow->hide();
     }
 
-    openVideoPlayback(files, currentIndex);
+    openVideoPlayback(files, currentIndex, [this]() {
+        if (m_drivingImageWindow) {
+            m_drivingImageWindow->showPlaybackPage();
+        }
+    });
 }
 
 void MainWindow::onMusicUSBClicked() {

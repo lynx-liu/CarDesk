@@ -7,6 +7,7 @@
 #include <QPushButton>
 #include <QStyledItemDelegate>
 #include <QPainter>
+#include <functional>
 
 class BluetoothManager;
 class MusicPlayerWindow;
@@ -70,7 +71,8 @@ public:
     QWidget *videoPlayWindow() const;
     void setBluetoothManager(BluetoothManager *manager);
     void setMusicWindow(MusicPlayerWindow *musicWindow);
-    void playVideoFiles(const QStringList &videoList, int currentIdx);
+    void playVideoFiles(const QStringList &videoList, int currentIdx,
+                        const std::function<void()> &returnToList = {});
 
 signals:
     void requestReturnToMain();
@@ -103,6 +105,7 @@ protected:
     VideoPlayWindow *m_playWindow = nullptr;
     BluetoothManager *m_bluetoothManager = nullptr;
     MusicPlayerWindow *m_musicWindow = nullptr;
+    std::function<void()> m_returnToListHandler;
 };
 
 #endif // VIDEOLISTWINDOW_H

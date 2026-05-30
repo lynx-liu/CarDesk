@@ -712,6 +712,26 @@ void DrivingImageWindow::showPage(int index, int drivingModeOverride)
     updatePreviewChrome();
 }
 
+void DrivingImageWindow::showPlaybackPage()
+{
+    if (!m_stack) {
+        return;
+    }
+    m_stack->setCurrentIndex(2);
+    if (m_navBar) {
+        m_navBar->setActiveTab(DrivingImageNavBar::TabPlayback);
+    }
+    if (m_ahdManager) {
+        cancelPreviewChromeAutoHide();
+        m_previewChromeVisible = false;
+        m_ahdManager->stopPreview();
+    }
+    updatePreviewChrome();
+    show();
+    raise();
+    activateWindow();
+}
+
 void DrivingImageWindow::applyAutomotiveMode(int mode)
 {
     if (!m_stack || m_stack->currentIndex() != 0) {

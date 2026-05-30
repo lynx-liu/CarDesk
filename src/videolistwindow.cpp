@@ -483,11 +483,14 @@ void VideoListWindow::setMusicWindow(MusicPlayerWindow *musicWindow) {
     m_musicWindow = musicWindow;
 }
 
-void VideoListWindow::playVideoFiles(const QStringList &videoList, int currentIdx)
+void VideoListWindow::playVideoFiles(const QStringList &videoList, int currentIdx,
+                                     const std::function<void()> &returnToList)
 {
     if (videoList.isEmpty() || currentIdx < 0 || currentIdx >= videoList.size()) {
         return;
     }
+
+    m_returnToListHandler = returnToList;
 
     if (!m_playWindow) {
         m_playWindow = new VideoPlayWindow();
@@ -495,7 +498,11 @@ void VideoListWindow::playVideoFiles(const QStringList &videoList, int currentId
             m_playWindow->setBluetoothManager(m_bluetoothManager);
         }
         connect(m_playWindow, &VideoPlayWindow::requestReturnToList, this, [this]() {
-            this->show();
+            if (m_returnToListHandler) {
+                m_returnToListHandler();
+            } else {
+                this->show();
+            }
         });
         connect(m_playWindow, &VideoPlayWindow::requestReturnToMain, this, [this]() {
             if (m_playWindow) {
