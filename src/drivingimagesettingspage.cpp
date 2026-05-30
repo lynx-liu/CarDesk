@@ -5,14 +5,16 @@
 #include "drivingimagesubtopbar.h"
 
 #include <QButtonGroup>
+#include <QEventLoop>
 #include <QFontMetrics>
+#include <QMainWindow>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
-#include <QMessageBox>
 #include <QPainter>
+#include <QPaintEvent>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QSizePolicy>
@@ -20,14 +22,6 @@
 #include <QVBoxLayout>
 
 namespace {
-
-void paintModeTileFrame(QPainter &painter, const QRect &rect, bool selected)
-{
-    const QColor borderColor = selected ? QColor(0, 250, 255) : QColor(0, 104, 255);
-    painter.fillRect(rect, QColor(255, 255, 255, 26));
-    painter.setPen(QPen(borderColor, 1));
-    painter.drawRect(rect.adjusted(0, 0, -1, -1));
-}
 
 void paintTopRightLabel(QPainter &painter, const QRect &tileRect, const QString &text, bool selected)
 {
@@ -56,13 +50,7 @@ void paintCenteredPixmap(QPainter &painter, const QRect &tileRect, const QPixmap
     if (pixmap.isNull()) {
         return;
     }
-    QSize targetSize = pixmap.size();
-    targetSize.scale(tileRect.width() - 2, tileRect.height() - 2, Qt::KeepAspectRatio);
-    const QRect imageRect(
-        tileRect.left() + (tileRect.width() - targetSize.width()) / 2,
-        tileRect.top() + (tileRect.height() - targetSize.height()) / 2,
-        targetSize.width(), targetSize.height());
-    painter.drawPixmap(imageRect, pixmap);
+    painter.drawPixmap(tileRect, pixmap);
 }
 
 class ModeSelectButton : public QPushButton {
@@ -88,10 +76,8 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing, false);
 
-        const QRect tileRect = rect().adjusted(0, 0, -1, -1);
+        const QRect tileRect = rect();
         const bool selected = isChecked();
-        paintModeTileFrame(painter, tileRect, selected);
-
         static QPixmap bgPix;
         if (bgPix.isNull()) {
             bgPix = QPixmap(m_bgImage);
@@ -127,9 +113,8 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing, false);
 
-        const QRect tileRect = rect().adjusted(0, 0, -1, -1);
+        const QRect tileRect = rect();
         const bool selected = isChecked();
-        paintModeTileFrame(painter, tileRect, selected);
 
         static const QPixmap sidePix(
             QStringLiteral(":/images/pic_driving_image_setting_direction_side.png"));
@@ -140,11 +125,6 @@ protected:
 
         paintCenteredPixmap(painter, leftRect, sidePix);
         paintCenteredPixmap(painter, rightRect, sidePix);
-
-        const QColor borderColor = selected ? QColor(0, 250, 255) : QColor(0, 104, 255);
-        painter.setPen(QPen(borderColor, 1));
-        painter.drawLine(tileRect.left() + halfW, tileRect.top() + 1, tileRect.left() + halfW,
-                         tileRect.bottom() - 1);
 
         paintTopRightLabel(painter, leftRect, QStringLiteral("左"), selected);
         paintTopRightLabel(painter, rightRect, QStringLiteral("右"), selected);
@@ -225,12 +205,17 @@ void DrivingImageSettingsPage::setupUI()
     modeLayout->setContentsMargins(0, 24, 0, 0);
     modeLayout->setSpacing(0);
 
-    auto *recRow = new QWidget(modePage);
-    recRow->setFixedHeight(96);
-    recRow->setStyleSheet(
-        QStringLiteral("border-bottom:2px solid rgba(255,255,255,0.1);background:transparent;"));
+    auto *recRowWrap = new QWidget(modePage);
+    recRowWrap->setStyleSheet(QStringLiteral("background:transparent;border:none;"));
+    auto *recWrapLayout = new QVBoxLayout(recRowWrap);
+    recWrapLayout->setContentsMargins(0, 0, 0, 24);
+    recWrapLayout->setSpacing(0);
+
+    auto *recRow = new QWidget(recRowWrap);
+    recRow->setFixedHeight(72);
+    recRow->setStyleSheet(QStringLiteral("background:transparent;border:none;"));
     auto *recRowLayout = new QHBoxLayout(recRow);
-    recRowLayout->setContentsMargins(0, 0, 0, 24);
+    recRowLayout->setContentsMargins(0, 0, 0, 0);
     auto *recLabel = new QLabel(QStringLiteral("行车录像"), recRow);
     recLabel->setStyleSheet(QStringLiteral("color:#eaf2ff;font-size:32px;background:transparent;"));
     m_recordingSwitch = new QPushButton(recRow);
@@ -244,19 +229,35 @@ void DrivingImageSettingsPage::setupUI()
     recRowLayout->addWidget(recLabel);
     recRowLayout->addStretch();
     recRowLayout->addWidget(m_recordingSwitch);
-    modeLayout->addWidget(recRow);
+    recWrapLayout->addWidget(recRow);
+
+    auto *recDivider = new QFrame(recRowWrap);
+    recDivider->setFixedHeight(2);
+    recDivider->setStyleSheet(QStringLiteral("background:rgba(255,255,255,26);border:none;"));
+    recWrapLayout->addWidget(recDivider);
+    modeLayout->addWidget(recRowWrap);
 
     auto *modeTitleRow = new QWidget(modePage);
-    modeTitleRow->setFixedHeight(96);
-    modeTitleRow->setStyleSheet(
-        QStringLiteral("border-bottom:2px solid rgba(255,255,255,0.1);background:transparent;"));
+    modeTitleRow->setFixedHeight(72);
+    modeTitleRow->setStyleSheet(QStringLiteral("background:transparent;border:none;"));
     auto *modeTitleLayout = new QHBoxLayout(modeTitleRow);
-    modeTitleLayout->setContentsMargins(0, 0, 0, 24);
+    modeTitleLayout->setContentsMargins(0, 0, 0, 0);
     auto *modeLabel = new QLabel(QStringLiteral("行车模式"), modeTitleRow);
     modeLabel->setStyleSheet(QStringLiteral("color:#eaf2ff;font-size:32px;background:transparent;"));
     modeTitleLayout->addWidget(modeLabel);
     modeTitleLayout->addStretch();
     modeLayout->addWidget(modeTitleRow);
+
+    auto *sectionDividerWrap = new QWidget(modePage);
+    sectionDividerWrap->setStyleSheet(QStringLiteral("background:transparent;border:none;"));
+    auto *sectionDividerLayout = new QVBoxLayout(sectionDividerWrap);
+    sectionDividerLayout->setContentsMargins(0, 0, 0, 24);
+    sectionDividerLayout->setSpacing(0);
+    auto *sectionDivider = new QFrame(sectionDividerWrap);
+    sectionDivider->setFixedHeight(2);
+    sectionDivider->setStyleSheet(QStringLiteral("background:rgba(255,255,255,26);border:none;"));
+    sectionDividerLayout->addWidget(sectionDivider);
+    modeLayout->addWidget(sectionDividerWrap);
 
     auto *tilesRow = new QHBoxLayout();
     tilesRow->setContentsMargins(76, 0, 0, 0);
@@ -277,18 +278,21 @@ void DrivingImageSettingsPage::setupUI()
     auto *formatPage = new QWidget(m_stack);
     formatPage->setStyleSheet(QStringLiteral("background:transparent;border:none;"));
     auto *formatLayout = new QVBoxLayout(formatPage);
-    formatLayout->setContentsMargins(0, 24, 0, 0);
+    formatLayout->setContentsMargins(0, 138, 0, 0);
     auto *formatHint = new QLabel(
-        QStringLiteral("格式化将删除存储卡中的行车录像文件\n请谨慎操作"), formatPage);
+        QStringLiteral("格式化将删除\"TF卡\"中的所有数据\n请谨慎操作"), formatPage);
     formatHint->setAlignment(Qt::AlignCenter);
     formatHint->setWordWrap(true);
-    formatHint->setStyleSheet(QStringLiteral("color:#eaf2ff;font-size:32px;background:transparent;"));
+    formatHint->setStyleSheet(
+        QStringLiteral("color:#eaf2ff;font-size:32px;line-height:48px;background:transparent;"));
     auto *formatBtn = new QPushButton(QStringLiteral("开始格式化"), formatPage);
     formatBtn->setFixedSize(192, 54);
+    formatBtn->setFocusPolicy(Qt::NoFocus);
     formatBtn->setStyleSheet(
         QStringLiteral("QPushButton{background:transparent;color:#fff;font-size:24px;"
-                       "border:2px solid #0068FF;}"
-                       "QPushButton:hover{color:#00FAFF;border-color:#00FAFF;}"));
+                       "border:2px solid #0068FF;outline:none;}"
+                       "QPushButton:hover{color:#00FAFF;border:2px solid #00FAFF;}"
+                       "QPushButton:focus,QPushButton:pressed{outline:none;border:2px solid #0068FF;}"));
     formatLayout->addWidget(formatHint, 0, Qt::AlignHCenter);
     formatLayout->addSpacing(55);
     formatLayout->addWidget(formatBtn, 0, Qt::AlignHCenter);
@@ -327,6 +331,107 @@ void DrivingImageSettingsPage::setupUI()
     connect(formatBtn, &QPushButton::clicked, this, &DrivingImageSettingsPage::onFormatClicked);
 }
 
+bool DrivingImageSettingsPage::showPopAlert(QWidget *parent, const QString &title, bool withCancel)
+{
+    QWidget *host = parent ? parent->window() : nullptr;
+    if (!host) {
+        return false;
+    }
+    QWidget *surface = host;
+    if (auto *mainWin = qobject_cast<QMainWindow *>(host)) {
+        if (QWidget *central = mainWin->centralWidget()) {
+            surface = central;
+        }
+    }
+
+    auto *layer = new QWidget(surface);
+    layer->setObjectName(QStringLiteral("popAlertLayer"));
+    layer->setGeometry(surface->rect());
+    layer->setAttribute(Qt::WA_StyledBackground, true);
+    layer->setStyleSheet(QStringLiteral("background:transparent;"));
+    layer->show();
+    layer->raise();
+
+    auto *panel = new QWidget(layer);
+    panel->setObjectName(QStringLiteral("popAlertPanel"));
+    panel->setFixedSize(530, 272);
+    panel->move((layer->width() - panel->width()) / 2, (layer->height() - panel->height()) / 2);
+    panel->setAttribute(Qt::WA_StyledBackground, true);
+    panel->setAutoFillBackground(true);
+    panel->setStyleSheet(
+        QStringLiteral("QWidget#popAlertPanel{background-color:#1a2950;"
+                       "border-image:url(:/images/pict_popalert_bg.png) 25 25 25 25 stretch stretch;"
+                       "border:25px solid transparent;}"));
+    panel->show();
+    panel->raise();
+
+    auto *root = new QVBoxLayout(panel);
+    root->setContentsMargins(28, 28, 28, 28);
+    root->setSpacing(12);
+
+    auto *top = new QLabel(title, panel);
+    top->setMinimumHeight(104);
+    top->setWordWrap(true);
+    top->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    top->setStyleSheet(
+        QStringLiteral("color:#ffffff;font-size:36px;line-height:96px;padding-left:124px;"
+                       "background:transparent url(:/images/pict_popalert_icon.png) left top no-repeat;"
+                       "border:none;"));
+
+    auto *btnWrap = new QWidget(panel);
+    btnWrap->setFixedWidth(392);
+    auto *btnRow = new QHBoxLayout(btnWrap);
+    btnRow->setContentsMargins(0, 0, 0, 0);
+    btnRow->setSpacing(0);
+    if (withCancel) {
+        btnRow->addStretch();
+    }
+    auto *okBtn = new QPushButton(QStringLiteral("确认"), btnWrap);
+    okBtn->setFixedSize(168, 64);
+    okBtn->setFocusPolicy(Qt::NoFocus);
+    okBtn->setStyleSheet(
+        QStringLiteral("QPushButton{background:none;color:#ffffff;font-size:36px;"
+                       "border:2px solid #0068FF;outline:none;}"
+                       "QPushButton:hover{color:#00FAFF;border:2px solid #00FAFF;}"));
+    btnRow->addWidget(okBtn);
+    QPushButton *cancelBtn = nullptr;
+    if (withCancel) {
+        cancelBtn = new QPushButton(QStringLiteral("取消"), btnWrap);
+        cancelBtn->setFixedSize(168, 64);
+        cancelBtn->setFocusPolicy(Qt::NoFocus);
+        cancelBtn->setStyleSheet(
+            QStringLiteral("QPushButton{background:none;color:#ffffff;font-size:36px;"
+                           "border:2px solid #999999;outline:none;}"
+                           "QPushButton:hover{color:#cccccc;border:2px solid #999999;}"));
+        btnRow->addWidget(cancelBtn);
+        btnRow->addStretch();
+    } else {
+        btnRow->addStretch();
+    }
+
+    root->addWidget(top);
+    auto *btnCenter = new QHBoxLayout();
+    btnCenter->addStretch();
+    btnCenter->addWidget(btnWrap);
+    btnCenter->addStretch();
+    root->addLayout(btnCenter);
+
+    bool accepted = false;
+    QEventLoop loop;
+    const auto finish = [layer, &accepted, &loop](bool ok) {
+        accepted = ok;
+        layer->deleteLater();
+        loop.quit();
+    };
+    connect(okBtn, &QPushButton::clicked, layer, [finish]() { finish(true); });
+    if (cancelBtn) {
+        connect(cancelBtn, &QPushButton::clicked, layer, [finish]() { finish(false); });
+    }
+
+    loop.exec();
+    return accepted;
+}
+
 void DrivingImageSettingsPage::refreshRecordingSwitch()
 {
     if (!m_recordingSwitch) {
@@ -349,17 +454,13 @@ void DrivingImageSettingsPage::refreshModeTiles()
 
 void DrivingImageSettingsPage::onFormatClicked()
 {
-    const auto reply = QMessageBox::question(
-        this, QStringLiteral("格式化"),
-        QStringLiteral("确定删除存储卡中所有行车录像文件吗？"),
-        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-    if (reply != QMessageBox::Yes) {
+    if (!showPopAlert(this, QStringLiteral("您确定执行此操作吗"), true)) {
         return;
     }
     QString msg;
     if (AhdRecordStore::formatStorage(&msg)) {
-        QMessageBox::information(this, QStringLiteral("格式化"), msg);
+        showPopAlert(this, msg.isEmpty() ? QStringLiteral("格式化完成") : msg, false);
     } else {
-        QMessageBox::warning(this, QStringLiteral("格式化"), msg);
+        showPopAlert(this, msg.isEmpty() ? QStringLiteral("格式化失败") : msg, false);
     }
 }

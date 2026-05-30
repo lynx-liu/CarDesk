@@ -25,6 +25,7 @@ private:
     void refreshRecordingSwitch();
     void refreshModeTiles();
     void onFormatClicked();
+    static bool showPopAlert(QWidget *parent, const QString &title, bool withCancel);
 
     AhdManager *m_manager = nullptr;
     DrivingImageSubTopBar *m_topBar = nullptr;

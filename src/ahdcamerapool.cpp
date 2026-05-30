@@ -261,8 +261,7 @@ void applySdkWatermark(dvr_factory *dvr, const QString &line1, const QString &li
     const QByteArray l1 = line1.toUtf8();
     const QByteArray l2 = line2.toUtf8();
     char bufname[512];
-    snprintf(bufname, sizeof(bufname), "64,64,0,64,150,%s,64,250,%s", l1.constData(),
-             l2.isEmpty() ? "ALLWINNER" : l2.constData());
+    snprintf(bufname, sizeof(bufname), "64,64,0,64,150,%s,64,250,%s", l1.constData(), l2.constData());
     dvr->setWaterMarkMultiple(bufname);
 }
 
@@ -765,16 +764,15 @@ void AhdCameraPool::syncRecordingState()
 
 void AhdCameraPool::applySafetyWatermarks(const QString &text)
 {
-    const QString tip = text.isEmpty() ? QStringLiteral("请注意周边安全") : text;
+    Q_UNUSED(text);
     for (int i = 0; i < kChannelCount; ++i) {
         if (!m_channels[i].dvr) {
             continue;
         }
         auto *dvr = static_cast<dvr_factory *>(m_channels[i].dvr);
-        const int slot = poolSlotForCameraId(m_channels[i].cameraId);
-        const QString channelName =
-            (slot >= 0 && slot < kChannelCount) ? AhdLayoutSpec::channelLabel(slot) : QString();
-        applySdkWatermark(dvr, channelName.isEmpty() ? tip : channelName, QStringLiteral("CarDesk"));
+        // 前/后/左/右角标由 Qt AhdPreviewGLWidget::drawChannelOverlays 绘制；
+        // SDK 不再叠通道名，避免与 Qt 半透明角标重影成「双边框」。
+        applySdkWatermark(dvr, QString(), QString());
     }
 }
 
