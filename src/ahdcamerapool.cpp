@@ -1,5 +1,6 @@
 #include "ahdcamerapool.h"
 
+#include "ahdrecordstore.h"
 #include "ahdsettings.h"
 
 #include <QCoreApplication>
@@ -248,8 +249,11 @@ void softStopDvrChannel(dvr_factory *dvr, bool previewOn, bool recordOn)
 
 bool recordingRequested()
 {
+    if (qEnvironmentVariableIsSet("CARDESK_AHD_RECORD")) {
+        return true;
+    }
     return AhdSettings::instance().recordingEnabled()
-           || qEnvironmentVariableIsSet("CARDESK_AHD_RECORD");
+           && AhdRecordStore::hasRecordStorage();
 }
 
 void applySdkWatermark(dvr_factory *dvr, const QString &line1, const QString &line2)
@@ -613,6 +617,7 @@ void AhdCameraPool::stopAll()
 
     qDebug() << "[Ahd] stopAll (stopPriview only, keep dvr_factory — never delete)";
     m_shuttingDown = true;
+    const bool wasRecording = isRecordingActive();
     m_running = false;
     if (s_activePool == this) {
         s_activePool = nullptr;
@@ -631,6 +636,10 @@ void AhdCameraPool::stopAll()
         softStopDvrChannel(dvr, ch.previewOn, ch.recordOn);
         ch.previewOn = false;
         ch.recordOn = false;
+    }
+
+    if (wasRecording) {
+        emit recordingActiveChanged(false);
     }
 
     {
@@ -742,6 +751,7 @@ void AhdCameraPool::deliverPreviewFrame(int channelIndex, QByteArray nv21, int w
 
 void AhdCameraPool::syncRecordingState()
 {
+    const bool wasActive = isRecordingActive();
     for (int i = 0; i < kChannelCount; ++i) {
         ChannelState &ch = m_channels[i];
         if (!ch.dvr) {
@@ -760,6 +770,20 @@ void AhdCameraPool::syncRecordingState()
             qDebug() << "[Ahd] recording stopped camera" << ch.cameraId;
         }
     }
+    const bool nowActive = isRecordingActive();
+    if (wasActive != nowActive) {
+        emit recordingActiveChanged(nowActive);
+    }
+}
+
+bool AhdCameraPool::isRecordingActive() const
+{
+    for (int i = 0; i < kChannelCount; ++i) {
+        if (m_channels[i].recordOn) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void AhdCameraPool::applySafetyWatermarks(const QString &text)
@@ -837,5 +861,10 @@ void AhdCameraPool::applySafetyWatermarks(const QString &text)
 }
 
 void AhdCameraPool::syncRecordingState() {}
+
+bool AhdCameraPool::isRecordingActive() const
+{
+    return false;
+}
 
 #endif // CAR_DESK_USE_T507_SDK

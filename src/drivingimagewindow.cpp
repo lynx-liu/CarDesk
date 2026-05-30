@@ -643,6 +643,9 @@ void DrivingImageWindow::updateStorageState()
     if (m_settingsPage) {
         m_settingsPage->refreshStorageState();
     }
+    if (m_stack && m_stack->currentIndex() == 0 && m_ahdManager) {
+        m_ahdManager->syncRecordingWithSettings();
+    }
 }
 
 void DrivingImageWindow::layoutLongPressHint()

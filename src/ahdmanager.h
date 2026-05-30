@@ -52,6 +52,7 @@ signals:
 private:
     void applyLayoutSpec();
     void attachPreviewWidget(QWidget *parentWidget, int w, int h);
+    void updateRecordingBadge();
 
     AhdCameraPool *m_pool;
     AhdPreviewGLWidget *m_previewWidget;

@@ -18,6 +18,9 @@ AhdManager::AhdManager(int layoutMode, QObject *parent)
 {
     m_layout.mode = layoutMode;
     connect(m_pool, &AhdCameraPool::poolError, this, &AhdManager::cameraError);
+    connect(m_pool, &AhdCameraPool::recordingActiveChanged, this, [this](bool) {
+        updateRecordingBadge();
+    });
 }
 
 AhdManager::~AhdManager()
@@ -142,8 +145,7 @@ bool AhdManager::startPreview(QWidget *parentWidget, int x, int y, int w, int h)
         if (!m_pool->hasPersistedFactories()) {
             m_previewWidget->clearChannelCache();
         }
-        m_previewWidget->setShowRecordingBadge(AhdSettings::instance().recordingEnabled());
-        m_previewWidget->update();
+        syncRecordingWithSettings();
     }
 
     if (!m_prevActive) {
@@ -218,8 +220,15 @@ void AhdManager::syncRecordingWithSettings()
     if (m_pool) {
         m_pool->syncRecordingState();
     }
-    if (m_previewWidget) {
-        m_previewWidget->setShowRecordingBadge(AhdSettings::instance().recordingEnabled());
-        m_previewWidget->update();
+    updateRecordingBadge();
+}
+
+void AhdManager::updateRecordingBadge()
+{
+    if (!m_previewWidget) {
+        return;
     }
+    const bool active = m_pool && m_pool->isRecordingActive();
+    m_previewWidget->setShowRecordingBadge(active);
+    m_previewWidget->update();
 }

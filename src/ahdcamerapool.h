@@ -52,6 +52,7 @@ public:
 
     void applySafetyWatermarks(const QString &text);
     void syncRecordingState();
+    bool isRecordingActive() const;
 
 #ifdef CAR_DESK_USE_T507_SDK
     void onPreviewFrameFromSdk(void *dvrUser, char *dataPtr);
@@ -61,6 +62,7 @@ public:
 signals:
     void framesUpdated();
     void poolError(const QString &message);
+    void recordingActiveChanged(bool active);
 
 private slots:
 #ifdef CAR_DESK_USE_T507_SDK
