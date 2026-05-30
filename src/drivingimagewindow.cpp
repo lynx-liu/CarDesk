@@ -802,6 +802,11 @@ void DrivingImageWindow::showPage(int index, int drivingModeOverride)
     updatePreviewChrome();
 }
 
+bool DrivingImageWindow::allowsIncomingCallOverlay() const
+{
+    return m_stack && m_stack->currentIndex() != 0;
+}
+
 void DrivingImageWindow::showPlaybackPage()
 {
     if (!m_stack) {

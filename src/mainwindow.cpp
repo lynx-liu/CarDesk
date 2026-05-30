@@ -444,7 +444,8 @@ void MainWindow::onBluetoothCallStatusChanged(int status) {
     }
 
     QWidget *current = findCurrentVisibleNonPhoneWindow();
-    if (current && current == m_drivingImageWindow) {
+    if (current && current == m_drivingImageWindow
+        && !m_drivingImageWindow->allowsIncomingCallOverlay()) {
         return;
     }
     // 记录当前界面到恢复栈（仅当当前不是 PhoneWindow 时）

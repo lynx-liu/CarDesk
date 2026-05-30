@@ -28,6 +28,7 @@ public:
     void applyAutomotiveMode(int mode);
     int drivingMode() const;
     void showPlaybackPage();
+    bool allowsIncomingCallOverlay() const;
 
 signals:
     void requestReturnToMain();
