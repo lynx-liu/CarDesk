@@ -1,19 +1,22 @@
 #ifndef AHDPREVIEWWIDGET_H
 #define AHDPREVIEWWIDGET_H
 
-#include <QImage>
+#include <QOpenGLFunctions>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLWidget>
+#include <QRectF>
 #include <QVector>
-#include <QWidget>
 
 #include "ahdcamerapool.h"
 #include "ahdlayout.h"
 
-// CPU 绘制预览，避免与 SDK（libsdk_camera 内 EGL/Mali）争用同一显示栈
-class AhdPreviewGLWidget : public QWidget {
+// OpenGL 着色器直接采样 NV21（Y + VU 双纹理），避免 CPU 转 RGB
+class AhdPreviewGLWidget : public QOpenGLWidget, protected QOpenGLFunctions {
     Q_OBJECT
 
 public:
     explicit AhdPreviewGLWidget(AhdCameraPool *pool, QWidget *parent = nullptr);
+    ~AhdPreviewGLWidget() override;
 
     void setLayoutSpec(const AhdLayoutSpec &spec);
     void setShowRecordingBadge(bool show);
@@ -21,25 +24,32 @@ public:
     bool hasDisplayableCache() const;
 
 protected:
-    void paintEvent(QPaintEvent *event) override;
+    void initializeGL() override;
+    void resizeGL(int w, int h) override;
+    void paintGL() override;
 
 private:
-    struct ChannelImage {
+    struct ChannelTex {
+        GLuint yTex = 0;
+        GLuint uvTex = 0;
         int width = 0;
         int height = 0;
         quint64 cachedGeneration = 0;
-        QImage image;
     };
 
-    bool ensureChannelImage(int cacheIndex, const AhdCameraPool::FrameSlot &frame);
-    void drawViewport(QPainter *painter, const AhdViewport &vp, int channelIndex);
-    void drawChannelOverlays(QPainter *painter);
-    static QRect sourceRectFor360Quadrant(const QImage &image, int channelIndex);
+    void releaseGlResources();
+    bool ensureChannelTextures(int cacheIndex, const AhdCameraPool::FrameSlot &frame);
+    void uploadNv21Textures(ChannelTex *ch, const uint8_t *nv21, int width, int height);
+    void drawYuvViewport(const AhdViewport &vp, int channelIndex);
+    void drawChannelOverlays(QPainter &painter);
+    static QRectF normalized360Quadrant(int channelIndex);
 
     AhdCameraPool *m_pool;
     AhdLayoutSpec m_layout;
-    QVector<ChannelImage> m_channelImages;
+    QVector<ChannelTex> m_channelTex;
+    QOpenGLShaderProgram *m_program = nullptr;
     bool m_showRecordingBadge = false;
+    bool m_glReady = false;
 };
 
 #endif // AHDPREVIEWWIDGET_H

@@ -816,7 +816,7 @@ void AhdCameraPool::applySafetyWatermarks(const QString &text)
             continue;
         }
         auto *dvr = static_cast<dvr_factory *>(m_channels[i].dvr);
-        // 前/后/左/右角标由 Qt AhdPreviewGLWidget::drawChannelOverlays 绘制；
+        // 前/后/左/右角标由 Qt OpenGL 预览控件 drawChannelOverlays 绘制；
         // SDK 不再叠通道名，避免与 Qt 半透明角标重影成「双边框」。
         applySdkWatermark(dvr, QString(), QString());
     }
