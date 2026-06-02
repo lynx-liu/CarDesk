@@ -1,7 +1,7 @@
 #include "ahdpreviewwidget.h"
 
 #include <QOpenGLContext>
-#include <QPainter>
+#include <QLabel>
 #include <QPixmap>
 
 namespace {
@@ -58,6 +58,23 @@ AhdPreviewGLWidget::AhdPreviewGLWidget(AhdCameraPool *pool, QWidget *parent)
 
     setAttribute(Qt::WA_OpaquePaintEvent, true);
     setAutoFillBackground(false);
+
+    static const QString kChannelLabelStyle(
+        QStringLiteral("QLabel{background-color:rgba(0,0,0,128);color:#FFFFFF;border:none;padding:0px;}"));
+
+    for (int i = 0; i < AhdLayoutSpec::kChannelCount; ++i) {
+        auto *label = new QLabel(this);
+        label->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        label->setAlignment(Qt::AlignCenter);
+        label->setStyleSheet(kChannelLabelStyle);
+        label->hide();
+        m_channelLabels[static_cast<size_t>(i)] = label;
+    }
+
+    m_recordingBadge = new QLabel(this);
+    m_recordingBadge->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    m_recordingBadge->setScaledContents(true);
+    m_recordingBadge->hide();
 
     if (m_pool) {
         connect(m_pool, &AhdCameraPool::framesUpdated, this, [this]() { update(); },
@@ -124,11 +141,13 @@ void AhdPreviewGLWidget::resizeGL(int w, int h)
 {
     Q_UNUSED(w);
     Q_UNUSED(h);
+    updateChannelLabelLayout();
 }
 
 void AhdPreviewGLWidget::setLayoutSpec(const AhdLayoutSpec &spec)
 {
     m_layout = spec;
+    updateChannelLabelLayout();
     update();
 }
 
@@ -138,6 +157,7 @@ void AhdPreviewGLWidget::setShowRecordingBadge(bool show)
         return;
     }
     m_showRecordingBadge = show;
+    updateChannelLabelLayout();
     update();
 }
 
@@ -326,31 +346,36 @@ void AhdPreviewGLWidget::drawYuvViewport(const AhdViewport &vp, int channelIndex
     m_program->release();
 }
 
-void AhdPreviewGLWidget::drawChannelOverlays(QPainter &painter)
+void AhdPreviewGLWidget::updateChannelLabelLayout()
 {
+    if (width() < 8 || height() < 8) {
+        return;
+    }
+
     AhdViewport viewports[AhdLayoutSpec::kChannelCount];
     m_layout.viewports(viewports);
 
-    painter.save();
-    painter.resetTransform();
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-
-    QFont font = painter.font();
+    QFont font;
     font.setPixelSize(qMax(22, height() * 30 / 720));
     font.setBold(true);
-    painter.setFont(font);
 
-    static const QPixmap recIcon(QStringLiteral(":/images/pict_driving_image_video_recording.png"));
+    const int badge = qMax(36, height() * 48 / 720);
+    bool showRec = false;
+    QRect recRect;
 
     for (int i = 0; i < AhdLayoutSpec::kChannelCount; ++i) {
+        QLabel *label = m_channelLabels[static_cast<size_t>(i)];
         const AhdViewport &vp = viewports[i];
-        if (!vp.visible || vp.channel < 0) {
+        if (!label || !vp.visible || vp.channel < 0) {
+            if (label) {
+                label->hide();
+            }
             continue;
         }
 
-        const QString label = AhdLayoutSpec::channelLabel(vp.channel);
-        if (label.isEmpty()) {
+        const QString text = AhdLayoutSpec::channelLabel(vp.channel);
+        if (text.isEmpty()) {
+            label->hide();
             continue;
         }
 
@@ -359,37 +384,59 @@ void AhdPreviewGLWidget::drawChannelOverlays(QPainter &painter)
                          static_cast<int>(vp.norm.width() * width()),
                          static_cast<int>(vp.norm.height() * height()));
         if (dest.width() < 8 || dest.height() < 8) {
+            label->hide();
             continue;
         }
 
-        const int badge = qMax(36, height() * 48 / 720);
-        QRect badgeRect(dest.right() - badge + 1, dest.top(), badge, badge);
-        painter.fillRect(badgeRect, QColor(0, 0, 0, 128));
-        painter.setPen(Qt::white);
-        painter.drawText(badgeRect, Qt::AlignCenter, label);
+        const QRect badgeRect(dest.right() - badge + 1, dest.top(), badge, badge);
+        label->setFont(font);
+        label->setText(text);
+        label->setGeometry(badgeRect);
+        label->show();
+        label->raise();
 
-        if (m_showRecordingBadge && AhdLayoutSpec::isRearChannel(vp.channel) && !recIcon.isNull()) {
+        if (m_showRecordingBadge && AhdLayoutSpec::isRearChannel(vp.channel)) {
             const int iconSide = qMax(24, badge * 2 / 3);
-            const QRect iconRect(badgeRect.left() - iconSide - 6, badgeRect.top() + 6, iconSide,
-                                 iconSide);
-            painter.drawPixmap(iconRect, recIcon.scaled(iconSide, iconSide, Qt::KeepAspectRatio,
-                                                         Qt::SmoothTransformation));
+            recRect = QRect(badgeRect.left() - iconSide - 6, badgeRect.top() + 6, iconSide, iconSide);
+            showRec = true;
         }
     }
 
-    painter.restore();
+    if (m_recordingBadge) {
+        if (showRec) {
+            static const QPixmap recIcon(
+                QStringLiteral(":/images/pict_driving_image_video_recording.png"));
+            if (!recIcon.isNull()) {
+                m_recordingBadge->setPixmap(
+                    recIcon.scaled(recRect.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                m_recordingBadge->setGeometry(recRect);
+                m_recordingBadge->show();
+                m_recordingBadge->raise();
+            } else {
+                m_recordingBadge->hide();
+            }
+        } else {
+            m_recordingBadge->hide();
+        }
+    }
 }
 
 void AhdPreviewGLWidget::paintGL()
 {
-    QPainter painter(this);
-
     if (!m_glReady || !m_program) {
-        painter.fillRect(rect(), Qt::black);
+        glClearColor(0.f, 0.f, 0.f, 1.f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        for (QLabel *label : m_channelLabels) {
+            if (label) {
+                label->hide();
+            }
+        }
+        if (m_recordingBadge) {
+            m_recordingBadge->hide();
+        }
         return;
     }
 
-    painter.beginNativePainting();
     glClear(GL_COLOR_BUFFER_BIT);
 
     AhdViewport viewports[AhdLayoutSpec::kChannelCount];
@@ -397,7 +444,4 @@ void AhdPreviewGLWidget::paintGL()
     for (int i = 0; i < AhdLayoutSpec::kChannelCount; ++i) {
         drawYuvViewport(viewports[i], viewports[i].channel);
     }
-    painter.endNativePainting();
-
-    drawChannelOverlays(painter);
 }

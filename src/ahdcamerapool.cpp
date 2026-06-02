@@ -261,6 +261,11 @@ void applySdkWatermark(dvr_factory *dvr, const QString &line1, const QString &li
     if (!dvr) {
         return;
     }
+    if (line1.isEmpty() && line2.isEmpty()) {
+        // 通道名由 Qt 绘制；必须关闭 SDK 预览水印，否则 NV21 里会残留斜角 OSD 与 Qt 叠影。
+        dvr->disableWaterMark();
+        return;
+    }
     dvr->enableWaterMark();
     const QByteArray l1 = line1.toUtf8();
     const QByteArray l2 = line2.toUtf8();
@@ -360,6 +365,7 @@ bool AhdCameraPool::resumePreview(const QVector<int> &cameraIds, bool hideHwOver
             return false;
         }
         ch.previewOn = true;
+        applySdkWatermark(dvr, QString(), QString());
         if (hideHwOverlayImmediately) {
             applyHideHwOverlayOnly(cameraId);
         }
@@ -378,6 +384,7 @@ bool AhdCameraPool::resumePreview(const QVector<int> &cameraIds, bool hideHwOver
             scheduleHideHwOverlay(cameraIds.first());
         }
     }
+    applySafetyWatermarks(QString());
     return true;
 }
 
@@ -584,6 +591,7 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
             return false;
         }
         ch.previewOn = true;
+        applySdkWatermark(e.dvr, QString(), QString());
         if (hideHwOverlayImmediately) {
             applyHideHwOverlayOnly(e.cameraId);
         }
@@ -603,7 +611,7 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
         }
     }
 
-    applySafetyWatermarks(QStringLiteral("请注意周边安全"));
+    applySafetyWatermarks(QString());
 
     markAhdSessionActive();
     noteHardwareRecoveryDone();
@@ -812,8 +820,7 @@ void AhdCameraPool::applySafetyWatermarks(const QString &text)
             continue;
         }
         auto *dvr = static_cast<dvr_factory *>(m_channels[i].dvr);
-        // 前/后/左/右角标由 Qt OpenGL 预览控件 drawChannelOverlays 绘制；
-        // SDK 不再叠通道名，避免与 Qt 半透明角标重影成「双边框」。
+        // 前/后/左/右角标由 Qt 预览控件绘制；关闭 SDK 预览水印（含时间戳/OSD），避免斜字叠影。
         applySdkWatermark(dvr, QString(), QString());
     }
 }
