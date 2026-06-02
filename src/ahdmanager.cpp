@@ -1,6 +1,7 @@
 #include "ahdmanager.h"
 
 #include "ahdcamerapool.h"
+#include "ahdpreviewoverlaywidget.h"
 #include "ahdpreviewwidget.h"
 #include "ahdsettings.h"
 
@@ -78,6 +79,9 @@ void AhdManager::applyLayoutSpec()
     if (m_previewWidget) {
         m_previewWidget->setLayoutSpec(m_layout);
         m_previewWidget->update();
+    }
+    if (m_overlayWidget) {
+        m_overlayWidget->setLayoutSpec(m_layout);
     }
 }
 
@@ -168,11 +172,25 @@ void AhdManager::attachPreviewWidget(QWidget *parentWidget, int w, int h)
     } else if (parentWidget && m_previewWidget->parentWidget() != parentWidget) {
         m_previewWidget->setParent(parentWidget);
     }
+
+    if (!m_overlayWidget) {
+        m_overlayWidget = new AhdPreviewOverlayWidget(parentWidget);
+        m_overlayWidget->setLayoutSpec(m_layout);
+    } else if (parentWidget && m_overlayWidget->parentWidget() != parentWidget) {
+        m_overlayWidget->setParent(parentWidget);
+        m_overlayWidget->setLayoutSpec(m_layout);
+    }
+
     const int pw = (w > 0) ? w : (parentWidget ? parentWidget->width() : 0);
     const int ph = (h > 0) ? h : (parentWidget ? parentWidget->height() : 0);
-    m_previewWidget->setGeometry(0, 0, pw, ph);
+    const QRect geom(0, 0, pw, ph);
+    m_previewWidget->setGeometry(geom);
     m_previewWidget->show();
-    m_previewWidget->raise();
+    m_previewWidget->lower();
+
+    m_overlayWidget->setGeometry(geom);
+    m_overlayWidget->show();
+    m_overlayWidget->raise();
 }
 
 void AhdManager::stopPreview()
@@ -182,6 +200,9 @@ void AhdManager::stopPreview()
     }
     if (m_previewWidget) {
         m_previewWidget->hide();
+    }
+    if (m_overlayWidget) {
+        m_overlayWidget->hide();
     }
     m_prevActive = false;
     emit previewStopped();
@@ -245,10 +266,9 @@ void AhdManager::flushRecordingSync()
 
 void AhdManager::updateRecordingBadge()
 {
-    if (!m_previewWidget) {
+    if (!m_overlayWidget) {
         return;
     }
     const bool active = m_pool && m_pool->isRecordingActive();
-    m_previewWidget->setShowRecordingBadge(active);
-    m_previewWidget->update();
+    m_overlayWidget->setShowRecordingBadge(active);
 }

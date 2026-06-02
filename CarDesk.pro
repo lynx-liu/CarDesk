@@ -134,6 +134,7 @@ HEADERS += \
     src/ahdlayout.h \
     src/ahdcamerapool.h \
     src/ahdpreviewwidget.h \
+    src/ahdpreviewoverlaywidget.h \
     src/otamanager.h \
     src/progressmonitor.h \
     src/appsignals.h \
@@ -173,6 +174,7 @@ SOURCES += \
     src/ahdlayout.cpp \
     src/ahdcamerapool.cpp \
     src/ahdpreviewwidget.cpp \
+    src/ahdpreviewoverlaywidget.cpp \
     src/otamanager.cpp \
     src/progressmonitor.cpp \
     src/appsignals.cpp \

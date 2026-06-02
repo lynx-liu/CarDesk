@@ -11,6 +11,7 @@ class QWidget;
 
 class AhdCameraPool;
 class AhdPreviewGLWidget;
+class AhdPreviewOverlayWidget;
 
 class QTimer;
 
@@ -60,6 +61,7 @@ private:
 
     AhdCameraPool *m_pool;
     AhdPreviewGLWidget *m_previewWidget;
+    AhdPreviewOverlayWidget *m_overlayWidget = nullptr;
     QTimer *m_recordSyncTimer = nullptr;
     AhdLayoutSpec m_layout;
     bool m_camReady;

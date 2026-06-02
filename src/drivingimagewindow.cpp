@@ -531,10 +531,6 @@ QWidget *DrivingImageWindow::createPreviewPage()
     m_previewWrap->setStyleSheet(QStringLiteral("QFrame{background:#000000;border:none;}"));
     layout->addWidget(m_previewWrap, 1);
 
-    auto *previewSurface = new QFrame(m_previewWrap);
-    previewSurface->setStyleSheet(QStringLiteral("QFrame{background:#000000;border:none;}"));
-    previewSurface->setGeometry(m_previewWrap->rect());
-
     // 对齐 UI .video_play_tips：整条半透明底，图标 + 竖排文字同一容器
     m_safetyTipFrame = new QFrame(m_previewWrap);
     m_safetyTipFrame->setStyleSheet(
