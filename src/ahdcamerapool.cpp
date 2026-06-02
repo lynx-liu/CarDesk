@@ -463,6 +463,8 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
         s_activePool = this;
         if (resumePreview(cameraIds, hideHwOverlayImmediately)) {
             m_running = true;
+            applySafetyWatermarks(QString());
+            armDeferredRecording();
             markAhdSessionActive();
             noteHardwareRecoveryDone();
             qDebug() << "[Ahd] startAll resumed (no delete, avoid SDK ~dvr_factory crash)";
@@ -525,25 +527,6 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
 
         dvr->SetDataCB(poolUsrDataCb, dvr);
         dvr->setCallbacks(poolNotifyCallback, poolDataCallback, poolDataCallbackTimestamp, dvr);
-
-        if (recordingRequested()) {
-            qDebug() << "[Ahd] phase1 recordInit camera" << cameraId;
-            if (dvr->recordInit() != 0) {
-                emit poolError(QStringLiteral("摄像头 %1 recordInit 失败").arg(cameraId));
-                stopAll();
-                return false;
-            }
-            ch.recordInited = true;
-            if (dvr->mRecordCamera) {
-                dvr->mRecordCamera->setDuration(180); // 3 minutes per file segment
-            }
-            if (dvr->startRecord() != 0) {
-                emit poolError(QStringLiteral("摄像头 %1 startRecord 失败").arg(cameraId));
-                stopAll();
-                return false;
-            }
-            ch.recordOn = true;
-        }
 
         OpenEntry entry;
         entry.cameraId = cameraId;
@@ -629,6 +612,11 @@ void AhdCameraPool::stopAll()
     }
     if (!needsStop) {
         return;
+    }
+
+    m_pendingRecordingStart = false;
+    if (m_recordingDeferTimer) {
+        m_recordingDeferTimer->stop();
     }
 
     qDebug() << "[Ahd] stopAll (stopPriview only, keep dvr_factory — never delete)";
@@ -753,6 +741,64 @@ void AhdCameraPool::deliverPreviewFrame(int channelIndex, QByteArray nv21, int w
         }
     }
     emit framesUpdated();
+    tryStartRecordingWhenReady();
+}
+
+void AhdCameraPool::armDeferredRecording()
+{
+    m_pendingRecordingStart = recordingRequested();
+    if (!m_pendingRecordingStart) {
+        return;
+    }
+
+    if (!m_recordingDeferTimer) {
+        m_recordingDeferTimer = new QTimer(this);
+        m_recordingDeferTimer->setSingleShot(true);
+        connect(m_recordingDeferTimer, &QTimer::timeout, this, [this]() {
+            if (!m_pendingRecordingStart || !m_running || m_shuttingDown) {
+                return;
+            }
+            qWarning() << "[Ahd] deferred recording fallback (preview frame timeout)";
+            m_pendingRecordingStart = false;
+            QMetaObject::invokeMethod(this, "syncRecordingState", Qt::QueuedConnection);
+        });
+    }
+    // 插 TF 时勿在 startAll 同步 recordInit；若迟迟无预览帧则超时兜底启动录像。
+    m_recordingDeferTimer->start(8000);
+    qDebug() << "[Ahd] recording deferred until preview frames ready";
+}
+
+void AhdCameraPool::tryStartRecordingWhenReady()
+{
+    if (!m_pendingRecordingStart || m_shuttingDown || !m_running || !recordingRequested()) {
+        return;
+    }
+
+    bool hasFrame = false;
+    {
+        QMutexLocker lock(&m_frameMutex);
+        if (m_uses360Compose) {
+            hasFrame = m_frames[0].generation != 0 && !m_frames[0].nv21.isEmpty()
+                       && m_frames[0].width > 0 && m_frames[0].height > 0;
+        } else {
+            for (int i = 0; i < kChannelCount; ++i) {
+                if (m_frames[i].generation != 0 && !m_frames[i].nv21.isEmpty()) {
+                    hasFrame = true;
+                    break;
+                }
+            }
+        }
+    }
+    if (!hasFrame) {
+        return;
+    }
+
+    m_pendingRecordingStart = false;
+    if (m_recordingDeferTimer) {
+        m_recordingDeferTimer->stop();
+    }
+    qDebug() << "[Ahd] preview frames ready, starting deferred recording";
+    QMetaObject::invokeMethod(this, "syncRecordingState", Qt::QueuedConnection);
 }
 
 void AhdCameraPool::syncRecordingState()

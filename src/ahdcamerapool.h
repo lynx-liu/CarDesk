@@ -5,6 +5,8 @@
 #include <QMutex>
 #include <QObject>
 
+class QTimer;
+
 #include "ahdlayout.h"
 
 class AhdCameraPool : public QObject {
@@ -96,6 +98,11 @@ private:
     AhdLayoutSpec m_layoutSpec;
     bool m_running = false;
     bool m_shuttingDown = false;
+    bool m_pendingRecordingStart = false;
+    QTimer *m_recordingDeferTimer = nullptr;
+
+    void armDeferredRecording();
+    void tryStartRecordingWhenReady();
 };
 
 inline bool AhdCameraPool::hasPersistedFactories() const
