@@ -98,4 +98,16 @@ private:
     bool m_shuttingDown = false;
 };
 
+inline bool AhdCameraPool::hasPersistedFactories() const
+{
+#ifdef CAR_DESK_USE_T507_SDK
+    for (int i = 0; i < kChannelCount; ++i) {
+        if (m_channels[i].dvr) {
+            return true;
+        }
+    }
+#endif
+    return false;
+}
+
 #endif // AHDCAMERAPOOL_H

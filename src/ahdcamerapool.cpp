@@ -527,6 +527,9 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
                 return false;
             }
             ch.recordInited = true;
+            if (dvr->mRecordCamera) {
+                dvr->mRecordCamera->setDuration(180); // 3 minutes per file segment
+            }
             if (dvr->startRecord() != 0) {
                 emit poolError(QStringLiteral("摄像头 %1 startRecord 失败").arg(cameraId));
                 stopAll();
@@ -657,16 +660,6 @@ void AhdCameraPool::stopAll()
     m_shuttingDown = false;
 }
 
-bool AhdCameraPool::hasPersistedFactories() const
-{
-    for (int i = 0; i < kChannelCount; ++i) {
-        if (m_channels[i].dvr) {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool AhdCameraPool::isRunning() const
 {
     return m_running;
@@ -778,6 +771,9 @@ void AhdCameraPool::syncRecordingState()
                     continue;
                 }
                 ch.recordInited = true;
+                if (dvr->mRecordCamera) {
+                    dvr->mRecordCamera->setDuration(180); // 3 minutes per file segment
+                }
             }
             if (dvr->startRecord() != 0) {
                 qWarning() << "[Ahd] startRecord failed camera" << ch.cameraId;
