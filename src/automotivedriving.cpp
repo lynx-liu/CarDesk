@@ -7,19 +7,20 @@
 
 #include <QApplication>
 #include <QDebug>
+#include <QWidget>
 
 namespace {
 
 static float s_vehicleSpeedKmh = 0.f;
-static bool s_speedDrivingActive = false;
+// 仅在行车影像界面内生效：≥35 行车布局，<25 四分屏，25~35 滞回
+static bool s_speedDrivingMode = false;
 static bool s_backupOn = false;
 static bool s_leftTurnOn = false;
 static bool s_rightTurnOn = false;
 static bool s_illuminationOn = false;
 static int s_activeSignalMode = 0;
-static int s_lastTurnSignalMode = 0; // 271/272，左右同时有效时取最近激活
+static int s_lastTurnSignalMode = 0;
 static bool s_userOpenedDrivingImage = false;
-static bool s_userDismissedDrivingImage = false;
 
 MainWindow *findMainWindow()
 {
@@ -41,6 +42,14 @@ DrivingImageWindow *findDrivingImageWindow()
     return nullptr;
 }
 
+bool isDrivingImageWindowVisible()
+{
+    if (DrivingImageWindow *drive = findDrivingImageWindow()) {
+        return drive->isVisible();
+    }
+    return false;
+}
+
 void activateDrivingImageMode(int mode)
 {
     MainWindow *main = findMainWindow();
@@ -48,38 +57,51 @@ void activateDrivingImageMode(int mode)
         main->mediaManager()->pausePlaybackForOcclusion();
     }
 
-    if (DrivingImageWindow *drive = findDrivingImageWindow()) {
+    DrivingImageWindow *drive = findDrivingImageWindow();
+    if (!drive && main) {
+        main->showDrivingImageForAutomotive(mode);
+        return;
+    }
+
+    if (drive) {
         drive->applyAutomotiveMode(mode);
         if (!drive->isVisible()) {
             drive->show();
         }
         drive->raise();
         drive->activateWindow();
-        return;
     }
+}
 
-    if (main) {
-        main->showDrivingImageForAutomotive(mode);
+bool hasOtherVisibleTopLevel(const QWidget *except)
+{
+    for (QWidget *widget : QApplication::topLevelWidgets()) {
+        if (widget == except || widget->objectName() == QLatin1String("transitionOverlay")) {
+            continue;
+        }
+        if (widget->isVisible()) {
+            return true;
+        }
     }
+    return false;
 }
 
 void hideDrivingImageWindow()
 {
-    if (DrivingImageWindow *drive = findDrivingImageWindow()) {
-        if (!drive->isVisible()) {
-            return;
-        }
+    DrivingImageWindow *drive = findDrivingImageWindow();
+    if (drive && drive->isVisible()) {
         drive->hide();
     }
 
     MainWindow *main = findMainWindow();
-    if (main) {
+    if (main && main->mediaManager()) {
+        main->mediaManager()->resumePlaybackAfterInterruption();
+    }
+
+    if (main && !hasOtherVisibleTopLevel(drive)) {
         main->show();
         main->raise();
         main->activateWindow();
-        if (main->mediaManager()) {
-            main->mediaManager()->resumePlaybackAfterInterruption();
-        }
     }
 }
 
@@ -112,65 +134,67 @@ void refreshActiveSignalMode()
     s_lastTurnSignalMode = 0;
 }
 
+void updateSpeedDrivingMode()
+{
+    const bool wasDriving = s_speedDrivingMode;
+    if (s_vehicleSpeedKmh >= 35.f) {
+        s_speedDrivingMode = true;
+    } else if (s_vehicleSpeedKmh < 25.f) {
+        s_speedDrivingMode = false;
+    }
+
+    if (wasDriving != s_speedDrivingMode) {
+        qDebug() << "[Automotive] speed driving mode:" << s_speedDrivingMode
+                 << "speed=" << s_vehicleSpeedKmh;
+    }
+}
+
 int resolveAutomotiveLayoutMode()
 {
     if (s_activeSignalMode != 0) {
         return s_activeSignalMode;
     }
-    if (s_speedDrivingActive) {
+    if (s_speedDrivingMode) {
         return layoutModeForSpeedDriving();
     }
     return 360;
 }
 
-bool shouldShowDrivingImage()
+// 车速仅切换已打开的行车影像布局，不自动弹出窗口
+void applySpeedLayoutIfDrivingImageVisible()
 {
-    if (s_activeSignalMode != 0) {
-        return true;
+    if (!isDrivingImageWindowVisible()) {
+        return;
     }
-    if (s_speedDrivingActive && !s_userDismissedDrivingImage) {
-        return true;
+
+    const int mode = resolveAutomotiveLayoutMode();
+    if (DrivingImageWindow *drive = findDrivingImageWindow()) {
+        qDebug() << "[Automotive] speed layout" << mode << "speed=" << s_vehicleSpeedKmh
+                 << "drivingMode=" << s_speedDrivingMode;
+        drive->applyAutomotiveMode(mode);
     }
-    if (s_userOpenedDrivingImage) {
-        return true;
-    }
-    return false;
 }
 
-void applyAutomotiveDisplayState()
+// 转向/倒车 CAN：可自动弹出影像；用户手动进入也保持
+void applyCanAutomotiveDisplayState()
 {
-    if (!shouldShowDrivingImage()) {
+    const bool needWindow = s_activeSignalMode != 0 || s_userOpenedDrivingImage;
+    if (!needWindow) {
         hideDrivingImageWindow();
         return;
     }
 
     const int mode = resolveAutomotiveLayoutMode();
-    qDebug() << "[Automotive] apply layout mode" << mode << "speed=" << s_vehicleSpeedKmh
-             << "speedDriving=" << s_speedDrivingActive << "backup=" << s_backupOn
+    qDebug() << "[Automotive] CAN layout" << mode << "backup=" << s_backupOn
              << "lTurn=" << s_leftTurnOn << "rTurn=" << s_rightTurnOn;
     activateDrivingImageMode(mode);
-}
-
-void updateSpeedDrivingActive()
-{
-    const bool wasActive = s_speedDrivingActive;
-    if (s_vehicleSpeedKmh >= 35.f) {
-        s_speedDrivingActive = true;
-    } else if (s_vehicleSpeedKmh < 25.f) {
-        s_speedDrivingActive = false;
-        s_userDismissedDrivingImage = false;
-    }
-
-    if (wasActive != s_speedDrivingActive) {
-        qDebug() << "[Automotive] speed driving active:" << s_speedDrivingActive
-                 << "speed=" << s_vehicleSpeedKmh;
-    }
 }
 
 void updateSignalAndApply()
 {
     refreshActiveSignalMode();
-    applyAutomotiveDisplayState();
+    applyCanAutomotiveDisplayState();
+    applySpeedLayoutIfDrivingImageVisible();
 }
 
 bool canUserCloseDrivingImage()
@@ -180,38 +204,30 @@ bool canUserCloseDrivingImage()
 
 int layoutForUserOpen()
 {
-    if (s_activeSignalMode != 0) {
-        return s_activeSignalMode;
-    }
-    if (s_speedDrivingActive) {
-        return layoutModeForSpeedDriving();
-    }
-    return 360;
+    return resolveAutomotiveLayoutMode();
 }
 
 void notifyUserOpenedDrivingImage()
 {
     s_userOpenedDrivingImage = true;
-    s_userDismissedDrivingImage = false;
 }
 
 void notifyUserClosedDrivingImage()
 {
     if (!canUserCloseDrivingImage()) {
-        qDebug() << "[Automotive] ignore close: turn/reverse active";
+        qDebug() << "[Automotive] ignore manual exit: turn/reverse active";
         return;
     }
 
     s_userOpenedDrivingImage = false;
-    s_userDismissedDrivingImage = true;
-    applyAutomotiveDisplayState();
+    applyCanAutomotiveDisplayState();
 }
 
 void updateVehicleSpeed(float speedKmh)
 {
     s_vehicleSpeedKmh = speedKmh;
-    updateSpeedDrivingActive();
-    applyAutomotiveDisplayState();
+    updateSpeedDrivingMode();
+    applySpeedLayoutIfDrivingImageVisible();
 }
 
 void syncCanSignals(int rTurn, int lTurn, int backup)
