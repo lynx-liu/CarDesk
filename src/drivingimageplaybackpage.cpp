@@ -242,6 +242,15 @@ void DrivingImagePlaybackPage::reloadDates()
     showDateList();
 }
 
+void DrivingImagePlaybackPage::restoreAfterVideoPlayback()
+{
+    if (!m_currentDate.isEmpty()) {
+        showFileList(m_currentDate);
+        return;
+    }
+    reloadDates();
+}
+
 void DrivingImagePlaybackPage::populateDateGrid()
 {
     clearGrid(m_dateGrid);

@@ -17,6 +17,8 @@ public:
     explicit DrivingImagePlaybackPage(QWidget *parent = nullptr);
 
     void reloadDates();
+    /** 从录像播放器返回：有当前日期则回到该日期的文件列表，否则刷新日期列表 */
+    void restoreAfterVideoPlayback();
 
 signals:
     void requestReturnToMain();

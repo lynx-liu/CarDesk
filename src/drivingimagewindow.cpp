@@ -827,7 +827,7 @@ void DrivingImageWindow::showPlaybackPage()
         m_ahdManager->stopPreview();
     }
     if (m_playbackPage) {
-        m_playbackPage->reloadDates();
+        m_playbackPage->restoreAfterVideoPlayback();
     }
     updatePreviewChrome();
     show();
