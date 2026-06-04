@@ -25,7 +25,7 @@ public:
     explicit DrivingImageWindow(QWidget *parent = nullptr);
     void warmupCamera();
     void setDrivingMode(int mode);
-    void applyAutomotiveMode(int mode);
+    void applyAutomotiveMode(int mode, bool forceReengage = false);
     int drivingMode() const;
     void showPlaybackPage();
     bool allowsIncomingCallOverlay() const;

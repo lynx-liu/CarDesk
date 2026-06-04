@@ -826,19 +826,24 @@ void DrivingImageWindow::showPlaybackPage()
     activateWindow();
 }
 
-void DrivingImageWindow::applyAutomotiveMode(int mode)
+void DrivingImageWindow::applyAutomotiveMode(int mode, bool forceReengage)
 {
     if (!m_stack || m_stack->currentIndex() != 0) {
         showPage(0, mode);
         return;
     }
-    setDrivingMode(mode);
-    if (isVisible()) {
-        layoutTextOverlays();
-        layoutCenterHint();
-        startPreviewIfNeeded();
-        updatePreviewChrome();
+    if (forceReengage && mode == m_cameraMode && m_ahdManager) {
+        m_ahdManager->stopPreview();
+        m_cameraMode = -1;
     }
+    setDrivingMode(mode);
+    if (!isVisible()) {
+        return;
+    }
+    layoutTextOverlays();
+    layoutCenterHint();
+    startPreviewIfNeeded();
+    updatePreviewChrome();
 }
 
 void DrivingImageWindow::layoutTextOverlays()
@@ -983,7 +988,8 @@ void DrivingImageWindow::stopPreview()
 void DrivingImageWindow::setDrivingMode(int mode)
 {
     const bool modeChanged = mode != m_cameraMode;
-    if (mode == m_cameraMode && !m_isFullscreen) {
+    const bool previewInactive = !m_ahdManager || !m_ahdManager->isPreviewActive();
+    if (mode == m_cameraMode && !m_isFullscreen && isVisible() && !previewInactive) {
         updatePreviewChrome();
         return;
     }

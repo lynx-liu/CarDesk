@@ -33,6 +33,10 @@ public:
 
     // 获取/创建全局共享实例（首次调用时以 parent 为父对象）
     static McuSerialReader *ensureShared(QObject *parent = nullptr);
+    static McuSerialReader *existingShared();
+
+    // 布局释放：清空 MCU 侧转向/倒车缓存并同步为全 OFF（避免下一帧把已退出的信号又拉起来）
+    void clearCanSignalState();
 
     // 打开串口，默认 /dev/ttyS2；成功返回 true
     bool open(const QString &portName = QStringLiteral("/dev/ttyS2"));
@@ -63,6 +67,7 @@ private:
     void parseJsonLine(const QByteArray &line);
     // 解析 VIST TEXT 行（[ts][#seq][NAME] key=value ...）
     void parseVistTextLine(const QString &name, const QString &kv);
+    void emitLcIfChanged();
 
     static McuSerialReader *s_shared;
     QSerialPort          *m_port;
@@ -77,6 +82,9 @@ private:
     int                   m_canLTurn;     // 来自 OEL（或 OEL 缺失时来自 LC）
     int                   m_canBackup;    // 来自 LC
     bool                  m_oelReceived;  // 曾收到过 OEL 报文，则忽略 LC 转向字段
+    int                   m_lastEmittedRTurn = -1;
+    int                   m_lastEmittedLTurn = -1;
+    int                   m_lastEmittedBackup = -1;
 };
 
 #endif // MCUSERIALREADER_H

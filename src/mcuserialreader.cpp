@@ -1,5 +1,6 @@
 #include "mcuserialreader.h"
 #include "appsignals.h"
+#include "automotivedriving.h"
 
 #include <QDebug>
 #include <QJsonDocument>
@@ -15,6 +16,23 @@ McuSerialReader *McuSerialReader::ensureShared(QObject *parent)
         s_shared = new McuSerialReader(parent);
     }
     return s_shared;
+}
+
+McuSerialReader *McuSerialReader::existingShared()
+{
+    return s_shared;
+}
+
+void McuSerialReader::clearCanSignalState()
+{
+    m_canRTurn = 0;
+    m_canLTurn = 0;
+    m_canBackup = 0;
+    m_lastEmittedRTurn = -1;
+    m_lastEmittedLTurn = -1;
+    m_lastEmittedBackup = -1;
+    qDebug() << "[TXRX] clear CAN signal state after layout release";
+    automotiveSyncCanSignals(0, 0, 0);
 }
 
 McuSerialReader::McuSerialReader(QObject *parent)
@@ -121,13 +139,13 @@ void McuSerialReader::parseJsonLine(const QByteArray &raw)
         m_canRTurn = (turnSig == 2) ? 1 : 0;
         qDebug() << "[TXRX] OEL turn_sig=" << turnSig
                  << "lTurn=" << m_canLTurn << "rTurn=" << m_canRTurn;
-        emit lcReceived(m_canRTurn, m_canLTurn, m_canBackup);
+        emitLcIfChanged();
     } else if (name == QLatin1String("LC")) {
         // 0x0CFE4121: 只取 backup 字段，转向信号仅由 OEL 提供
         const int backup = obj.value(QStringLiteral("backup")).toInt();
         m_canBackup = backup;
         qDebug() << "[TXRX] LC backup=" << m_canBackup;
-        emit lcReceived(m_canRTurn, m_canLTurn, m_canBackup);
+        emitLcIfChanged();
     } else if (name == QLatin1String("TCO1")) {
         const float speedKmh = static_cast<float>(obj.value(QStringLiteral("speed_kmh")).toDouble());
         qDebug() << "[TXRX] TCO1 speed_kmh=" << speedKmh;
@@ -203,6 +221,20 @@ void McuSerialReader::processLine(const QByteArray &raw)
     }
 }
 
+void McuSerialReader::emitLcIfChanged()
+{
+    automotiveSyncCanSignals(m_canRTurn, m_canLTurn, m_canBackup);
+
+    if (m_canRTurn == m_lastEmittedRTurn && m_canLTurn == m_lastEmittedLTurn
+        && m_canBackup == m_lastEmittedBackup) {
+        return;
+    }
+    m_lastEmittedRTurn = m_canRTurn;
+    m_lastEmittedLTurn = m_canLTurn;
+    m_lastEmittedBackup = m_canBackup;
+    emit lcReceived(m_canRTurn, m_canLTurn, m_canBackup);
+}
+
 void McuSerialReader::parseVistTextLine(const QString &name, const QString &kv)
 {
     if (name == QLatin1String("OEL")) {
@@ -222,14 +254,14 @@ void McuSerialReader::parseVistTextLine(const QString &name, const QString &kv)
             m_canRTurn = rTurnOn ? 1 : 0;
         }
         qDebug() << "[TXRX TEXT] OEL lTurn=" << m_canLTurn << "rTurn=" << m_canRTurn << " raw=" << kv;
-        emit lcReceived(m_canRTurn, m_canLTurn, m_canBackup);
+        emitLcIfChanged();
     } else if (name == QLatin1String("LC")) {
         // [530][#3][LC] R-Turn=OFF L-Turn=ON Backup=OFF Marker=ON
         // 转向信号仅由 OEL 提供，这里只取 backup
         const bool backupOn = kv.contains(QLatin1String("Backup=ON"),  Qt::CaseInsensitive);
         m_canBackup = backupOn ? 1 : 0;
         qDebug() << "[TXRX TEXT] LC backup=" << m_canBackup << " raw=" << kv;
-        emit lcReceived(m_canRTurn, m_canLTurn, m_canBackup);
+        emitLcIfChanged();
     } else if (name == QLatin1String("TCO1")) {
         // "Speed=80.50km/h"
         static const QRegularExpression re(QStringLiteral("Speed=([\\d.]+)"));

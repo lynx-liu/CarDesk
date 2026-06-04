@@ -1244,11 +1244,7 @@ int main(int argc, char *argv[]) {
         McuSerialReader *txrxReader = McuSerialReader::ensureShared(&app);
         txrxReader->open(QStringLiteral("/dev/ttyS2"));
 
-        // LC 灯光指令 → 对应模式开/关（边沿触发，避免每 35ms 重复调用）
-        QObject::connect(txrxReader, &McuSerialReader::lcReceived,
-                         &app, [](int rTurn, int lTurn, int backup) {
-            automotiveSyncCanSignals(rTurn, lTurn, backup);
-        });
+        // LC/OEL 由 McuSerialReader::emitLcIfChanged 每帧调用 automotiveSyncCanSignals
 
         QObject::connect(AppSignals::instance(), &AppSignals::vehicleSpeedChanged,
                          &app, [](float speedKmh) {

@@ -3,16 +3,20 @@
 #include "ahdsettings.h"
 #include "drivingimagewindow.h"
 #include "mainwindow.h"
+#include "mcuserialreader.h"
 #include "mediamanager.h"
 
 #include <QApplication>
+#include <QDateTime>
 #include <QDebug>
+#include <QTimer>
 #include <QWidget>
+
+static qint64 g_lastLcFrameMs = 0;
 
 namespace {
 
 static float s_vehicleSpeedKmh = 0.f;
-// 仅在行车影像界面内生效：≥35 行车布局，<25 四分屏，25~35 滞回
 static bool s_speedDrivingMode = false;
 static bool s_backupOn = false;
 static bool s_leftTurnOn = false;
@@ -21,6 +25,22 @@ static bool s_illuminationOn = false;
 static int s_activeSignalMode = 0;
 static int s_lastTurnSignalMode = 0;
 static bool s_userOpenedDrivingImage = false;
+static qint64 s_noTurnReverseSinceMs = 0;
+static QTimer *s_canReleaseWatchdog = nullptr;
+static constexpr int kCanReleaseDelayMs = 3000;
+static constexpr int kCanWatchdogIntervalMs = 200;
+
+void applyCanAutomotiveDisplayState(bool forceReengage);
+void applySpeedLayoutIfDrivingImageVisible();
+void applyCanSignalTransition();
+void tickCanReleaseWatchdog();
+void releaseCanLayout();
+void ensureCanReleaseWatchdog();
+
+qint64 nowMs()
+{
+    return QDateTime::currentMSecsSinceEpoch();
+}
 
 MainWindow *findMainWindow()
 {
@@ -50,7 +70,7 @@ bool isDrivingImageWindowVisible()
     return false;
 }
 
-void activateDrivingImageMode(int mode)
+void activateDrivingImageMode(int mode, bool forceReengage)
 {
     MainWindow *main = findMainWindow();
     if (main && main->mediaManager()) {
@@ -64,10 +84,10 @@ void activateDrivingImageMode(int mode)
     }
 
     if (drive) {
-        drive->applyAutomotiveMode(mode);
         if (!drive->isVisible()) {
             drive->show();
         }
+        drive->applyAutomotiveMode(mode, forceReengage);
         drive->raise();
         drive->activateWindow();
     }
@@ -110,28 +130,36 @@ int layoutModeForSpeedDriving()
     return (AhdSettings::instance().preferredDrivingMode() == 271) ? 180 : 3;
 }
 
-void refreshActiveSignalMode()
+int computeRawCanMode()
 {
     if (s_backupOn) {
-        s_activeSignalMode = 270;
-        return;
+        return 270;
     }
     if (s_leftTurnOn && s_rightTurnOn) {
-        s_activeSignalMode = (s_lastTurnSignalMode == 271 || s_lastTurnSignalMode == 272)
-                                 ? s_lastTurnSignalMode
-                                 : 272;
-        return;
+        return (s_lastTurnSignalMode == 271 || s_lastTurnSignalMode == 272) ? s_lastTurnSignalMode
+                                                                            : 272;
     }
     if (s_rightTurnOn) {
-        s_activeSignalMode = 272;
-        return;
+        return 272;
     }
     if (s_leftTurnOn) {
-        s_activeSignalMode = 271;
-        return;
+        return 271;
     }
-    s_activeSignalMode = 0;
-    s_lastTurnSignalMode = 0;
+    return 0;
+}
+
+bool isCanBusRecent()
+{
+    return g_lastLcFrameMs > 0 && (nowMs() - g_lastLcFrameMs) < kCanReleaseDelayMs;
+}
+
+// 有转向/倒车：近期有 OEL/LC 且解析为 ON（无数据视为无信号）
+bool hasLiveTurnOrReverse()
+{
+    if (!isCanBusRecent()) {
+        return false;
+    }
+    return computeRawCanMode() != 0;
 }
 
 void updateSpeedDrivingMode()
@@ -160,7 +188,6 @@ int resolveAutomotiveLayoutMode()
     return 360;
 }
 
-// 车速仅切换已打开的行车影像布局，不自动弹出窗口
 void applySpeedLayoutIfDrivingImageVisible()
 {
     if (!isDrivingImageWindowVisible()) {
@@ -169,14 +196,11 @@ void applySpeedLayoutIfDrivingImageVisible()
 
     const int mode = resolveAutomotiveLayoutMode();
     if (DrivingImageWindow *drive = findDrivingImageWindow()) {
-        qDebug() << "[Automotive] speed layout" << mode << "speed=" << s_vehicleSpeedKmh
-                 << "drivingMode=" << s_speedDrivingMode;
         drive->applyAutomotiveMode(mode);
     }
 }
 
-// 转向/倒车 CAN：可自动弹出影像；用户手动进入也保持
-void applyCanAutomotiveDisplayState()
+void applyCanAutomotiveDisplayState(bool forceReengage)
 {
     const bool needWindow = s_activeSignalMode != 0 || s_userOpenedDrivingImage;
     if (!needWindow) {
@@ -185,21 +209,115 @@ void applyCanAutomotiveDisplayState()
     }
 
     const int mode = resolveAutomotiveLayoutMode();
-    qDebug() << "[Automotive] CAN layout" << mode << "backup=" << s_backupOn
-             << "lTurn=" << s_leftTurnOn << "rTurn=" << s_rightTurnOn;
-    activateDrivingImageMode(mode);
+    qDebug() << "[Automotive] CAN layout" << mode << "activeCan=" << s_activeSignalMode
+             << "raw=" << computeRawCanMode() << "backup=" << s_backupOn
+             << "lTurn=" << s_leftTurnOn << "rTurn=" << s_rightTurnOn
+             << "force=" << forceReengage;
+    activateDrivingImageMode(mode, forceReengage);
+}
+
+void releaseCanLayout()
+{
+    if (s_activeSignalMode == 0) {
+        return;
+    }
+
+    const int releasedMode = s_activeSignalMode;
+    s_activeSignalMode = 0;
+    s_lastTurnSignalMode = 0;
+    s_noTurnReverseSinceMs = 0;
+
+    if (McuSerialReader *reader = McuSerialReader::existingShared()) {
+        reader->clearCanSignalState();
+    } else {
+        s_backupOn = false;
+        s_leftTurnOn = false;
+        s_rightTurnOn = false;
+        applyCanAutomotiveDisplayState(false);
+    }
+
+    qDebug() << "[Automotive] released CAN layout, was mode" << releasedMode;
+    applySpeedLayoutIfDrivingImageVisible();
+}
+
+void ensureCanReleaseWatchdog()
+{
+    if (s_canReleaseWatchdog) {
+        return;
+    }
+    s_canReleaseWatchdog = new QTimer(qApp);
+    s_canReleaseWatchdog->setInterval(kCanWatchdogIntervalMs);
+    QObject::connect(s_canReleaseWatchdog, &QTimer::timeout, qApp, []() {
+        tickCanReleaseWatchdog();
+    });
+    s_canReleaseWatchdog->start();
+}
+
+void tickCanReleaseWatchdog()
+{
+    if (s_activeSignalMode == 0) {
+        s_noTurnReverseSinceMs = 0;
+        return;
+    }
+
+    if (hasLiveTurnOrReverse()) {
+        s_noTurnReverseSinceMs = 0;
+        return;
+    }
+
+    const qint64 now = nowMs();
+    if (s_noTurnReverseSinceMs == 0) {
+        if (g_lastLcFrameMs > 0 && now - g_lastLcFrameMs >= kCanReleaseDelayMs) {
+            s_noTurnReverseSinceMs = g_lastLcFrameMs;
+        } else {
+            s_noTurnReverseSinceMs = now;
+        }
+        qDebug() << "[Automotive] no turn/reverse for 3s started, hold mode"
+                 << s_activeSignalMode;
+        return;
+    }
+
+    if (now - s_noTurnReverseSinceMs >= kCanReleaseDelayMs) {
+        releaseCanLayout();
+    }
+}
+
+void applyCanSignalTransition()
+{
+    const int rawMode = computeRawCanMode();
+
+    if (rawMode != 0) {
+        const bool newlyEngaged = (s_activeSignalMode == 0);
+        s_noTurnReverseSinceMs = 0;
+        ensureCanReleaseWatchdog();
+        s_activeSignalMode = rawMode;
+        applyCanAutomotiveDisplayState(newlyEngaged);
+        applySpeedLayoutIfDrivingImageVisible();
+        return;
+    }
+
+    if (s_activeSignalMode != 0) {
+        ensureCanReleaseWatchdog();
+        if (s_noTurnReverseSinceMs == 0) {
+            s_noTurnReverseSinceMs = nowMs();
+            qDebug() << "[Automotive] waiting 3s with no turn/reverse, hold"
+                     << s_activeSignalMode;
+        }
+        return;
+    }
+
+    s_noTurnReverseSinceMs = 0;
+    applyCanAutomotiveDisplayState(false);
 }
 
 void updateSignalAndApply()
 {
-    refreshActiveSignalMode();
-    applyCanAutomotiveDisplayState();
-    applySpeedLayoutIfDrivingImageVisible();
+    applyCanSignalTransition();
 }
 
 bool canUserCloseDrivingImage()
 {
-    return s_activeSignalMode == 0;
+    return s_activeSignalMode == 0 && s_noTurnReverseSinceMs == 0;
 }
 
 int layoutForUserOpen()
@@ -215,23 +333,26 @@ void notifyUserOpenedDrivingImage()
 void notifyUserClosedDrivingImage()
 {
     if (!canUserCloseDrivingImage()) {
-        qDebug() << "[Automotive] ignore manual exit: turn/reverse active";
+        qDebug() << "[Automotive] ignore manual exit: CAN hold active";
         return;
     }
 
     s_userOpenedDrivingImage = false;
-    applyCanAutomotiveDisplayState();
+    applyCanAutomotiveDisplayState(false);
 }
 
 void updateVehicleSpeed(float speedKmh)
 {
     s_vehicleSpeedKmh = speedKmh;
     updateSpeedDrivingMode();
+    tickCanReleaseWatchdog();
     applySpeedLayoutIfDrivingImageVisible();
 }
 
 void syncCanSignals(int rTurn, int lTurn, int backup)
 {
+    g_lastLcFrameMs = nowMs();
+
     const bool newLeft = lTurn != 0;
     const bool newRight = rTurn != 0;
     if (newLeft && !s_leftTurnOn) {
@@ -240,6 +361,7 @@ void syncCanSignals(int rTurn, int lTurn, int backup)
     if (newRight && !s_rightTurnOn) {
         s_lastTurnSignalMode = 272;
     }
+
     s_backupOn = backup != 0;
     s_leftTurnOn = newLeft;
     s_rightTurnOn = newRight;
@@ -248,12 +370,14 @@ void syncCanSignals(int rTurn, int lTurn, int backup)
 
 void setBackupSignal(bool on)
 {
+    g_lastLcFrameMs = nowMs();
     s_backupOn = on;
     updateSignalAndApply();
 }
 
 void setLeftTurnSignal(bool on)
 {
+    g_lastLcFrameMs = nowMs();
     if (on) {
         s_rightTurnOn = false;
         s_lastTurnSignalMode = 271;
@@ -266,6 +390,7 @@ void setLeftTurnSignal(bool on)
 
 void setRightTurnSignal(bool on)
 {
+    g_lastLcFrameMs = nowMs();
     if (on) {
         s_leftTurnOn = false;
         s_lastTurnSignalMode = 272;
@@ -282,7 +407,6 @@ void setIllumination(bool on)
         return;
     }
     s_illuminationOn = on;
-    qDebug() << "[Automotive] cabin illumination" << (on ? "ON" : "OFF");
 }
 
 } // namespace
