@@ -162,6 +162,7 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     , m_sdkDurationMs(0)
     , m_sdkPlaying(false)
     , m_sdkSwitching(false)
+    , m_switchPending(false)
     , m_sdkSeeking(false)
     , m_pendingRelease(false)
 #endif
@@ -686,6 +687,10 @@ void VideoPlayWindow::onPlayVideo() {
                 return;
             }
         }
+        if (m_sdkSwitching) {
+            m_switchPending = true;
+            return;
+        }
         if (m_sdkPlayer && !m_sdkPlaying) {
             if (XPlayerStart(m_sdkPlayer) == 0) {
                 m_sdkPlaying = true;
@@ -738,6 +743,13 @@ void VideoPlayWindow::onNextVideo() {
         return;
     }
     m_currentIndex = (m_currentIndex + 1) % m_videoFiles.count();
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        updateTitle();
+        requestSdkVideoSwitch();
+        return;
+    }
+#endif
     onPlayVideo();
 }
 
@@ -746,6 +758,13 @@ void VideoPlayWindow::onPreviousVideo() {
         return;
     }
     m_currentIndex = (m_currentIndex - 1 + m_videoFiles.count()) % m_videoFiles.count();
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        updateTitle();
+        requestSdkVideoSwitch();
+        return;
+    }
+#endif
     onPlayVideo();
 }
 
@@ -1163,10 +1182,7 @@ void VideoPlayWindow::onSdkTick()
 void VideoPlayWindow::onSdkPlaybackComplete()
 {
 #ifdef CAR_DESK_USE_T507_SDK
-    if (!m_useSdkPlayer) {
-        return;
-    }
-    if (m_sdkSwitching) {
+    if (!m_useSdkPlayer || m_videoFiles.isEmpty()) {
         return;
     }
 
@@ -1176,11 +1192,9 @@ void VideoPlayWindow::onSdkPlaybackComplete()
         m_sdkTimer->stop();
     }
 
-    m_sdkSwitching = true;
-    QTimer::singleShot(300, this, [this]() {
-        m_sdkSwitching = false;   // 先清标志，再执行切换，避免 initSdkPlayer 守卫误拦截
-        onNextVideo();
-    });
+    m_currentIndex = (m_currentIndex + 1) % m_videoFiles.count();
+    updateTitle();
+    requestSdkVideoSwitch();
 #endif
 }
 
@@ -1195,34 +1209,93 @@ void VideoPlayWindow::onSdkSeekComplete()
         // seek 已安全结束，现在执行真正的 Pause + Reset。
         releaseSdkPlayer();
     }
+    if (m_sdkSwitching && isVisible()) {
+        QMetaObject::invokeMethod(this, "continueSdkVideoSwitch", Qt::QueuedConnection);
+    }
 #endif
 }
 
 #ifdef CAR_DESK_USE_T507_SDK
+void VideoPlayWindow::requestSdkVideoSwitch()
+{
+    if (m_speedHighLocked || !m_useSdkPlayer || m_videoFiles.isEmpty()) {
+        return;
+    }
+    if (m_currentIndex < 0 || m_currentIndex >= m_videoFiles.count()) {
+        return;
+    }
+
+    if (m_sdkSwitching) {
+        m_switchPending = true;
+        return;
+    }
+
+    beginSdkVideoSwitch();
+}
+
+void VideoPlayWindow::beginSdkVideoSwitch()
+{
+    m_sdkSwitching = true;
+    m_switchPending = false;
+
+    if (!m_speedHighLocked) {
+        m_prevButton->setEnabled(false);
+        m_nextButton->setEnabled(false);
+    }
+    if (m_sdkTimer) {
+        m_sdkTimer->stop();
+    }
+    m_sdkPlaying = false;
+    setPlayButtonState(false);
+
+    releaseSdkPlayer();
+    if (m_pendingRelease) {
+        return;
+    }
+
+    if (!isVisible()) {
+        m_sdkSwitching = false;
+        if (!m_speedHighLocked) {
+            m_prevButton->setEnabled(true);
+            m_nextButton->setEnabled(true);
+        }
+        return;
+    }
+
+    QMetaObject::invokeMethod(this, "continueSdkVideoSwitch", Qt::QueuedConnection);
+}
+
 bool VideoPlayWindow::initSdkPlayer(const QString &videoPath)
 {
-    // 确保全局 SDK 资源已创建（进程生命周期内只创建一次）
     if (!ensureSdkResourcesCreated()) {
         qWarning() << "Failed to create global SDK resources";
         return false;
     }
 
-    // 若上一次 seek 仍在进行（pendingRelease），禁止重新初始化，
-    // 避免在 seek 活跃期间操作 XPlayer 导致状态错乱。
     if (m_pendingRelease) {
         qWarning() << "initSdkPlayer: deferred release pending, cannot init now";
         return false;
     }
 
-    // 停止当前播放、解绑旧回调（releaseSdkPlayer 内调 XPlayerReset）
     releaseSdkPlayer();
+    if (m_pendingRelease) {
+        qWarning() << "initSdkPlayer: release still pending after seek";
+        return false;
+    }
 
-    // 复用全局播放器
+    return startSdkPlayer(videoPath);
+}
+
+bool VideoPlayWindow::startSdkPlayer(const QString &videoPath)
+{
+    if (!g_sdkPlayer) {
+        return false;
+    }
+
     m_sdkPlayer    = g_sdkPlayer;
     m_sdkLayerCtrl = g_sdkLayerCtrl;
     m_sdkSoundCtrl = g_sdkSoundCtrl;
 
-    // 绑定当前窗口回调
     XPlayerSetNotifyCallback(m_sdkPlayer, sdkPlayerNotify, this);
 
     const QByteArray pathBytes = videoPath.toLocal8Bit();
@@ -1236,6 +1309,7 @@ bool VideoPlayWindow::initSdkPlayer(const QString &videoPath)
         qWarning() << "XPlayerPrepare failed:" << videoPath;
         XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
         XPlayerReset(m_sdkPlayer);
+        m_sdkPlayer = nullptr;
         return false;
     }
 
@@ -1251,10 +1325,11 @@ bool VideoPlayWindow::initSdkPlayer(const QString &videoPath)
         qWarning() << "XPlayerStart failed:" << videoPath;
         XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
         XPlayerReset(m_sdkPlayer);
+        m_sdkPlayer = nullptr;
         return false;
     }
 
-    qDebug() << "VideoPlayWindow::initSdkPlayer: started" << videoPath << "durationMs=" << m_sdkDurationMs;
+    qDebug() << "VideoPlayWindow::startSdkPlayer:" << videoPath << "durationMs=" << m_sdkDurationMs;
     return true;
 }
 
@@ -1339,6 +1414,59 @@ bool VideoPlayWindow::restoreSdkPlaybackAfterInterruption()
     return true;
 }
 #endif
+
+void VideoPlayWindow::continueSdkVideoSwitch()
+{
+#ifdef CAR_DESK_USE_T507_SDK
+    if (!m_sdkSwitching) {
+        return;
+    }
+    if (!isVisible()) {
+        m_sdkSwitching = false;
+        m_switchPending = false;
+        if (!m_speedHighLocked) {
+            m_prevButton->setEnabled(true);
+            m_nextButton->setEnabled(true);
+        }
+        return;
+    }
+    if (m_pendingRelease) {
+        return;
+    }
+    if (m_currentIndex < 0 || m_currentIndex >= m_videoFiles.count()) {
+        m_sdkSwitching = false;
+        if (!m_speedHighLocked) {
+            m_prevButton->setEnabled(true);
+            m_nextButton->setEnabled(true);
+        }
+        return;
+    }
+
+    const QString videoPath = m_videoFiles.at(m_currentIndex);
+    const bool ok = startSdkPlayer(videoPath);
+
+    m_sdkSwitching = false;
+    if (!m_speedHighLocked) {
+        m_prevButton->setEnabled(true);
+        m_nextButton->setEnabled(true);
+    }
+
+    if (ok) {
+        m_sdkPlaying = true;
+        setPlayButtonState(true);
+        if (m_sdkTimer && !m_sdkTimer->isActive()) {
+            m_sdkTimer->start();
+        }
+    } else {
+        setPlayButtonState(false);
+    }
+
+    if (m_switchPending) {
+        m_switchPending = false;
+        beginSdkVideoSwitch();
+    }
+#endif
+}
 
 void VideoPlayWindow::keyPressEvent(QKeyEvent *event)
 {

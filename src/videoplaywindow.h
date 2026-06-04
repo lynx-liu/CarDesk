@@ -63,6 +63,7 @@ private slots:
     void onSdkTick();
     void onSdkPlaybackComplete();
     void onSdkSeekComplete();
+    void continueSdkVideoSwitch();
 
 private:
     void setupUI();
@@ -82,9 +83,12 @@ private:
 
 #ifdef CAR_DESK_USE_T507_SDK
     bool initSdkPlayer(const QString &videoPath);
+    bool startSdkPlayer(const QString &videoPath);
     void releaseSdkPlayer();
     void resetSdkPlayerForCall();
     bool restoreSdkPlaybackAfterInterruption();
+    void requestSdkVideoSwitch();
+    void beginSdkVideoSwitch();
 #endif
 
     QLabel *m_titleLabel;
@@ -129,6 +133,7 @@ private:
     qint64 m_sdkDurationMs;
     bool m_sdkPlaying;
     bool m_sdkSwitching;
+    bool m_switchPending;  // 切歌中又收到下一首：只合并索引，不重叠 Reset/Prepare
     bool m_sdkSeeking;     // seek 进行中标志
     bool m_pendingRelease; // releaseSdkPlayer 在 seek 期间被推迟，待 SEEK_COMPLETE 后执行
 #endif
