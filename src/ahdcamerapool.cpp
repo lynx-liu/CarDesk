@@ -2,6 +2,7 @@
 
 #include "ahdrecordstore.h"
 #include "ahdsettings.h"
+#include "appsignals.h"
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -47,6 +48,7 @@ static bool g_dvrManagerInited = false;
 static bool g_sdkRuntimePrepared = false;
 static bool g_displayInited = false;
 static bool g_uncleanHardwareRecovery = false;
+static bool g_recordStorageAvailable = false;
 
 void prepareSdkRuntimeOnce()
 {
@@ -252,8 +254,7 @@ bool recordingRequested()
     if (qEnvironmentVariableIsSet("CARDESK_AHD_RECORD")) {
         return true;
     }
-    return AhdSettings::instance().recordingEnabled()
-           && AhdRecordStore::hasRecordStorage();
+    return AhdSettings::instance().recordingEnabled() && g_recordStorageAvailable;
 }
 
 void applySdkWatermark(dvr_factory *dvr, const QString &line1, const QString &line2)
@@ -318,6 +319,10 @@ void AhdCameraPool::globalCleanup()
 AhdCameraPool::AhdCameraPool(QObject *parent)
     : QObject(parent)
 {
+    g_recordStorageAvailable = AhdRecordStore::hasRecordStorage();
+    connect(AppSignals::instance(), &AppSignals::sdcardStateChanged, this, [](bool ready) {
+        g_recordStorageAvailable = ready;
+    });
 }
 
 AhdCameraPool::~AhdCameraPool()

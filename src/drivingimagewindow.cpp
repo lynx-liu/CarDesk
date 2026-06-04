@@ -110,11 +110,8 @@ DrivingImageWindow::DrivingImageWindow(QWidget *parent)
     connect(m_previewChromeHideTimer, &QTimer::timeout, this,
             &DrivingImageWindow::onPreviewChromeHideTimeout);
 
-    m_storagePollTimer = new QTimer(this);
-    m_storagePollTimer->setInterval(1000);
-    connect(m_storagePollTimer, &QTimer::timeout, this, &DrivingImageWindow::updateStorageState);
     connect(AppSignals::instance(), &AppSignals::sdcardStateChanged, this,
-            &DrivingImageWindow::updateStorageState);
+            &DrivingImageWindow::onSdcardStateChanged);
 }
 
 AhdManager *DrivingImageWindow::ahdManager()
@@ -197,9 +194,6 @@ void DrivingImageWindow::hideEvent(QHideEvent *event)
     if (m_exitInProgress) {
         QMainWindow::hideEvent(event);
         return;
-    }
-    if (m_storagePollTimer) {
-        m_storagePollTimer->stop();
     }
     if (m_ahdManager) {
         m_ahdManager->stopPreview();
@@ -623,10 +617,13 @@ void DrivingImageWindow::layoutTfCardHint()
     }
 }
 
-void DrivingImageWindow::updateStorageState()
+void DrivingImageWindow::onSdcardStateChanged(bool hasTf)
 {
-    const bool hasTf = AhdRecordStore::hasRecordStorage();
     const bool storageChanged = (hasTf != m_lastRecordStoragePresent);
+    if (storageChanged) {
+        qDebug() << "[Driving] TF storage" << (hasTf ? "ready" : "absent")
+                 << AhdRecordStore::recordRootPaths();
+    }
     m_lastRecordStoragePresent = hasTf;
 
     const bool onPreview360 =
@@ -729,7 +726,7 @@ void DrivingImageWindow::updatePreviewChrome()
         if (m_tfCardHintLabel) {
             m_tfCardHintLabel->hide();
         }
-        updateStorageState();
+        onSdcardStateChanged(m_lastRecordStoragePresent);
         return;
     }
 
@@ -763,7 +760,7 @@ void DrivingImageWindow::updatePreviewChrome()
             m_navBar->show();
             m_navBar->raise();
         }
-        updateStorageState();
+        onSdcardStateChanged(m_lastRecordStoragePresent);
     } else {
         if (m_previewTopBar) {
             m_previewTopBar->hide();
@@ -776,7 +773,7 @@ void DrivingImageWindow::updatePreviewChrome()
             m_longPressHintLabel->show();
             m_longPressHintLabel->raise();
         }
-        updateStorageState();
+        onSdcardStateChanged(m_lastRecordStoragePresent);
     }
 }
 
@@ -1114,11 +1111,7 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
     if (m_ahdManager) {
         m_ahdManager->syncRecordingWithSettingsNow();
     }
-    m_lastRecordStoragePresent = AhdRecordStore::hasRecordStorage();
-    updateStorageState();
-    if (m_storagePollTimer) {
-        m_storagePollTimer->start();
-    }
+    onSdcardStateChanged(AhdRecordStore::hasRecordStorage());
     qDebug() << "[Driving] showEvent end";
 }
 
@@ -1130,7 +1123,7 @@ void DrivingImageWindow::resizeEvent(QResizeEvent *event)
         layoutTextOverlays();
         layoutCenterHint();
     }
-    updateStorageState();
+    onSdcardStateChanged(m_lastRecordStoragePresent);
     if (m_ahdManager && m_ahdManager->isPreviewActive() && m_previewWrap) {
         const QRect rect = previewRectOnScreen();
         m_ahdManager->startPreview(m_previewWrap, rect.x(), rect.y(), rect.width(), rect.height());

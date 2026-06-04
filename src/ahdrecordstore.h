@@ -3,11 +3,13 @@
 
 #include <QStringList>
 
-// 扫描 SDK 录像目录：TF 在 /mnt/sdcard/<子目录>/（子目录已挂载或非空视为有卡）
+// SDK 录像目录：路径由 TfCardMonitor 检测后写入缓存，此处只读
 class AhdRecordStore {
 public:
     static QStringList recordRootPaths();
     static bool hasRecordStorage();
+    /** 仅 TfCardMonitor 在 rescan 后调用 */
+    static void updateStorageCache(bool present, const QStringList &roots);
 
     static QStringList listDateFolders();
     static QStringList listVideoFilesForDate(const QString &dateKey);

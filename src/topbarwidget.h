@@ -37,7 +37,6 @@ private slots:
     void onClockTick();
     void onBluetoothStateChanged(bool connected);
     void updateUsbState();
-    void updateSdcardState();
 
 private:
     QPushButton *m_btBtn    = nullptr;
@@ -50,7 +49,6 @@ private:
     QTimer             *m_usbDebounceTimer = nullptr;  // /proc/mounts 变化后防抖延迟
     QFileSystemWatcher *m_mountsWatcher = nullptr;
     bool         m_usbConnected = false;
-    bool         m_sdcardConnected = false;
     bool         m_isMuted   = false;
 };
 

@@ -54,7 +54,7 @@ private:
     void layoutLongPressHint();
     void layoutPreviewTopBar();
     void updatePreviewChrome();
-    void updateStorageState();
+    void onSdcardStateChanged(bool hasTf);
     void schedulePreviewChromeAutoHide();
     void cancelPreviewChromeAutoHide();
     void hidePreviewChrome();
@@ -88,7 +88,6 @@ private:
     QTimer *m_singleClickTimer;
     QTimer *m_longPressTimer = nullptr;
     QTimer *m_previewChromeHideTimer = nullptr;
-    QTimer *m_storagePollTimer = nullptr;
     bool m_previewChromeVisible = false;
     bool m_longPressTriggered = false;
     bool m_returning;

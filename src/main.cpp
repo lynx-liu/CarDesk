@@ -43,6 +43,7 @@
 #include "automotivedriving.h"
 #include "appsettings.h"
 #include "ahdmanager.h"
+#include "tfcarddetect.h"
 
 // ── 背光控制（POWER 键关/亮屏，SLEEP 键关机，具体 dispdbg 操作在 backlight.cpp）─
 static MainWindow *findMainWindow();
@@ -1237,6 +1238,8 @@ int main(int argc, char *argv[]) {
         AppSignals::setVolumeLevel(savedLevel);
         app.setProperty("appVolumeLevel", savedLevel);
     }
+
+    TfCardMonitor::instance()->start();
 
     MainWindow window;
     window.show();

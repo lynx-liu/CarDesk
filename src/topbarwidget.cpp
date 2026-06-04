@@ -1,6 +1,5 @@
 #include "topbarwidget.h"
 #include "appsignals.h"
-#include "ahdrecordstore.h"
 #include "t507sdkbridge.h"
 
 #include <QHBoxLayout>
@@ -243,7 +242,6 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     m_usbTimer = new QTimer(this);
     m_usbTimer->setInterval(5000); // 兜底轮询，主要靠 QFileSystemWatcher 即时触发
     connect(m_usbTimer, &QTimer::timeout, this, &TopBarRightWidget::updateUsbState);
-    connect(m_usbTimer, &QTimer::timeout, this, &TopBarRightWidget::updateSdcardState);
     m_usbTimer->start();
 
     // USB 挂载防抖定时器：/proc/mounts 变化后等待文件系统真正就绪再检测状态。
@@ -262,9 +260,6 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     if (QDir(kUsbMountDir).exists()) {
         m_mountsWatcher->addPath(kUsbMountDir);
     }
-    if (QDir(QStringLiteral("/mnt/sdcard")).exists()) {
-        m_mountsWatcher->addPath(QStringLiteral("/mnt/sdcard"));
-    }
     connect(m_mountsWatcher, &QFileSystemWatcher::fileChanged, this, [this](const QString &path) {
         // 重置防抖计时器——多次触发合并为一次延迟检测，等文件系统真正就绪
         m_usbDebounceTimer->start();
@@ -276,10 +271,7 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
         m_usbDebounceTimer->start();
     });
 
-    connect(m_usbDebounceTimer, &QTimer::timeout, this, &TopBarRightWidget::updateSdcardState);
-
     updateUsbState();
-    updateSdcardState();
     // ── 时钟定时器 ────────────────────────────────────────────────────────────
     m_clockTimer = new QTimer(this);
     m_clockTimer->setInterval(1000);
@@ -390,14 +382,3 @@ void TopBarRightWidget::updateUsbState()
                 "background-repeat: no-repeat; background-position: center; }")
             .arg(icon));
 }
-
-void TopBarRightWidget::updateSdcardState()
-{
-    const bool found = AhdRecordStore::hasRecordStorage();
-    if (found == m_sdcardConnected) {
-        return;
-    }
-    m_sdcardConnected = found;
-    emit AppSignals::instance()->sdcardStateChanged(found);
-}
-
