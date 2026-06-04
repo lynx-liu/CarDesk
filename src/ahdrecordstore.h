@@ -3,7 +3,7 @@
 
 #include <QStringList>
 
-// 扫描 SDK 录像目录：TF 卡挂载在 /mnt/sdcard/<volume>/ 下
+// 扫描 SDK 录像目录：TF 在 /mnt/sdcard/<子目录>/（子目录已挂载或非空视为有卡）
 class AhdRecordStore {
 public:
     static QStringList recordRootPaths();

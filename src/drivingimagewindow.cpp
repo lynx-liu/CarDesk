@@ -1,4 +1,5 @@
 #include "drivingimagewindow.h"
+#include "appsignals.h"
 #include "automotivedriving.h"
 #include "ahdpreviewwidget.h"
 #include "ahdrecordstore.h"
@@ -110,8 +111,10 @@ DrivingImageWindow::DrivingImageWindow(QWidget *parent)
             &DrivingImageWindow::onPreviewChromeHideTimeout);
 
     m_storagePollTimer = new QTimer(this);
-    m_storagePollTimer->setInterval(2000);
+    m_storagePollTimer->setInterval(1000);
     connect(m_storagePollTimer, &QTimer::timeout, this, &DrivingImageWindow::updateStorageState);
+    connect(AppSignals::instance(), &AppSignals::sdcardStateChanged, this,
+            &DrivingImageWindow::updateStorageState);
 }
 
 AhdManager *DrivingImageWindow::ahdManager()
@@ -623,6 +626,9 @@ void DrivingImageWindow::layoutTfCardHint()
 void DrivingImageWindow::updateStorageState()
 {
     const bool hasTf = AhdRecordStore::hasRecordStorage();
+    const bool storageChanged = (hasTf != m_lastRecordStoragePresent);
+    m_lastRecordStoragePresent = hasTf;
+
     const bool onPreview360 =
         m_stack && m_stack->currentIndex() == 0 && m_cameraMode == 360;
     const bool showHint = !hasTf && onPreview360;
@@ -638,6 +644,9 @@ void DrivingImageWindow::updateStorageState()
     }
     if (m_settingsPage) {
         m_settingsPage->refreshStorageState();
+    }
+    if (m_playbackPage && storageChanged) {
+        m_playbackPage->reloadDates();
     }
     if (m_stack && m_stack->currentIndex() == 0 && m_ahdManager) {
         m_ahdManager->syncRecordingWithSettings();
@@ -819,6 +828,9 @@ void DrivingImageWindow::showPlaybackPage()
         cancelPreviewChromeAutoHide();
         m_previewChromeVisible = false;
         m_ahdManager->stopPreview();
+    }
+    if (m_playbackPage) {
+        m_playbackPage->reloadDates();
     }
     updatePreviewChrome();
     show();
@@ -1102,6 +1114,7 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
     if (m_ahdManager) {
         m_ahdManager->syncRecordingWithSettingsNow();
     }
+    m_lastRecordStoragePresent = AhdRecordStore::hasRecordStorage();
     updateStorageState();
     if (m_storagePollTimer) {
         m_storagePollTimer->start();

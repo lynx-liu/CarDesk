@@ -41,6 +41,9 @@ signals:
     /** USB 设备插拔状态变化：true=已插入，false=已拔出 */
     void usbStateChanged(bool connected);
 
+    /** TF 卡插拔状态变化：true=已插入且已挂载，false=未检测到有效存储 */
+    void sdcardStateChanged(bool connected);
+
     /** 车速变化（km/h，来自 CAN TCO1 报文） */
     void vehicleSpeedChanged(float speedKmh);
 

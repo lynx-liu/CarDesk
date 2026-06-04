@@ -94,6 +94,7 @@ private:
     bool m_returning;
     bool m_exitInProgress;
     bool m_startScheduled;
+    bool m_lastRecordStoragePresent = false;
     bool m_isFullscreen;
     int m_fullscreenCameraId;
     int m_cameraMode;
