@@ -1,3 +1,8 @@
 build/
 release/
 .toolchain-alias/
+
+# 主工程 qmake/rcc 本地生成
+Makefile
+.qmake.stash
+qrc_resources.cpp

@@ -6,6 +6,8 @@
 #include "topbarwidget.h"
 #include "backlight.h"
 #include "appsignals.h"
+#include "appsettings.h"
+#include "automotivedriving.h"
 #include "t507sdkbridge.h"
 
 static const QString kUsbMountDir    = QStringLiteral("/mnt/usb");
@@ -1065,6 +1067,35 @@ QWidget *SystemSettingWindow::createDisplayPage()
         h->addWidget(container);
         layout->addWidget(clockRow);
         layout->addWidget(makeDivider());
+    }
+
+    {
+        const bool initEnabled = AppSettings::drivingVideoEnabled();
+        auto *row = new QWidget(page);
+        row->setFixedHeight(98);
+        auto *h = new QHBoxLayout(row);
+        h->setContentsMargins(0, 27, 0, 27);
+        h->setSpacing(16);
+        auto *title = new QLabel(QStringLiteral("行车视频"), row);
+        title->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;}");
+        title->setFixedWidth(170);
+        h->addWidget(title);
+        h->addStretch();
+        auto *enableBtn = new QPushButton(row);
+        enableBtn->setCheckable(true);
+        enableBtn->setChecked(initEnabled);
+        enableBtn->setFixedSize(88, 44);
+        enableBtn->setCursor(Qt::PointingHandCursor);
+        enableBtn->setStyleSheet(
+            "QPushButton{border:none;background:url(:/images/butt_setting_close.png) no-repeat center;}"
+            "QPushButton:checked{background:url(:/images/butt_setting_open.png) no-repeat center;}"
+        );
+        h->addWidget(enableBtn);
+        connect(enableBtn, &QPushButton::toggled, this, [](bool checked) {
+            AppSettings::setDrivingVideoEnabled(checked);
+            automotiveOnDrivingVideoSettingChanged();
+        });
+        layout->addWidget(row);
     }
 
     layout->addStretch();

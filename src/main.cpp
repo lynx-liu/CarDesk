@@ -41,6 +41,7 @@
 #include "appsignals.h"
 #include "mcuserialreader.h"
 #include "automotivedriving.h"
+#include "appsettings.h"
 #include "ahdmanager.h"
 
 // ── 背光控制（POWER 键关/亮屏，SLEEP 键关机，具体 dispdbg 操作在 backlight.cpp）─
@@ -1056,6 +1057,7 @@ int main(int argc, char *argv[]) {
         const int touchClickLevel = qBound(0, settings.value("sound/touchClickLevel", 1).toInt(), 2);
         app.setProperty("appTouchSoundLevel", touchClickLevel);
     }
+    AppSettings::syncAppPropertiesFromSettings();
     app.setProperty("appSoundMode", QStringLiteral("立体声"));  // 默认声场模式
     T507SdkBridge::setSoundMode(QStringLiteral("立体声"));  // 应用默认声场到 TM2313
     app.setQuitOnLastWindowClosed(false);

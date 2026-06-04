@@ -1,5 +1,6 @@
 #include "automotivedriving.h"
 
+#include "appsettings.h"
 #include "ahdsettings.h"
 #include "drivingimagewindow.h"
 #include "mainwindow.h"
@@ -165,15 +166,16 @@ bool hasLiveTurnOrReverse()
 void updateSpeedDrivingMode()
 {
     const bool wasDriving = s_speedDrivingMode;
-    if (s_vehicleSpeedKmh >= 35.f) {
+    if (AppSettings::drivingVideoEnabled() && s_vehicleSpeedKmh >= 35.f) {
         s_speedDrivingMode = true;
-    } else if (s_vehicleSpeedKmh < 25.f) {
+    } else if (!AppSettings::drivingVideoEnabled() || s_vehicleSpeedKmh < 25.f) {
         s_speedDrivingMode = false;
     }
 
     if (wasDriving != s_speedDrivingMode) {
         qDebug() << "[Automotive] speed driving mode:" << s_speedDrivingMode
-                 << "speed=" << s_vehicleSpeedKmh;
+                 << "speed=" << s_vehicleSpeedKmh
+                 << "drivingVideoEnabled=" << AppSettings::drivingVideoEnabled();
     }
 }
 
@@ -330,6 +332,12 @@ void notifyUserOpenedDrivingImage()
     s_userOpenedDrivingImage = true;
 }
 
+void onDrivingVideoSettingChanged()
+{
+    updateSpeedDrivingMode();
+    applySpeedLayoutIfDrivingImageVisible();
+}
+
 void notifyUserClosedDrivingImage()
 {
     if (!canUserCloseDrivingImage()) {
@@ -410,6 +418,11 @@ void setIllumination(bool on)
 }
 
 } // namespace
+
+void automotiveOnDrivingVideoSettingChanged()
+{
+    onDrivingVideoSettingChanged();
+}
 
 void automotiveNotifyUserOpenedDrivingImage()
 {

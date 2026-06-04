@@ -138,6 +138,7 @@ HEADERS += \
     src/otamanager.h \
     src/progressmonitor.h \
     src/appsignals.h \
+    src/appsettings.h \
     src/topbarwidget.h \
     src/faultcodedb.h \
     src/automotivedriving.h \
@@ -178,6 +179,7 @@ SOURCES += \
     src/otamanager.cpp \
     src/progressmonitor.cpp \
     src/appsignals.cpp \
+    src/appsettings.cpp \
     src/topbarwidget.cpp \
     src/faultcodedb.cpp \
     src/mcuserialreader.cpp \

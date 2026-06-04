@@ -20,4 +20,7 @@ bool automotiveCanUserCloseDrivingImage();
 
 int automotiveLayoutForUserOpen();
 
+// 系统设置「行车视频」开关变更：仅影响车速≥35km/h 时是否切入行车布局
+void automotiveOnDrivingVideoSettingChanged();
+
 #endif // AUTOMOTIVEDRIVING_H
