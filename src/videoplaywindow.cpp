@@ -2,6 +2,7 @@
 #include "bluetoothmanager.h"
 #include "devicedetect.h"
 #include "t507sdkbridge.h"
+#include "xplayercedarx.h"
 #include "appsignals.h"
 
 #include <QVBoxLayout>
@@ -1320,6 +1321,13 @@ bool VideoPlayWindow::startSdkPlayer(const QString &videoPath)
         m_sdkDurationMs = 0;
     }
     updateTimeAndSlider(0, m_sdkDurationMs);
+
+    if (cedarxIsAhdRecordVideoPath(videoPath)) {
+        cedarxXPlayerSetDiscardAudio(m_sdkPlayer, 1);
+        qDebug() << "[Video] AHD record playback: discard audio (skip 4s AV first-sync wait)";
+    } else {
+        cedarxXPlayerSetDiscardAudio(m_sdkPlayer, 0);
+    }
 
     if (XPlayerStart(m_sdkPlayer) != 0) {
         qWarning() << "XPlayerStart failed:" << videoPath;

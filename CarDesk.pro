@@ -128,6 +128,7 @@ HEADERS += \
     src/drivingimageplaybackpage.h \
     src/ahdsettings.h \
     src/ahdrecordstore.h \
+    src/xplayercedarx.h \
     src/tfcarddetect.h \
     src/imageviewingwindow.h \
     src/t507sdkbridge.h \
@@ -170,6 +171,7 @@ SOURCES += \
     src/drivingimageplaybackpage.cpp \
     src/ahdsettings.cpp \
     src/ahdrecordstore.cpp \
+    src/xplayercedarx.cpp \
     src/tfcarddetect.cpp \
     src/imageviewingwindow.cpp \
     src/t507sdkbridge.cpp \
