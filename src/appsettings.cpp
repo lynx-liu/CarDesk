@@ -34,4 +34,19 @@ void syncAppPropertiesFromSettings()
     }
 }
 
+bool debugMode()
+{
+    if (!QCoreApplication::instance()) {
+        return false;
+    }
+    return QCoreApplication::instance()->property("appDebugMode").toBool();
+}
+
+void setDebugMode(bool enabled)
+{
+    if (QCoreApplication::instance()) {
+        QCoreApplication::instance()->setProperty("appDebugMode", enabled);
+    }
+}
+
 } // namespace AppSettings

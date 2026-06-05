@@ -2,6 +2,7 @@
 
 #include "ahdrecordstore.h"
 #include "ahdsettings.h"
+#include "appsettings.h"
 #include "appsignals.h"
 
 #include <QCoreApplication>
@@ -471,6 +472,7 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
         s_activePool = this;
         if (resumePreview(cameraIds, hideHwOverlayImmediately)) {
             m_running = true;
+            resetPreviewFpsStats();
             applySafetyWatermarks(QString());
             armDeferredRecording();
             markAhdSessionActive();
@@ -568,6 +570,7 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
     struct view_info vv = {0, 0, 1280, 720};
     m_running = true;
     s_activePool = this;
+    resetPreviewFpsStats();
 
     for (const OpenEntry &e : opened) {
         qDebug() << "[Ahd] phase3 startPriview camera" << e.cameraId;
@@ -634,6 +637,8 @@ void AhdCameraPool::stopAll()
     if (s_activePool == this) {
         s_activePool = nullptr;
     }
+    resetPreviewFpsStats();
+    emit previewFpsChanged();
 
     if (QCoreApplication::instance()) {
         QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 80);
@@ -743,6 +748,7 @@ void AhdCameraPool::deliverPreviewFrame(int channelIndex, QByteArray nv21, int w
         recordFrameForFaultCheck(channelIndex);
     }
 
+    notePreviewFpsSample(channelIndex);
     emit framesUpdated();
     tryStartRecordingWhenReady();
 }
@@ -751,9 +757,9 @@ QString AhdCameraPool::faultTextForType(CamFaultType type)
 {
     switch (type) {
     case CamFaultType::StreamInterrupt:
-        return QStringLiteral("请检查摄像头");
+        return QStringLiteral("摄像头故障");
     case CamFaultType::LowFps:
-        return QStringLiteral("低帧率故障");
+        return QStringLiteral("请检查摄像头");
     default:
         return QString();
     }
@@ -765,6 +771,49 @@ QString AhdCameraPool::cameraFaultText(int channelIndex) const
         return QString();
     }
     return faultTextForType(m_channelFaults[channelIndex].fault);
+}
+
+void AhdCameraPool::resetPreviewFpsStats()
+{
+    for (int i = 0; i < kChannelCount; ++i) {
+        m_previewFpsCount[i] = 0;
+        m_channelPreviewFps[i] = 0.0;
+    }
+    m_previewFpsWindowStartMs = 0;
+}
+
+void AhdCameraPool::notePreviewFpsSample(int channelIndex)
+{
+    if (!AppSettings::debugMode() || channelIndex < 0 || channelIndex >= kChannelCount) {
+        return;
+    }
+
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    m_previewFpsCount[channelIndex]++;
+    if (m_previewFpsWindowStartMs == 0) {
+        m_previewFpsWindowStartMs = now;
+        return;
+    }
+
+    const qint64 elapsed = now - m_previewFpsWindowStartMs;
+    if (elapsed < 1000) {
+        return;
+    }
+
+    for (int i = 0; i < kChannelCount; ++i) {
+        m_channelPreviewFps[i] = m_previewFpsCount[i] * 1000.0 / static_cast<double>(elapsed);
+        m_previewFpsCount[i] = 0;
+    }
+    m_previewFpsWindowStartMs = now;
+    emit previewFpsChanged();
+}
+
+double AhdCameraPool::channelPreviewFps(int channelIndex) const
+{
+    if (channelIndex < 0 || channelIndex >= kChannelCount) {
+        return 0.0;
+    }
+    return m_channelPreviewFps[channelIndex];
 }
 
 void AhdCameraPool::resetFaultState()
@@ -795,30 +844,47 @@ void AhdCameraPool::setRecordingFaultMonitorActive(bool active)
     }
 }
 
-AhdCameraPool::CamFaultType AhdCameraPool::localFaultFromStats(const ChannelFaultState &st,
-                                                               qint64 now,
-                                                               qint64 sinceRec) const
+bool AhdCameraPool::evaluateChannelFault(ChannelFaultState &st, qint64 now, qint64 sinceRec)
 {
-    if (st.lastFrameWallMs == 0) {
+    const CamFaultType before = st.fault;
+
+    if (!st.hasFrame) {
         if (sinceRec > CAM_FAULT_TIMEOUT_MS) {
-            return CamFaultType::StreamInterrupt;
+            st.fault = CamFaultType::StreamInterrupt;
         }
-        return CamFaultType::None;
+        return st.fault != before;
     }
-    if (now - st.lastFrameWallMs > CAM_FAULT_TIMEOUT_MS) {
-        return CamFaultType::StreamInterrupt;
+
+    if (st.fault == CamFaultType::StreamInterrupt) {
+        return false;
     }
-    if (sinceRec >= CAM_FPS_WINDOW_MS) {
-        ChannelFaultState mutableSt = st;
-        const qint64 windowStart = now - CAM_FPS_WINDOW_MS;
-        while (!mutableSt.frameTimesMs.isEmpty() && mutableSt.frameTimesMs.first() < windowStart) {
-            mutableSt.frameTimesMs.removeFirst();
-        }
-        if (mutableSt.frameTimesMs.size() < CAM_FPS_MIN_FRAMES) {
-            return CamFaultType::LowFps;
-        }
+
+    const qint64 elapsed = now - st.lastFrameWallMs;
+    if (elapsed > CAM_FAULT_TIMEOUT_MS) {
+        st.fault = CamFaultType::StreamInterrupt;
+        return st.fault != before;
     }
-    return CamFaultType::None;
+
+    if (st.fpsWindowStartMs == 0) {
+        st.fpsWindowStartMs = now;
+        st.fpsFrameCount = qMax(st.fpsFrameCount, 1);
+        return false;
+    }
+
+    const qint64 windowElapsed = now - st.fpsWindowStartMs;
+    if (windowElapsed < CAM_FPS_WINDOW_MS) {
+        return false;
+    }
+
+    if (st.fpsFrameCount < CAM_FPS_MIN_FRAMES) {
+        st.fault = CamFaultType::LowFps;
+    } else if (st.fault == CamFaultType::LowFps) {
+        st.fault = CamFaultType::None;
+    }
+
+    st.fpsWindowStartMs = now;
+    st.fpsFrameCount = 0;
+    return st.fault != before;
 }
 
 void AhdCameraPool::recordFrameForFaultCheck(int camId)
@@ -830,14 +896,11 @@ void AhdCameraPool::recordFrameForFaultCheck(int camId)
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     ChannelFaultState &st = m_channelFaults[camId];
     st.lastFrameWallMs = now;
-    st.frameTimesMs.append(now);
+    st.hasFrame = true;
+    st.fpsFrameCount++;
 
-    const qint64 windowStart = now - CAM_FPS_WINDOW_MS;
-    while (!st.frameTimesMs.isEmpty() && st.frameTimesMs.first() < windowStart) {
-        st.frameTimesMs.removeFirst();
-    }
-
-    if (st.fault != CamFaultType::None) {
+    // 断流恢复：仅清除断流故障，低帧率由完整统计窗口判定（对齐 MultiCameraCompose）
+    if (st.fault == CamFaultType::StreamInterrupt) {
         st.fault = CamFaultType::None;
         emit cameraFaultsChanged();
     }
@@ -855,9 +918,7 @@ void AhdCameraPool::updateChannelFaults()
         m_recordingFaultMonitorSinceMs > 0 ? (now - m_recordingFaultMonitorSinceMs) : 0;
 
     for (int i = 0; i < kChannelCount; ++i) {
-        const CamFaultType newFault = localFaultFromStats(m_channelFaults[i], now, sinceRec);
-        if (m_channelFaults[i].fault != newFault) {
-            m_channelFaults[i].fault = newFault;
+        if (evaluateChannelFault(m_channelFaults[i], now, sinceRec)) {
             changed = true;
         }
     }
@@ -1061,6 +1122,12 @@ QString AhdCameraPool::cameraFaultText(int channelIndex) const
 {
     Q_UNUSED(channelIndex);
     return QString();
+}
+
+double AhdCameraPool::channelPreviewFps(int channelIndex) const
+{
+    Q_UNUSED(channelIndex);
+    return 0.0;
 }
 
 #endif // CAR_DESK_USE_T507_SDK

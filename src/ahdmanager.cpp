@@ -4,6 +4,7 @@
 #include "ahdpreviewoverlaywidget.h"
 #include "ahdpreviewwidget.h"
 #include "ahdsettings.h"
+#include "appsettings.h"
 
 #include <QProcessEnvironment>
 #include <QRect>
@@ -25,6 +26,9 @@ AhdManager::AhdManager(int layoutMode, QObject *parent)
         updateCameraFaultOverlay();
     });
     connect(m_pool, &AhdCameraPool::cameraFaultsChanged, this, &AhdManager::updateCameraFaultOverlay);
+    if (AppSettings::debugMode()) {
+        connect(m_pool, &AhdCameraPool::previewFpsChanged, this, &AhdManager::updateFpsOverlay);
+    }
 }
 
 AhdManager::~AhdManager()
@@ -163,6 +167,9 @@ bool AhdManager::startPreview(QWidget *parentWidget, int x, int y, int w, int h)
     }
 
     applyLayoutSpec();
+    if (AppSettings::debugMode()) {
+        updateFpsOverlay();
+    }
     return true;
 }
 
@@ -178,9 +185,11 @@ void AhdManager::attachPreviewWidget(QWidget *parentWidget, int w, int h)
     if (!m_overlayWidget) {
         m_overlayWidget = new AhdPreviewOverlayWidget(parentWidget);
         m_overlayWidget->setLayoutSpec(m_layout);
+        m_overlayWidget->setShowChannelFps(AppSettings::debugMode());
     } else if (parentWidget && m_overlayWidget->parentWidget() != parentWidget) {
         m_overlayWidget->setParent(parentWidget);
         m_overlayWidget->setLayoutSpec(m_layout);
+        m_overlayWidget->setShowChannelFps(AppSettings::debugMode());
     }
 
     const int pw = (w > 0) ? w : (parentWidget ? parentWidget->width() : 0);
@@ -289,4 +298,17 @@ void AhdManager::updateCameraFaultOverlay()
         }
     }
     m_overlayWidget->setChannelFaultTexts(texts);
+}
+
+void AhdManager::updateFpsOverlay()
+{
+    if (!m_overlayWidget || !m_pool || !AppSettings::debugMode()) {
+        return;
+    }
+
+    double fps[AhdLayoutSpec::kChannelCount];
+    for (int i = 0; i < AhdLayoutSpec::kChannelCount; ++i) {
+        fps[i] = m_pool->channelPreviewFps(i);
+    }
+    m_overlayWidget->setChannelFpsValues(fps);
 }

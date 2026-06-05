@@ -58,6 +58,7 @@ private:
     void attachPreviewWidget(QWidget *parentWidget, int w, int h);
     void updateRecordingBadge();
     void updateCameraFaultOverlay();
+    void updateFpsOverlay();
     void flushRecordingSync();
 
     AhdCameraPool *m_pool;

@@ -8,6 +8,10 @@ bool drivingVideoEnabled();
 void setDrivingVideoEnabled(bool enabled);
 void syncAppPropertiesFromSettings();
 
+// 命令行带 debug 参数启动时为 true
+bool debugMode();
+void setDebugMode(bool enabled);
+
 } // namespace AppSettings
 
 #endif // APPSETTINGS_H

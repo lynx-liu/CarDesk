@@ -1036,6 +1036,9 @@ int main(int argc, char *argv[]) {
 
     QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
+    if (s_debugMode) {
+        AppSettings::setDebugMode(true);
+    }
 #ifdef CAR_DESK_USE_T507_SDK
     AhdManager::globalInit();
     QObject::connect(&app, &QCoreApplication::aboutToQuit, []() { AhdManager::globalCleanup(); });

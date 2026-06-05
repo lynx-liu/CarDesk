@@ -28,6 +28,29 @@ void AhdPreviewOverlayWidget::setShowRecordingBadge(bool show)
     update();
 }
 
+void AhdPreviewOverlayWidget::setShowChannelFps(bool show)
+{
+    if (m_showChannelFps == show) {
+        return;
+    }
+    m_showChannelFps = show;
+    update();
+}
+
+void AhdPreviewOverlayWidget::setChannelFpsValues(const double fps[AhdLayoutSpec::kChannelCount])
+{
+    bool changed = false;
+    for (int i = 0; i < AhdLayoutSpec::kChannelCount; ++i) {
+        if (qAbs(m_channelFps[i] - fps[i]) > 0.05) {
+            m_channelFps[i] = fps[i];
+            changed = true;
+        }
+    }
+    if (changed) {
+        update();
+    }
+}
+
 void AhdPreviewOverlayWidget::setChannelFaultTexts(
     const QString texts[AhdLayoutSpec::kChannelCount])
 {
@@ -81,6 +104,27 @@ void AhdPreviewOverlayWidget::paintEvent(QPaintEvent *event)
                          static_cast<int>(vp.norm.height() * height()));
         if (dest.width() < 8 || dest.height() < 8) {
             continue;
+        }
+
+        if (m_showChannelFps && vp.channel >= 0 && vp.channel < AhdLayoutSpec::kChannelCount) {
+            const QString fpsText =
+                QStringLiteral("%1 fps").arg(m_channelFps[vp.channel], 0, 'f', 1);
+            QFont fpsFont = painter.font();
+            fpsFont.setPixelSize(qMax(18, dest.height() * 24 / 720));
+            fpsFont.setBold(true);
+            painter.setFont(fpsFont);
+
+            const QFontMetrics fpsFm(fpsFont);
+            const int padH = 8;
+            const int padV = 4;
+            const QRect fpsBg(dest.left() + 6, dest.top() + 6,
+                              fpsFm.horizontalAdvance(fpsText) + padH * 2,
+                              fpsFm.height() + padV * 2);
+            painter.fillRect(fpsBg, QColor(0, 0, 0, 170));
+            painter.setPen(QColor(80, 255, 160));
+            painter.drawText(fpsBg, Qt::AlignCenter, fpsText);
+            painter.setFont(font);
+            painter.setPen(Qt::white);
         }
 
         const QRect badgeRect(dest.right() - badge + 1, dest.top(), badge, badge);
