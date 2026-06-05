@@ -4,10 +4,21 @@
 #include <QByteArray>
 #include <QMutex>
 #include <QObject>
+#include <QVector>
 
 class QTimer;
 
 #include "ahdlayout.h"
+
+/* 故障检测超时阈值 (毫秒) - 连续无新帧超过此时间判定为断流故障 */
+#define CAM_FAULT_TIMEOUT_MS 3000
+
+/* 低帧率故障检测阈值
+ * 在FPS_WINDOW_MS毫秒窗口内，帧数低于FPS_MIN_FRAMES则判定为低帧率故障
+ * 例如: 2000ms窗口内至少需要10帧(=5fps)，低于此值则判定异常
+ */
+#define CAM_FPS_WINDOW_MS     2000   /* 帧率统计时间窗口(ms) */
+#define CAM_FPS_MIN_FRAMES    10     /* 窗口内最少帧数 (2000ms内10帧 = 5fps) */
 
 class AhdCameraPool : public QObject {
     Q_OBJECT
@@ -56,6 +67,9 @@ public:
     void syncRecordingState();
     bool isRecordingActive() const;
 
+    // 录像期间摄像头故障文案（空串表示无故障）；channelIndex 0..3
+    QString cameraFaultText(int channelIndex) const;
+
 #ifdef CAR_DESK_USE_T507_SDK
     void onPreviewFrameFromSdk(void *dvrUser, char *dataPtr);
     static AhdCameraPool *s_activePool;
@@ -65,10 +79,12 @@ signals:
     void framesUpdated();
     void poolError(const QString &message);
     void recordingActiveChanged(bool active);
+    void cameraFaultsChanged();
 
 private slots:
 #ifdef CAR_DESK_USE_T507_SDK
-    void deliverPreviewFrame(int channelIndex, QByteArray nv21, int width, int height, qint64 timestampUs);
+    void deliverPreviewFrame(int channelIndex, QByteArray nv21, int width, int height,
+                             qint64 timestampUs);
 #endif
 
 private:
@@ -103,6 +119,29 @@ private:
 
     void armDeferredRecording();
     void tryStartRecordingWhenReady();
+
+    enum class CamFaultType {
+        None,
+        StreamInterrupt,
+        LowFps,
+    };
+
+    struct ChannelFaultState {
+        CamFaultType fault = CamFaultType::None;
+        QVector<qint64> frameTimesMs;
+        qint64 lastFrameWallMs = 0;
+    };
+
+    ChannelFaultState m_channelFaults[kChannelCount];
+    qint64 m_recordingFaultMonitorSinceMs = 0;
+    QTimer *m_faultCheckTimer = nullptr;
+
+    void setRecordingFaultMonitorActive(bool active);
+    void resetFaultState();
+    void recordFrameForFaultCheck(int camId);
+    void updateChannelFaults();
+    CamFaultType localFaultFromStats(const ChannelFaultState &st, qint64 now, qint64 sinceRec) const;
+    static QString faultTextForType(CamFaultType type);
 };
 
 inline bool AhdCameraPool::hasPersistedFactories() const

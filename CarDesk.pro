@@ -65,6 +65,8 @@ contains(CONFIG, arm_build)|contains(CONFIG, arm64_build) {
     LIBS += -lvdecoder -lvencoder -lVE -lvideoengine -lxmetadataretriever -lxplayer
     LIBS += -lvenc_base -lvenc_codec -lcdx_ion -lasound -ldbus-1
     LIBS += -lrt -Wl,--no-as-needed -lsdk_disp -Wl,--as-needed -lpthread
+    # V4L2 在 libsdk_camera.so 内回调 AhdCamFaultNoteFrame，需导出可执行文件符号
+    QMAKE_LFLAGS += -Wl,--export-dynamic
     # 与 sdktest 一致链接 Mali，供 libsdk_camera 内部 EGL/G2D 使用
     exists($$T507_SYSROOT/usr/lib/libmali.so) {
         LIBS += $$T507_SYSROOT/usr/lib/libmali.so

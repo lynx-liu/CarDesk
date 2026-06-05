@@ -28,6 +28,21 @@ void AhdPreviewOverlayWidget::setShowRecordingBadge(bool show)
     update();
 }
 
+void AhdPreviewOverlayWidget::setChannelFaultTexts(
+    const QString texts[AhdLayoutSpec::kChannelCount])
+{
+    bool changed = false;
+    for (int i = 0; i < AhdLayoutSpec::kChannelCount; ++i) {
+        if (m_channelFaultTexts[i] != texts[i]) {
+            m_channelFaultTexts[i] = texts[i];
+            changed = true;
+        }
+    }
+    if (changed) {
+        update();
+    }
+}
+
 void AhdPreviewOverlayWidget::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
@@ -72,6 +87,29 @@ void AhdPreviewOverlayWidget::paintEvent(QPaintEvent *event)
         painter.fillRect(badgeRect, QColor(0, 0, 0, 128));
         painter.setPen(Qt::white);
         painter.drawText(badgeRect, Qt::AlignCenter, label);
+
+        if (m_showRecordingBadge && vp.channel >= 0 && vp.channel < AhdLayoutSpec::kChannelCount) {
+            const QString &faultText = m_channelFaultTexts[vp.channel];
+            if (!faultText.isEmpty()) {
+                QFont faultFont = painter.font();
+                faultFont.setPixelSize(qMax(20, dest.height() * 28 / 720));
+                faultFont.setBold(true);
+                painter.setFont(faultFont);
+
+                const QFontMetrics fm(faultFont);
+                const int padH = qMax(12, dest.width() / 40);
+                const int padV = qMax(8, dest.height() / 60);
+                const int textW = fm.horizontalAdvance(faultText) + padH * 2;
+                const int textH = fm.height() + padV * 2;
+                QRect faultBg((dest.left() + dest.right() - textW) / 2,
+                              (dest.top() + dest.bottom() - textH) / 2, textW, textH);
+                painter.fillRect(faultBg, QColor(0, 0, 0, 170));
+                painter.setPen(QColor(255, 210, 64));
+                painter.drawText(faultBg, Qt::AlignCenter, faultText);
+                painter.setFont(font);
+                painter.setPen(Qt::white);
+            }
+        }
 
         if (m_showRecordingBadge && AhdLayoutSpec::isRearChannel(vp.channel)) {
             const int iconSide = qMax(24, badge * 2 / 3);

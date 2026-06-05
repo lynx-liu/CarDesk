@@ -5,6 +5,7 @@
 #include "appsignals.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDebug>
 #include <QFile>
 #include <QMetaObject>
@@ -142,7 +143,9 @@ QVector<int> cameraIdsForLayout(const AhdLayoutSpec &spec)
     QVector<int> ids;
     switch (spec.mode) {
     case 360:
-        ids.append(360);
+        // 应用层四分屏：四路独立预览 + Qt 布局合成，不依赖 SDK Oview/MultiCameraCompose
+        ids << (AhdCameraPool::kTvdDevIdStart + 0) << (AhdCameraPool::kTvdDevIdStart + 1)
+            << (AhdCameraPool::kTvdDevIdStart + 2) << (AhdCameraPool::kTvdDevIdStart + 3);
         break;
     case 180:
         ids << (AhdCameraPool::kTvdDevIdStart + 2) << (AhdCameraPool::kTvdDevIdStart + 3);
@@ -648,6 +651,7 @@ void AhdCameraPool::stopAll()
     }
 
     if (wasRecording) {
+        setRecordingFaultMonitorActive(false);
         emit recordingActiveChanged(false);
     }
 
@@ -733,20 +737,134 @@ void AhdCameraPool::deliverPreviewFrame(int channelIndex, QByteArray nv21, int w
         m_frames[channelIndex].height = height;
         m_frames[channelIndex].timestampUs = timestampUs;
         ++m_frames[channelIndex].generation;
-
-        if (m_uses360Compose && channelIndex == 0 && uses360QuadrantCrop(width, height)) {
-            const QByteArray shared = m_frames[0].nv21;
-            for (int i = 1; i < kChannelCount; ++i) {
-                m_frames[i].nv21 = shared;
-                m_frames[i].width = width;
-                m_frames[i].height = height;
-                m_frames[i].timestampUs = timestampUs;
-                m_frames[i].generation = m_frames[0].generation;
-            }
-        }
     }
+
+    if (isRecordingActive()) {
+        recordFrameForFaultCheck(channelIndex);
+    }
+
     emit framesUpdated();
     tryStartRecordingWhenReady();
+}
+
+QString AhdCameraPool::faultTextForType(CamFaultType type)
+{
+    switch (type) {
+    case CamFaultType::StreamInterrupt:
+        return QStringLiteral("请检查摄像头");
+    case CamFaultType::LowFps:
+        return QStringLiteral("低帧率故障");
+    default:
+        return QString();
+    }
+}
+
+QString AhdCameraPool::cameraFaultText(int channelIndex) const
+{
+    if (!isRecordingActive() || channelIndex < 0 || channelIndex >= kChannelCount) {
+        return QString();
+    }
+    return faultTextForType(m_channelFaults[channelIndex].fault);
+}
+
+void AhdCameraPool::resetFaultState()
+{
+    for (int i = 0; i < kChannelCount; ++i) {
+        m_channelFaults[i] = ChannelFaultState();
+    }
+    m_recordingFaultMonitorSinceMs = 0;
+}
+
+void AhdCameraPool::setRecordingFaultMonitorActive(bool active)
+{
+    if (active) {
+        resetFaultState();
+        m_recordingFaultMonitorSinceMs = QDateTime::currentMSecsSinceEpoch();
+        if (!m_faultCheckTimer) {
+            m_faultCheckTimer = new QTimer(this);
+            m_faultCheckTimer->setInterval(500);
+            connect(m_faultCheckTimer, &QTimer::timeout, this, &AhdCameraPool::updateChannelFaults);
+        }
+        m_faultCheckTimer->start();
+    } else {
+        if (m_faultCheckTimer) {
+            m_faultCheckTimer->stop();
+        }
+        resetFaultState();
+        emit cameraFaultsChanged();
+    }
+}
+
+AhdCameraPool::CamFaultType AhdCameraPool::localFaultFromStats(const ChannelFaultState &st,
+                                                               qint64 now,
+                                                               qint64 sinceRec) const
+{
+    if (st.lastFrameWallMs == 0) {
+        if (sinceRec > CAM_FAULT_TIMEOUT_MS) {
+            return CamFaultType::StreamInterrupt;
+        }
+        return CamFaultType::None;
+    }
+    if (now - st.lastFrameWallMs > CAM_FAULT_TIMEOUT_MS) {
+        return CamFaultType::StreamInterrupt;
+    }
+    if (sinceRec >= CAM_FPS_WINDOW_MS) {
+        ChannelFaultState mutableSt = st;
+        const qint64 windowStart = now - CAM_FPS_WINDOW_MS;
+        while (!mutableSt.frameTimesMs.isEmpty() && mutableSt.frameTimesMs.first() < windowStart) {
+            mutableSt.frameTimesMs.removeFirst();
+        }
+        if (mutableSt.frameTimesMs.size() < CAM_FPS_MIN_FRAMES) {
+            return CamFaultType::LowFps;
+        }
+    }
+    return CamFaultType::None;
+}
+
+void AhdCameraPool::recordFrameForFaultCheck(int camId)
+{
+    if (camId < 0 || camId >= kChannelCount || !isRecordingActive()) {
+        return;
+    }
+
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    ChannelFaultState &st = m_channelFaults[camId];
+    st.lastFrameWallMs = now;
+    st.frameTimesMs.append(now);
+
+    const qint64 windowStart = now - CAM_FPS_WINDOW_MS;
+    while (!st.frameTimesMs.isEmpty() && st.frameTimesMs.first() < windowStart) {
+        st.frameTimesMs.removeFirst();
+    }
+
+    if (st.fault != CamFaultType::None) {
+        st.fault = CamFaultType::None;
+        emit cameraFaultsChanged();
+    }
+}
+
+void AhdCameraPool::updateChannelFaults()
+{
+    if (!isRecordingActive()) {
+        return;
+    }
+
+    bool changed = false;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const qint64 sinceRec =
+        m_recordingFaultMonitorSinceMs > 0 ? (now - m_recordingFaultMonitorSinceMs) : 0;
+
+    for (int i = 0; i < kChannelCount; ++i) {
+        const CamFaultType newFault = localFaultFromStats(m_channelFaults[i], now, sinceRec);
+        if (m_channelFaults[i].fault != newFault) {
+            m_channelFaults[i].fault = newFault;
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        emit cameraFaultsChanged();
+    }
 }
 
 void AhdCameraPool::armDeferredRecording()
@@ -782,15 +900,10 @@ void AhdCameraPool::tryStartRecordingWhenReady()
     bool hasFrame = false;
     {
         QMutexLocker lock(&m_frameMutex);
-        if (m_uses360Compose) {
-            hasFrame = m_frames[0].generation != 0 && !m_frames[0].nv21.isEmpty()
-                       && m_frames[0].width > 0 && m_frames[0].height > 0;
-        } else {
-            for (int i = 0; i < kChannelCount; ++i) {
-                if (m_frames[i].generation != 0 && !m_frames[i].nv21.isEmpty()) {
-                    hasFrame = true;
-                    break;
-                }
+        for (int i = 0; i < kChannelCount; ++i) {
+            if (m_frames[i].generation != 0 && !m_frames[i].nv21.isEmpty()) {
+                hasFrame = true;
+                break;
             }
         }
     }
@@ -849,6 +962,7 @@ void AhdCameraPool::syncRecordingState()
 
     const bool nowActive = isRecordingActive();
     if (wasActive != nowActive) {
+        setRecordingFaultMonitorActive(nowActive);
         emit recordingActiveChanged(nowActive);
     }
 }
@@ -941,6 +1055,12 @@ void AhdCameraPool::syncRecordingState() {}
 bool AhdCameraPool::isRecordingActive() const
 {
     return false;
+}
+
+QString AhdCameraPool::cameraFaultText(int channelIndex) const
+{
+    Q_UNUSED(channelIndex);
+    return QString();
 }
 
 #endif // CAR_DESK_USE_T507_SDK

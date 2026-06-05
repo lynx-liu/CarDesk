@@ -22,7 +22,9 @@ AhdManager::AhdManager(int layoutMode, QObject *parent)
     connect(m_pool, &AhdCameraPool::poolError, this, &AhdManager::cameraError);
     connect(m_pool, &AhdCameraPool::recordingActiveChanged, this, [this](bool) {
         updateRecordingBadge();
+        updateCameraFaultOverlay();
     });
+    connect(m_pool, &AhdCameraPool::cameraFaultsChanged, this, &AhdManager::updateCameraFaultOverlay);
 }
 
 AhdManager::~AhdManager()
@@ -262,6 +264,7 @@ void AhdManager::flushRecordingSync()
         m_pool->syncRecordingState();
     }
     updateRecordingBadge();
+    updateCameraFaultOverlay();
 }
 
 void AhdManager::updateRecordingBadge()
@@ -271,4 +274,19 @@ void AhdManager::updateRecordingBadge()
     }
     const bool active = m_pool && m_pool->isRecordingActive();
     m_overlayWidget->setShowRecordingBadge(active);
+}
+
+void AhdManager::updateCameraFaultOverlay()
+{
+    if (!m_overlayWidget || !m_pool) {
+        return;
+    }
+
+    QString texts[AhdLayoutSpec::kChannelCount];
+    if (m_pool->isRecordingActive()) {
+        for (int i = 0; i < AhdLayoutSpec::kChannelCount; ++i) {
+            texts[i] = m_pool->cameraFaultText(i);
+        }
+    }
+    m_overlayWidget->setChannelFaultTexts(texts);
 }

@@ -14,6 +14,7 @@ public:
 
     void setLayoutSpec(const AhdLayoutSpec &spec);
     void setShowRecordingBadge(bool show);
+    void setChannelFaultTexts(const QString texts[AhdLayoutSpec::kChannelCount]);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -21,6 +22,7 @@ protected:
 private:
     AhdLayoutSpec m_layout;
     bool m_showRecordingBadge = false;
+    QString m_channelFaultTexts[AhdLayoutSpec::kChannelCount];
 };
 
 #endif // AHDPREVIEWOVERLAYWIDGET_H
