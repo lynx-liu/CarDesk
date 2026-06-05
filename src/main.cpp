@@ -1231,12 +1231,27 @@ int main(int argc, char *argv[]) {
     qDebug() << "Touch Device:" << (device.isTouchDevice() ? "Yes" : "No");
     qDebug() << "==============================================";
     
-    // 启动时从配置读取音量等级并应用到 TM2313 / 系统音量
+    // 启动时从配置读取音量、亮度并应用
     {
         QSettings settings;
         const int savedLevel = qBound(0, settings.value("sound/volumeLevel", 10).toInt(), 10);
         AppSignals::setVolumeLevel(savedLevel);
         app.setProperty("appVolumeLevel", savedLevel);
+
+        if (settings.contains(QStringLiteral("brightness/mode"))) {
+            const int mode = settings.value(QStringLiteral("brightness/mode")).toInt();
+            const int daySlider = qBound(0, settings.value(QStringLiteral("brightness/day"), 100).toInt(), 100);
+            const int nightSlider = qBound(0, settings.value(QStringLiteral("brightness/night"), 20).toInt(), 100);
+            int sliderVal = daySlider;
+            if (mode == 1) {
+                sliderVal = nightSlider;
+            } else if (mode == 2) {
+                sliderVal = qBound(0, settings.value(QStringLiteral("brightness/auto"), daySlider).toInt(), 100);
+            }
+            const int bl = Backlight::sliderToBacklight(sliderVal);
+            Backlight::set(bl);
+            qDebug() << "[Boot] restore brightness mode=" << mode << "slider=" << sliderVal << "bl=" << bl;
+        }
     }
 
     TfCardMonitor::instance()->start();
