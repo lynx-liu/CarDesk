@@ -1,4 +1,5 @@
 #include "topbarwidget.h"
+#include "appsettings.h"
 #include "appsignals.h"
 #include "t507sdkbridge.h"
 
@@ -176,6 +177,9 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     m_btBtn->setCursor(Qt::PointingHandCursor);
     m_btBtn->setToolTip("蓝牙");
     outerLay->addWidget(m_btBtn);
+    if (!AppSettings::debugMode()) {
+        m_btBtn->setVisible(false);
+    }
 
     const bool initialBtConnected = qApp->property("appBluetoothConnected").toBool();
     onBluetoothStateChanged(initialBtConnected);

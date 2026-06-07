@@ -62,6 +62,7 @@ private:
     QStackedWidget *m_pages;
     QListWidget *m_subnavList;
     BluetoothManager *m_bluetoothManager;
+    int m_bluetoothPageIndex;
     QLabel *m_bluetoothIntroLabel;
     QString m_bluetoothDeviceName;
     QString m_bluetoothPairPin;

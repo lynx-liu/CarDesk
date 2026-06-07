@@ -7,6 +7,7 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QCloseEvent>
+#include <QHideEvent>
 #include <QContextMenuEvent>
 #include <QResizeEvent>
 #include <QPointer>
@@ -49,6 +50,7 @@ private slots:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
     void contextMenuEvent(QContextMenuEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;

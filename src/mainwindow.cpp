@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "pagebgwidget.h"
 #include "devicedetect.h"
+#include "appsettings.h"
 #include "appsignals.h"
 #include "bluetoothmanager.h"
 #include "mediamanager.h"
@@ -28,6 +29,8 @@
 #include <QIcon>
 #include <QGridLayout>
 #include <QProcess>
+#include <QVector>
+#include <QHideEvent>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -36,7 +39,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_centralWidget(nullptr)
     , m_transitionOverlay(nullptr)
     , m_volumeWidget(nullptr)
-    , m_bluetoothManager(new BluetoothManager(this))
+    , m_bluetoothManager(AppSettings::debugMode() ? new BluetoothManager(this) : nullptr)
     , m_mediaManager(new MediaManager(this))
     , m_phoneWindow(nullptr)
     , m_radioWindow(nullptr)
@@ -56,7 +59,9 @@ MainWindow::MainWindow(QWidget *parent)
     // 确保用户首次点击时无需等待构建控件树。
     QTimer::singleShot(0, this, [this]() {
         PageBgWidget::prewarm();
-        ensurePhoneWindow();
+        if (AppSettings::debugMode()) {
+            ensurePhoneWindow();
+        }
         // RadioWindow 构造函数会打开硬件设备并切换声道，不能后台预创建
         ensureDiagnosticWindow();
         ensureSystemSettingWindow();
@@ -182,25 +187,42 @@ void MainWindow::createNavigationBar() {
     navLayout->setVerticalSpacing(34);
     
     struct NavItem {
-        int row, col;
+        int row;
         QString upImage;
         QString downImage;
         const char *slot;
         bool suppressTouchSound;
+        bool debugOnly;
     };
 
-    NavItem items[] = {
-        {0, 0, ":/images/butt_home_radio_up.png", ":/images/butt_home_radio_down.png", SLOT(onRadioClicked()), false},
-        {0, 1, ":/images/butt_home_driving_image_up.png", ":/images/butt_home_driving_image_down.png", SLOT(onDrivingImageClicked()), false},
-        {0, 2, ":/images/butt_home_video_play_up.png", ":/images/butt_home_video_play_down.png", SLOT(onVideoListClicked()), true},
-        {0, 3, ":/images/butt_home_image_viewing_up.png", ":/images/butt_home_image_viewing_down.png", SLOT(onImageViewingClicked()), false},
-        {1, 0, ":/images/butt_home_diagnostic_maintenance_up.png", ":/images/butt_home_diagnostic_maintenance_down.png", SLOT(onDiagnosticClicked()), false},
-        {1, 1, ":/images/butt_home_bluetooth_phone_up.png", ":/images/butt_home_bluetooth_phone_down.png", SLOT(onPhoneClicked()), false},
-        {1, 2, ":/images/butt_home_audio_play_up.png", ":/images/butt_home_audio_play_down.png", SLOT(onMusicUSBClicked()), true},
-        {1, 3, ":/images/butt_home_system_settings_up.png", ":/images/butt_home_system_settings_down.png", SLOT(onSystemSettingsClicked()), false},
+    const bool showBluetooth = AppSettings::debugMode();
+    NavItem allItems[] = {
+        {0, ":/images/butt_home_radio_up.png", ":/images/butt_home_radio_down.png", SLOT(onRadioClicked()), false, false},
+        {0, ":/images/butt_home_driving_image_up.png", ":/images/butt_home_driving_image_down.png", SLOT(onDrivingImageClicked()), false, false},
+        {0, ":/images/butt_home_video_play_up.png", ":/images/butt_home_video_play_down.png", SLOT(onVideoListClicked()), true, false},
+        {0, ":/images/butt_home_image_viewing_up.png", ":/images/butt_home_image_viewing_down.png", SLOT(onImageViewingClicked()), false, false},
+        {1, ":/images/butt_home_diagnostic_maintenance_up.png", ":/images/butt_home_diagnostic_maintenance_down.png", SLOT(onDiagnosticClicked()), false, false},
+        {1, ":/images/butt_home_bluetooth_phone_up.png", ":/images/butt_home_bluetooth_phone_down.png", SLOT(onPhoneClicked()), false, true},
+        {1, ":/images/butt_home_audio_play_up.png", ":/images/butt_home_audio_play_down.png", SLOT(onMusicUSBClicked()), true, false},
+        {1, ":/images/butt_home_system_settings_up.png", ":/images/butt_home_system_settings_down.png", SLOT(onSystemSettingsClicked()), false, false},
     };
 
-    for (const auto &item : items) {
+    QVector<NavItem> row0Items;
+    QVector<NavItem> row1Items;
+    row0Items.reserve(4);
+    row1Items.reserve(4);
+    for (const auto &item : allItems) {
+        if (item.debugOnly && !showBluetooth) {
+            continue;
+        }
+        if (item.row == 0) {
+            row0Items.append(item);
+        } else {
+            row1Items.append(item);
+        }
+    }
+
+    const auto makeNavButton = [this](const NavItem &item) -> QPushButton * {
         QPushButton *btn = new QPushButton(this);
         btn->setProperty("nav", true);
         btn->setFixedSize(216, 271);
@@ -216,8 +238,30 @@ void MainWindow::createNavigationBar() {
         if (item.suppressTouchSound) {
             btn->setProperty("suppressTouchClickSound", true);
         }
+        return btn;
+    };
 
-        navLayout->addWidget(btn, item.row, item.col, Qt::AlignCenter);
+    for (int i = 0; i < row0Items.size(); ++i) {
+        navLayout->addWidget(makeNavButton(row0Items[i]), 0, i, Qt::AlignCenter);
+    }
+
+    if (row1Items.size() == 4) {
+        for (int i = 0; i < row1Items.size(); ++i) {
+            navLayout->addWidget(makeNavButton(row1Items[i]), 1, i, Qt::AlignCenter);
+        }
+    } else if (!row1Items.isEmpty()) {
+        // 隐藏蓝牙电话后剩 3 个：与第一行同宽区域内左右各留 138px，使整排居中
+        constexpr int kSideMargin =
+            ((4 * 216 + 3 * 60) - (3 * 216 + 2 * 60)) / 2;
+        auto *row1Row = new QWidget(m_navBar);
+        row1Row->setFocusPolicy(Qt::NoFocus);
+        auto *row1Layout = new QHBoxLayout(row1Row);
+        row1Layout->setContentsMargins(kSideMargin, 0, kSideMargin, 0);
+        row1Layout->setSpacing(60);
+        for (const auto &item : row1Items) {
+            row1Layout->addWidget(makeNavButton(item));
+        }
+        navLayout->addWidget(row1Row, 1, 0, 1, 4);
     }
 }
 
@@ -266,6 +310,9 @@ void MainWindow::setupSystemInfo() {
 }
 
 void MainWindow::onBluetoothClicked() {
+    if (!m_bluetoothManager) {
+        return;
+    }
     qDebug() << "Bluetooth button clicked";
     m_bluetoothManager->scanDevices();
 }
@@ -374,6 +421,9 @@ void MainWindow::onMusicUSBClicked() {
 }
 
 void MainWindow::ensurePhoneWindow() {
+    if (!AppSettings::debugMode() || !m_bluetoothManager) {
+        return;
+    }
     if (!m_phoneWindow) {
         m_phoneWindow = new PhoneWindow(m_bluetoothManager, m_mediaManager);
         connect(m_phoneWindow, &PhoneWindow::requestReturnToMain, this, [this]() {
@@ -391,6 +441,9 @@ void MainWindow::ensurePhoneWindow() {
 }
 
 void MainWindow::onPhoneClicked() {
+    if (!AppSettings::debugMode() || !m_bluetoothManager) {
+        return;
+    }
     qDebug() << "Phone button clicked";
     if (m_mediaManager) {
         const bool radioActive = (m_radioWindow && m_radioWindow->isAudioActive());
@@ -410,7 +463,7 @@ void MainWindow::onPhoneClicked() {
 
 void MainWindow::keyPressEvent(QKeyEvent *event)
 {
-    if (event->key() == Qt::Key_Phone) {
+    if (event->key() == Qt::Key_Phone && AppSettings::debugMode()) {
         qDebug() << "MainWindow keyPressEvent Key_Phone => open phone";
         onPhoneClicked();
         return;
@@ -419,6 +472,9 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
 }
 
 void MainWindow::onBluetoothCallStatusChanged(int status) {
+    if (!m_bluetoothManager) {
+        return;
+    }
     if (status == 1) {
         // 通话结束
         if (!m_restoreStack.isEmpty()) {
@@ -749,6 +805,13 @@ void MainWindow::onImageViewingClicked() {
     m_imageViewingWindow->show();
     m_imageViewingWindow->raise();
     m_imageViewingWindow->activateWindow();
+}
+
+void MainWindow::hideEvent(QHideEvent *event) {
+    if (QWidget *focused = QApplication::focusWidget()) {
+        focused->clearFocus();
+    }
+    QMainWindow::hideEvent(event);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {

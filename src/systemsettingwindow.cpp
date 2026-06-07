@@ -237,6 +237,7 @@ SystemSettingWindow::SystemSettingWindow(BluetoothManager *bluetoothManager, QWi
     , m_pages(nullptr)
     , m_subnavList(nullptr)
     , m_bluetoothManager(bluetoothManager)
+    , m_bluetoothPageIndex(-1)
     , m_bluetoothIntroLabel(nullptr)
     , m_bluetoothDeviceName(QStringLiteral("wodelanya"))
     , m_bluetoothPairPin(QStringLiteral("0000"))
@@ -314,7 +315,8 @@ void SystemSettingWindow::onSubnavChanged(int index)
     }
     m_pages->setCurrentIndex(index);
 
-    if (index == 2 && m_bluetoothManager && m_bluetoothEnabled) {
+    if (index == m_bluetoothPageIndex && m_bluetoothPageIndex >= 0
+        && m_bluetoothManager && m_bluetoothEnabled) {
         m_bluetoothManager->queryConnectedDevice();
         if (m_bluetoothManager->getBluetoothName().isEmpty() || m_bluetoothManager->getBluetoothPin().isEmpty()) {
             m_bluetoothManager->queryBluetoothSettings();
@@ -768,14 +770,18 @@ void SystemSettingWindow::setupUI()
 
     m_subnavList = new QListWidget(content);
     m_subnavList->setFixedSize(280, 646);
-    const QStringList subnavItems = {
+    QStringList subnavItems = {
         QStringLiteral("显示模式"),
         QStringLiteral("声音设置"),
-        QStringLiteral("蓝牙设置"),
-        QStringLiteral("系统信息"),
-        QStringLiteral("恢复出厂"),
-        QStringLiteral("系统升级")
     };
+    m_bluetoothPageIndex = -1;
+    if (AppSettings::debugMode()) {
+        m_bluetoothPageIndex = subnavItems.size();
+        subnavItems << QStringLiteral("蓝牙设置");
+    }
+    subnavItems << QStringLiteral("系统信息")
+                << QStringLiteral("恢复出厂")
+                << QStringLiteral("系统升级");
     for (const QString &item : subnavItems) {
         auto *it = new QListWidgetItem(item, m_subnavList);
         it->setTextAlignment(Qt::AlignCenter | Qt::AlignVCenter);
@@ -806,7 +812,9 @@ void SystemSettingWindow::setupUI()
     );
     m_pages->addWidget(createDisplayPage());
     m_pages->addWidget(createSoundPage());
-    m_pages->addWidget(createBluetoothPage());
+    if (AppSettings::debugMode()) {
+        m_pages->addWidget(createBluetoothPage());
+    }
     m_pages->addWidget(createInfoPage());
     m_pages->addWidget(createFactoryPage());
     m_pages->addWidget(createUpdatePage());

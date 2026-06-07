@@ -1,6 +1,8 @@
 #ifndef TOPBARWIDGET_H
 #define TOPBARWIDGET_H
 
+#include "appsettings.h"
+
 #include <QWidget>
 #include <QLabel>
 #include <QPushButton>
@@ -29,7 +31,9 @@ public:
     explicit TopBarRightWidget(QWidget *parent = nullptr);
 
     /** 建议的固定宽度（像素）：BT+USB+vol组+时间+间距之和 */
-    static int preferredWidth() { return 400; }
+    static int preferredWidth() {
+        return AppSettings::debugMode() ? 400 : 336;
+    }
 
 private slots:
     void onVolumeChanged(int level);
