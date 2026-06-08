@@ -27,6 +27,7 @@
 
 #include <sdklog.h>
 
+#include "CameraFileCfg.h"
 #include "CameraHardware2.h"
 #include "Display.h"
 #include "DvrFactory.h"
@@ -184,10 +185,15 @@ void poolNotifyCallback(int32_t msgType, int32_t ext1, int32_t ext2, void *user)
     Q_UNUSED(user);
 }
 
+bool isPreviewFrameMsg(int32_t msgType)
+{
+    return msgType == CAMERA_MSG_PREVIEW_FRAME || msgType == CAMERA_MSG_VIDEO_FRAME;
+}
+
 void poolDataCallback(int32_t msgType, char *dataPtr, camera_frame_metadata_t *metadata, void *user)
 {
     Q_UNUSED(metadata);
-    if (msgType != CAMERA_MSG_PREVIEW_FRAME || !dataPtr || !user || !AhdCameraPool::s_activePool) {
+    if (!isPreviewFrameMsg(msgType) || !dataPtr || !user || !AhdCameraPool::s_activePool) {
         return;
     }
     AhdCameraPool::s_activePool->onPreviewFrameFromSdk(user, dataPtr);
@@ -196,9 +202,10 @@ void poolDataCallback(int32_t msgType, char *dataPtr, camera_frame_metadata_t *m
 void poolDataCallbackTimestamp(nsecs_t timestamp, int32_t msgType, char *dataPtr, void *user)
 {
     Q_UNUSED(timestamp);
-    Q_UNUSED(msgType);
-    Q_UNUSED(dataPtr);
-    Q_UNUSED(user);
+    if (!isPreviewFrameMsg(msgType) || !dataPtr || !user || !AhdCameraPool::s_activePool) {
+        return;
+    }
+    AhdCameraPool::s_activePool->onPreviewFrameFromSdk(user, dataPtr);
 }
 
 status_t poolUsrDataCb(int32_t msgType, char *dataPtr, int dalen, void *user)
@@ -259,6 +266,36 @@ bool recordingRequested()
         return true;
     }
     return AhdSettings::instance().recordingEnabled() && g_recordStorageAvailable;
+}
+
+// 对齐 sdktest：recordInit → start → startRecord → startPriview。
+// 360 Oview 合成帧经 CAMERA_MSG_VIDEO_FRAME 回调（非 PREVIEW_FRAME），
+// 必须 enableMsgType(VIDEO_FRAME)+startRecording；仅 startRecording() 不够。
+// initFileListDir 失败时 RecordCamera::startRecord 仍返回失败，但 recordStat 已由 start() 置位，
+// dvr_factory::startRecord 仍会打开 VIDEO_FRAME 管线——与插 TF 后恢复画面同路径。
+void ensurePreviewPipeline(dvr_factory *dvr, int cameraId)
+{
+    if (!dvr) {
+        return;
+    }
+    qDebug() << "[Ahd] ensurePreviewPipeline startRecord camera" << cameraId;
+    if (dvr->startRecord() != 0) {
+        qWarning() << "[Ahd] ensurePreviewPipeline startRecord failed camera" << cameraId;
+        return;
+    }
+    qDebug() << "[Ahd] ensurePreviewPipeline ready camera" << cameraId;
+}
+
+void applyRecordDirToSdk(int cameraId, const QString &rootPath)
+{
+    if (rootPath.isEmpty()) {
+        return;
+    }
+    QByteArray path = rootPath.toUtf8();
+    config_set_curfiledir(cameraId, path.data());
+    if (cameraId == 360) {
+        config_set_curfiledir(0, path.data());
+    }
 }
 
 void applySdkWatermark(dvr_factory *dvr, const QString &line1, const QString &line2)
@@ -367,9 +404,17 @@ bool AhdCameraPool::resumePreview(const QVector<int> &cameraIds, bool hideHwOver
         }
 
         qDebug() << "[Ahd] resume camera" << cameraId << dvr;
+        if (!ch.recordInited) {
+            if (dvr->recordInit() != 0) {
+                qWarning() << "[Ahd] resume recordInit failed camera" << cameraId;
+            } else {
+                ch.recordInited = true;
+            }
+        }
         if (cameraId != 360 && dvr->start() < 0) {
             return false;
         }
+        ensurePreviewPipeline(dvr, cameraId);
         if (dvr->startPriview(vv) != 0) {
             return false;
         }
@@ -553,12 +598,29 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
     }
 
     for (const OpenEntry &e : opened) {
-        qDebug() << "[Ahd] phase2 start() camera" << e.cameraId;
+        ChannelState &ch = m_channels[e.slot];
+        if (!ch.recordInited) {
+            qDebug() << "[Ahd] phase2 recordInit camera" << e.cameraId;
+            if (e.dvr->recordInit() != 0) {
+                qWarning() << "[Ahd] recordInit failed camera" << e.cameraId;
+            } else {
+                ch.recordInited = true;
+            }
+        }
+    }
+
+    for (const OpenEntry &e : opened) {
+        qDebug() << "[Ahd] phase3 start() camera" << e.cameraId;
         if (e.dvr->start() < 0) {
             emit poolError(QStringLiteral("摄像头 %1 start() 失败").arg(e.cameraId));
             stopAll();
             return false;
         }
+    }
+
+    for (const OpenEntry &e : opened) {
+        qDebug() << "[Ahd] phase3.5 ensurePreviewPipeline camera" << e.cameraId;
+        ensurePreviewPipeline(e.dvr, e.cameraId);
     }
 
     if (!g_displayInited) {
@@ -573,7 +635,7 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
     resetPreviewFpsStats();
 
     for (const OpenEntry &e : opened) {
-        qDebug() << "[Ahd] phase3 startPriview camera" << e.cameraId;
+        qDebug() << "[Ahd] phase4 startPriview camera" << e.cameraId;
         ChannelState &ch = m_channels[e.slot];
         if (e.dvr->startPriview(vv) != 0) {
             m_running = false;
@@ -606,6 +668,7 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
     }
 
     applySafetyWatermarks(QString());
+    armDeferredRecording();
 
     markAhdSessionActive();
     noteHardwareRecoveryDone();
@@ -998,6 +1061,10 @@ void AhdCameraPool::syncRecordingState()
         auto *dvr = static_cast<dvr_factory *>(ch.dvr);
 
         if (want && !ch.recordOn) {
+            const QStringList roots = AhdRecordStore::recordRootPaths();
+            if (!roots.isEmpty()) {
+                applyRecordDirToSdk(ch.cameraId, roots.first());
+            }
             if (!ch.recordInited) {
                 if (dvr->recordInit() != 0) {
                     qWarning() << "[Ahd] recordInit failed camera" << ch.cameraId;
@@ -1008,16 +1075,19 @@ void AhdCameraPool::syncRecordingState()
                     dvr->mRecordCamera->setDuration(180); // 3 minutes per file segment
                 }
             }
-            if (dvr->startRecord() != 0) {
-                qWarning() << "[Ahd] startRecord failed camera" << ch.cameraId;
-                continue;
+            // 预览管线已在 ensurePreviewPipeline 打开；此处仅在有 TF 时标记录像写入。
+            if (dvr->mRecordCamera && dvr->mRecordCamera->storage_state != 1) {
+                if (dvr->startRecord() != 0) {
+                    qWarning() << "[Ahd] startRecord failed camera" << ch.cameraId;
+                    continue;
+                }
             }
             ch.recordOn = true;
             qDebug() << "[Ahd] recording started camera" << ch.cameraId;
         } else if (!want && ch.recordOn) {
-            dvr->stopRecord();
+            // 无 TF 时勿 stopRecord：360 预览依赖 VIDEO_FRAME 管线，stopRecord 会断画面。
             ch.recordOn = false;
-            qDebug() << "[Ahd] recording stopped camera" << ch.cameraId;
+            qDebug() << "[Ahd] recording disabled (preview pipeline kept) camera" << ch.cameraId;
         }
     }
 

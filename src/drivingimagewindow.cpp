@@ -131,6 +131,9 @@ void DrivingImageWindow::bindAhdSignals()
                 m_exitHintLabel->hide();
             }
             updatePreviewChrome();
+            if (m_ahdManager) {
+                m_ahdManager->syncRecordingWithSettings();
+            }
         }
     });
     connect(ahdManager(), &AhdManager::cameraError, this, [this](const QString &message) {
@@ -160,13 +163,13 @@ void DrivingImageWindow::warmupCamera()
 
     AhdManager *mgr = ahdManager();
     if (mgr->isCameraReady()) {
-        qDebug() << "[Driving] warmupCamera: already ready";
+        qDebug() << "[Driving] already ready";
         return;
     }
 
-    qDebug() << "[Driving] warmupCamera: warmupHardware mode" << m_cameraMode;
+    qDebug() << "[Driving] warmupHardware mode" << m_cameraMode;
     if (!mgr->warmupHardware()) {
-        qWarning() << "[Driving] warmupCamera: warmupHardware failed";
+        qWarning() << "[Driving] warmupHardware failed";
         return;
     }
     mgr->enableSafetyWatermark(QStringLiteral("请注意周边安全"));
@@ -957,6 +960,19 @@ void DrivingImageWindow::startPreviewIfNeeded()
         return;
     }
 
+    AhdManager *mgr = ahdManager();
+    if (!mgr->isCameraReady()) {
+        qDebug() << "[Driving] startPreviewIfNeeded: camera not ready, warmup first";
+        if (!mgr->warmupHardware()) {
+            if (m_exitHintLabel) {
+                m_exitHintLabel->setText(QStringLiteral("影像功能出现故障"));
+                layoutCenterHint();
+                m_exitHintLabel->show();
+            }
+            return;
+        }
+    }
+
     qDebug() << "[Driving] startPreviewIfNeeded: opening cameras";
     updatePreviewLayout();
     if (m_exitHintLabel) {
@@ -1011,9 +1027,7 @@ void DrivingImageWindow::setDrivingMode(int mode)
     }
     if (isVisible()) {
         updatePreviewLayout();
-        if (m_ahdManager && m_ahdManager->isCameraReady()) {
-            startPreviewIfNeeded();
-        }
+        startPreviewIfNeeded();
     }
     updatePreviewChrome();
 }
@@ -1107,9 +1121,6 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
                 startPreviewIfNeeded();
             }
         });
-    }
-    if (m_ahdManager) {
-        m_ahdManager->syncRecordingWithSettingsNow();
     }
     onSdcardStateChanged(AhdRecordStore::hasRecordStorage());
     qDebug() << "[Driving] showEvent end";

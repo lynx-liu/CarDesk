@@ -156,7 +156,8 @@ bool AhdManager::startPreview(QWidget *parentWidget, int x, int y, int w, int h)
         if (!m_pool->hasPersistedFactories()) {
             m_previewWidget->clearChannelCache();
         }
-        syncRecordingWithSettingsNow();
+        // 预览先出图，录像状态稍后同步（无 TF 时仅跳过 startRecord，不阻塞预览）
+        QTimer::singleShot(0, this, &AhdManager::flushRecordingSync);
     }
 
     if (!m_prevActive) {
