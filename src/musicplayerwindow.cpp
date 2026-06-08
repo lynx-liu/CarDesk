@@ -4,6 +4,7 @@
 #include "devicedetect.h"
 #include "topbarwidget.h"
 #include "appsignals.h"
+#include "appsettings.h"
 #include "mediamanager.h"
 #include "t507sdkbridge.h"
 
@@ -892,6 +893,9 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
         "QPushButton { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }"
         "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }");
     m_btTab->setCursor(Qt::PointingHandCursor);
+    if (!AppSettings::debugMode()) {
+        m_btTab->hide();
+    }
 
     // ── 专辑封面（USB:120,182,210,210；蓝牙:120,182,320,320）───────────────────
     m_albumImage = new QLabel(page);
@@ -2125,6 +2129,9 @@ void MusicPlayerWindow::onUsbTabClicked()
 
 void MusicPlayerWindow::onBtTabClicked()
 {
+    if (!AppSettings::debugMode()) {
+        return;
+    }
     if (!m_isUsbMode) return;
     if (m_mediaManager) {
         m_mediaManager->prepareForBluetoothMusic();
