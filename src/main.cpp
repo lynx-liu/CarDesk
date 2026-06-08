@@ -22,6 +22,7 @@
 #include <QAbstractButton>
 #include <QAbstractItemView>
 #include <QSocketNotifier>
+#include <csignal>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -44,6 +45,7 @@
 #include "appsettings.h"
 #include "ahdmanager.h"
 #include "tfcarddetect.h"
+#include "processguard.h"
 
 // ── 背光控制（POWER 键关/亮屏，SLEEP 键关机，具体 dispdbg 操作在 backlight.cpp）─
 static MainWindow *findMainWindow();
@@ -1034,14 +1036,40 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    QString instanceLockError;
+    if (!ProcessGuard::tryAcquireInstanceLock(&instanceLockError)) {
+        qCritical().noquote() << instanceLockError;
+        return 1;
+    }
+
     QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, []() { ProcessGuard::releaseInstanceLock(); });
     if (s_debugMode) {
         AppSettings::setDebugMode(true);
     }
 #ifdef CAR_DESK_USE_T507_SDK
     AhdManager::globalInit();
     QObject::connect(&app, &QCoreApplication::aboutToQuit, []() { AhdManager::globalCleanup(); });
+    // First Ctrl+C quits; second forces exit if SDK teardown blocks (e.g. after TF unplug).
+    std::signal(SIGINT, +[](int sig) {
+        static volatile sig_atomic_t hits = 0;
+        if (++hits >= 2) {
+            AhdManager::globalCleanup();
+            ProcessGuard::releaseInstanceLock();
+            _exit(128 + sig);
+        }
+        if (QCoreApplication::instance()) {
+            QMetaObject::invokeMethod(QCoreApplication::instance(), "quit", Qt::QueuedConnection);
+        }
+    });
+    std::signal(SIGTERM, +[](int sig) {
+        if (QCoreApplication::instance()) {
+            QMetaObject::invokeMethod(QCoreApplication::instance(), "quit", Qt::QueuedConnection);
+        } else {
+            _exit(128 + sig);
+        }
+    });
 #endif
     // 设备 buildroot 默认 LANG=C，强制 UTF-8 避免中文文件名乱码
     QTextCodec::setCodecForLocale(QTextCodec::codecForName("UTF-8"));

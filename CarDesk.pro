@@ -149,10 +149,12 @@ HEADERS += \
     src/mcuserialreader.h \
     src/backlight.h \
     src/mupdfdocument.h \
-    src/pinyin_dictionary.h
+    src/pinyin_dictionary.h \
+    src/processguard.h
 
 SOURCES += \
     src/main.cpp \
+    src/processguard.cpp \
     src/automotivedriving.cpp \
     src/mainwindow.cpp \
     src/devicedetect.cpp \
