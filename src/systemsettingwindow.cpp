@@ -8,7 +8,6 @@
 #include "appsignals.h"
 #include "appsettings.h"
 #include "automotivedriving.h"
-#include "processguard.h"
 #include "t507sdkbridge.h"
 
 static const QString kUsbMountDir    = QStringLiteral("/mnt/usb");
@@ -49,7 +48,6 @@ static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
 #include <QSettings>
 #include <QtConcurrent>
 
-#include <unistd.h>
 #include <QScreen>
 #include <QTime>
 #include <QSet>
@@ -498,22 +496,15 @@ void SystemSettingWindow::onStartUpdate()
 
     m_updateProgress = 100;
     repaintAppUpdateUi(m_updateProgressBar, m_updateProgressText, m_updateStateLabel, 100,
-                       QStringLiteral("应用升级成功，正在自动重启程序..."));
+                       QStringLiteral("应用升级成功，正在同步并重启设备..."));
     if (m_updateCancelBtn) {
         m_updateCancelBtn->hide();
     }
 
     QTimer::singleShot(3000, this, []() {
-        ProcessGuard::releaseInstanceLock();
-        const qint64 pid = static_cast<qint64>(::getpid());
-        const QString cmd = QStringLiteral(
-                                "while kill -0 %1 2>/dev/null; do sleep 1; done; "
-                                "rm -f /tmp/cardesk.lock; exec /usr/bin/run.sh")
-                                .arg(pid);
-        if (QProcess::startDetached(QStringLiteral("/bin/sh"),
-                                    QStringList() << QStringLiteral("-c") << cmd)) {
-            QApplication::quit();
-        }
+        QProcess::startDetached(QStringLiteral("/bin/sh"),
+                                QStringList() << QStringLiteral("-c")
+                                              << QStringLiteral("sync; reboot"));
     });
     });
     watcher->setFuture(QtConcurrent::run([archivePath]() {

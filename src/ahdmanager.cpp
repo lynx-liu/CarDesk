@@ -254,7 +254,7 @@ void AhdManager::syncRecordingWithSettings()
     if (!m_recordSyncTimer) {
         m_recordSyncTimer = new QTimer(this);
         m_recordSyncTimer->setSingleShot(true);
-        m_recordSyncTimer->setInterval(350);
+        m_recordSyncTimer->setInterval(1500);
         connect(m_recordSyncTimer, &QTimer::timeout, this, &AhdManager::flushRecordingSync);
     }
     m_recordSyncTimer->start();
@@ -271,7 +271,7 @@ void AhdManager::syncRecordingWithSettingsNow()
 void AhdManager::flushRecordingSync()
 {
     if (m_pool) {
-        m_pool->syncRecordingState();
+        m_pool->scheduleRecordingSync();
     }
     updateRecordingBadge();
     updateCameraFaultOverlay();

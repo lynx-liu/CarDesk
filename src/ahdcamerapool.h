@@ -64,7 +64,6 @@ public:
     bool copyLatestFrame(int channelIndex, FrameSlot *out) const;
 
     void applySafetyWatermarks(const QString &text);
-    void syncRecordingState();
     bool isRecordingActive() const;
 
     // 录像期间摄像头故障文案（空串表示无故障）；channelIndex 0..3
@@ -84,6 +83,10 @@ signals:
     void poolError(const QString &message);
     void recordingActiveChanged(bool active);
     void cameraFaultsChanged();
+
+public slots:
+    void syncRecordingState();
+    void scheduleRecordingSync();
 
 private slots:
 #ifdef CAR_DESK_USE_T507_SDK
@@ -120,6 +123,9 @@ private:
     bool m_shuttingDown = false;
     bool m_pendingRecordingStart = false;
     QTimer *m_recordingDeferTimer = nullptr;
+    QTimer *m_recordSyncScheduleTimer = nullptr;
+    bool m_recordSyncBusy = false;
+    bool m_recordSyncPending = false;
 
     void armDeferredRecording();
     void tryStartRecordingWhenReady();

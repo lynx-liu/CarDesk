@@ -10,6 +10,7 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QFile>
+#include <QFileInfo>
 #include <QMetaObject>
 #include <QTimer>
 #include <unistd.h>
@@ -197,7 +198,7 @@ void poolNotifyCallback(int32_t msgType, int32_t ext1, int32_t ext2, void *user)
     g_lastStoreErrNotifyMs = nowMs;
     qWarning() << "[Ahd] CAMERA_MSG_DVR_STORE_ERR, stop storage recording";
     g_recordStorageAvailable = false;
-    QMetaObject::invokeMethod(AhdCameraPool::s_activePool, "syncRecordingState", Qt::QueuedConnection);
+    QMetaObject::invokeMethod(AhdCameraPool::s_activePool, "scheduleRecordingSync", Qt::QueuedConnection);
 }
 
 bool isPreviewFrameMsg(int32_t msgType)
@@ -342,6 +343,32 @@ void startPreviewVideoPipeline(dvr_factory *dvr, int cameraId)
     qDebug() << "[Ahd] startPreviewVideoPipeline ok (display only) camera" << cameraId;
 }
 
+bool isStorageRootUsable(const QString &root)
+{
+    const QFileInfo info(root);
+    return info.exists() && info.isDir() && info.isWritable();
+}
+
+bool startStorageRecordingSafe(dvr_factory *dvr, int cameraId, bool previewActive)
+{
+    if (!dvr) {
+        return false;
+    }
+    if (previewActive) {
+        stopDvrStoragePipeline(dvr);
+    }
+    if (dvr->startRecord() != 0) {
+        if (previewActive) {
+            startPreviewVideoPipeline(dvr, cameraId);
+        }
+        return false;
+    }
+    if (previewActive) {
+        startPreviewVideoPipeline(dvr, cameraId);
+    }
+    return true;
+}
+
 bool isDvrStorageWriting(dvr_factory *dvr)
 {
     if (!dvr || !dvr->mRecordCamera) {
@@ -426,8 +453,11 @@ AhdCameraPool::AhdCameraPool(QObject *parent)
     : QObject(parent)
 {
     g_recordStorageAvailable = AhdRecordStore::hasRecordStorage();
-    connect(AppSignals::instance(), &AppSignals::sdcardStateChanged, this, [](bool ready) {
+    connect(AppSignals::instance(), &AppSignals::sdcardStateChanged, this, [this](bool ready) {
         g_recordStorageAvailable = ready;
+        if (ready && m_running) {
+            scheduleRecordingSync();
+        }
     });
 }
 
@@ -669,10 +699,15 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
         }
     }
 
+    const QStringList recordRoots = AhdRecordStore::recordRootPaths();
+
     for (int n = 0; n < opened.size(); ++n) {
         const OpenEntry &e = opened.at(n);
         ChannelState &ch = m_channels[e.slot];
         if (!ch.recordInited) {
+            if (!recordRoots.isEmpty()) {
+                applyRecordDirToSdk(e.cameraId, recordRoots.first());
+            }
             qDebug() << "[Ahd] phase2 recordInit camera" << e.cameraId;
             if (e.dvr->recordInit() != 0) {
                 qWarning() << "[Ahd] recordInit failed camera" << e.cameraId;
@@ -1080,7 +1115,7 @@ void AhdCameraPool::armDeferredRecording()
             }
             qWarning() << "[Ahd] deferred recording fallback (preview frame timeout)";
             m_pendingRecordingStart = false;
-            QMetaObject::invokeMethod(this, "syncRecordingState", Qt::QueuedConnection);
+            QMetaObject::invokeMethod(this, "scheduleRecordingSync", Qt::QueuedConnection);
         });
     }
     // 插 TF 时勿在 startAll 同步 recordInit；若迟迟无预览帧则超时兜底启动录像。
@@ -1113,7 +1148,21 @@ void AhdCameraPool::tryStartRecordingWhenReady()
         m_recordingDeferTimer->stop();
     }
     qDebug() << "[Ahd] preview frames ready, starting deferred recording";
-    QMetaObject::invokeMethod(this, "syncRecordingState", Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, "scheduleRecordingSync", Qt::QueuedConnection);
+}
+
+void AhdCameraPool::scheduleRecordingSync()
+{
+    if (m_shuttingDown || !m_running) {
+        return;
+    }
+    if (!m_recordSyncScheduleTimer) {
+        m_recordSyncScheduleTimer = new QTimer(this);
+        m_recordSyncScheduleTimer->setSingleShot(true);
+        m_recordSyncScheduleTimer->setInterval(1500);
+        connect(m_recordSyncScheduleTimer, &QTimer::timeout, this, &AhdCameraPool::syncRecordingState);
+    }
+    m_recordSyncScheduleTimer->start();
 }
 
 void AhdCameraPool::syncRecordingState()
@@ -1121,6 +1170,11 @@ void AhdCameraPool::syncRecordingState()
     if (m_shuttingDown || !m_running) {
         return;
     }
+    if (m_recordSyncBusy) {
+        m_recordSyncPending = true;
+        return;
+    }
+    m_recordSyncBusy = true;
 
     struct StorageStopEntry {
         dvr_factory *dvr = nullptr;
@@ -1144,9 +1198,15 @@ void AhdCameraPool::syncRecordingState()
 
             if (want && !ch.recordOn) {
                 const QStringList roots = AhdRecordStore::recordRootPaths();
-                if (!roots.isEmpty()) {
-                    applyRecordDirToSdk(ch.cameraId, roots.first());
+                if (roots.isEmpty()) {
+                    continue;
                 }
+                const QString root = roots.first();
+                if (!isStorageRootUsable(root)) {
+                    qWarning() << "[Ahd] storage path not ready:" << root;
+                    continue;
+                }
+                applyRecordDirToSdk(ch.cameraId, root);
                 if (!ch.recordInited) {
                     if (dvr->recordInit() != 0) {
                         qWarning() << "[Ahd] recordInit failed camera" << ch.cameraId;
@@ -1157,8 +1217,8 @@ void AhdCameraPool::syncRecordingState()
                         dvr->mRecordCamera->setDuration(180); // 3 minutes per file segment
                     }
                 }
-                if (dvr->startRecord() != 0) {
-                    qWarning() << "[Ahd] startRecord failed camera" << ch.cameraId;
+                if (!startStorageRecordingSafe(dvr, ch.cameraId, ch.previewOn)) {
+                    qWarning() << "[Ahd] start storage recording failed camera" << ch.cameraId;
                     continue;
                 }
                 ch.recordOn = true;
@@ -1190,6 +1250,12 @@ void AhdCameraPool::syncRecordingState()
     if (wasActive != nowActive) {
         setRecordingFaultMonitorActive(nowActive);
         emit recordingActiveChanged(nowActive);
+    }
+
+    m_recordSyncBusy = false;
+    if (m_recordSyncPending) {
+        m_recordSyncPending = false;
+        QMetaObject::invokeMethod(this, "scheduleRecordingSync", Qt::QueuedConnection);
     }
 }
 
@@ -1277,6 +1343,8 @@ void AhdCameraPool::applySafetyWatermarks(const QString &text)
 }
 
 void AhdCameraPool::syncRecordingState() {}
+
+void AhdCameraPool::scheduleRecordingSync() {}
 
 bool AhdCameraPool::isRecordingActive() const
 {
