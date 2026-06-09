@@ -50,7 +50,6 @@ private slots:
 
 private:
     QString findAppUpdateArchive(QString *usbRoot = nullptr) const;
-    bool applyAppUpdateFromArchive(const QString &archivePath, QString *errorMessage);
     void setupUI();
     QWidget *createDisplayPage();
     QWidget *createSoundPage();
@@ -80,6 +79,7 @@ private:
     QPushButton *m_updateCancelBtn;
     int m_updateProgress;
     int m_selectedModule;
+    bool m_appUpdateRunning = false;
     QTimer *m_updateTimer;
     
     // 固件升级相关
