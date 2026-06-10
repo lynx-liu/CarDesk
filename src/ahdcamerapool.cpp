@@ -65,9 +65,9 @@ void prepareSdkRuntimeOnce()
     sigemptyset(&mask);
     sigaddset(&mask, SIGIO);
     pthread_sigmask(SIG_BLOCK, &mask, nullptr);
-    sdk_log_setlevel(6);
+    sdk_log_setlevel(2);
     g_sdkRuntimePrepared = true;
-    qDebug() << "[Ahd] SDK runtime prepared (SIGIO blocked, log level=6)";
+    qDebug() << "[Ahd] SDK runtime prepared (SIGIO blocked, log level=2)";
 }
 
 void markAhdSessionActive()
@@ -349,6 +349,15 @@ bool isStorageRootUsable(const QString &root)
     return info.exists() && info.isDir() && info.isWritable();
 }
 
+bool isDvrStorageWriting(dvr_factory *dvr)
+{
+    if (!dvr || !dvr->mRecordCamera) {
+        return false;
+    }
+    return dvr->mRecordCamera->storage_state == 1
+        && dvr->mRecordCamera->recordStat == RECORD_STATE_STARTED;
+}
+
 bool startStorageRecordingSafe(dvr_factory *dvr, int cameraId, bool previewActive)
 {
     if (!dvr) {
@@ -357,25 +366,16 @@ bool startStorageRecordingSafe(dvr_factory *dvr, int cameraId, bool previewActiv
     if (previewActive) {
         stopDvrStoragePipeline(dvr);
     }
-    if (dvr->startRecord() != 0) {
+    dvr->startRecord();
+    if (!isDvrStorageWriting(dvr)) {
+        qWarning() << "[Ahd] startRecord did not enter storage writing state camera" << cameraId;
         if (previewActive) {
             startPreviewVideoPipeline(dvr, cameraId);
         }
         return false;
     }
-    if (previewActive) {
-        startPreviewVideoPipeline(dvr, cameraId);
-    }
+    // 预览已开启时勿再调 startPreviewVideoPipeline：它会 stopRecord()，刚启动的写盘会被立刻关掉。
     return true;
-}
-
-bool isDvrStorageWriting(dvr_factory *dvr)
-{
-    if (!dvr || !dvr->mRecordCamera) {
-        return false;
-    }
-    return dvr->mRecordCamera->storage_state == 1
-        && dvr->mRecordCamera->recordStat == RECORD_STATE_STARTED;
 }
 
 void applyRecordDirToSdk(int cameraId, const QString &rootPath)
@@ -455,9 +455,22 @@ AhdCameraPool::AhdCameraPool(QObject *parent)
     g_recordStorageAvailable = AhdRecordStore::hasRecordStorage();
     connect(AppSignals::instance(), &AppSignals::sdcardStateChanged, this, [this](bool ready) {
         g_recordStorageAvailable = ready;
-        if (ready && m_running) {
-            scheduleRecordingSync();
+        if (!m_running) {
+            return;
         }
+        if (ready) {
+            armDeferredRecording();
+            scheduleRecordingSync();
+            return;
+        }
+        m_pendingRecordingStart = false;
+        if (m_recordingDeferTimer) {
+            m_recordingDeferTimer->stop();
+        }
+        if (m_recordSyncScheduleTimer && m_recordSyncScheduleTimer->isActive()) {
+            m_recordSyncScheduleTimer->stop();
+        }
+        syncRecordingState();
     });
 }
 
@@ -1213,9 +1226,9 @@ void AhdCameraPool::syncRecordingState()
                         continue;
                     }
                     ch.recordInited = true;
-                    if (dvr->mRecordCamera) {
-                        dvr->mRecordCamera->setDuration(180); // 3 minutes per file segment
-                    }
+                }
+                if (dvr->mRecordCamera) {
+                    dvr->mRecordCamera->setDuration(180); // 3 minutes per file segment
                 }
                 if (!startStorageRecordingSafe(dvr, ch.cameraId, ch.previewOn)) {
                     qWarning() << "[Ahd] start storage recording failed camera" << ch.cameraId;

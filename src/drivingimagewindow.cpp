@@ -649,7 +649,11 @@ void DrivingImageWindow::onSdcardStateChanged(bool hasTf)
         m_playbackPage->reloadDates();
     }
     if (m_stack && m_stack->currentIndex() == 0 && m_ahdManager) {
-        m_ahdManager->syncRecordingWithSettings();
+        if (hasTf) {
+            m_ahdManager->syncRecordingWithSettings();
+        } else {
+            m_ahdManager->syncRecordingWithSettingsNow();
+        }
     }
 }
 
