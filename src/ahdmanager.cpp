@@ -148,8 +148,10 @@ bool AhdManager::startPreview(QWidget *parentWidget, int x, int y, int w, int h)
 
     // 先创建 GL 预览控件再打开 SDK，避免首帧回调时无有效绘制上下文导致堆损坏
     attachPreviewWidget(parentWidget, rect.width(), rect.height());
+    m_pool->setQtPreviewDeliveryEnabled(true);
 
     if (!m_camReady && !startCamera()) {
+        m_pool->setQtPreviewDeliveryEnabled(false);
         return false;
     }
     if (m_previewWidget) {
@@ -209,6 +211,9 @@ void AhdManager::stopPreview()
 {
     if (!m_prevActive) {
         return;
+    }
+    if (m_pool) {
+        m_pool->setQtPreviewDeliveryEnabled(false);
     }
     if (m_previewWidget) {
         m_previewWidget->hide();

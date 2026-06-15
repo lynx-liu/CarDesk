@@ -63,6 +63,10 @@ public:
 
     bool copyLatestFrame(int channelIndex, FrameSlot *out) const;
 
+    // 仅控制 Qt/OpenGL 预览帧拷贝；不影响 SDK 录像写盘。
+    void setQtPreviewDeliveryEnabled(bool enabled);
+    bool isQtPreviewDeliveryEnabled() const;
+
     void applySafetyWatermarks(const QString &text);
     bool isRecordingActive() const;
 
@@ -126,6 +130,8 @@ private:
     QTimer *m_recordSyncScheduleTimer = nullptr;
     bool m_recordSyncBusy = false;
     bool m_recordSyncPending = false;
+    bool m_qtPreviewDeliveryEnabled = false;
+    bool m_previewStreamAlive[kChannelCount] = {};
 
     void armDeferredRecording();
     void tryStartRecordingWhenReady();

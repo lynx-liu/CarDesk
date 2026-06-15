@@ -850,6 +850,10 @@ void AhdCameraPool::stopAll()
             m_frames[i] = FrameSlot();
         }
     }
+    m_qtPreviewDeliveryEnabled = false;
+    for (int i = 0; i < kChannelCount; ++i) {
+        m_previewStreamAlive[i] = false;
+    }
 
     m_shuttingDown = false;
 }
@@ -867,6 +871,25 @@ void AhdCameraPool::setLayoutSpec(const AhdLayoutSpec &spec)
 AhdLayoutSpec AhdCameraPool::layoutSpec() const
 {
     return m_layoutSpec;
+}
+
+void AhdCameraPool::setQtPreviewDeliveryEnabled(bool enabled)
+{
+    if (m_qtPreviewDeliveryEnabled == enabled) {
+        return;
+    }
+    m_qtPreviewDeliveryEnabled = enabled;
+    if (!enabled) {
+        QMutexLocker lock(&m_frameMutex);
+        for (int i = 0; i < kChannelCount; ++i) {
+            m_frames[i] = FrameSlot();
+        }
+    }
+}
+
+bool AhdCameraPool::isQtPreviewDeliveryEnabled() const
+{
+    return m_qtPreviewDeliveryEnabled;
 }
 
 void AhdCameraPool::onPreviewFrameFromSdk(void *dvrUser, char *dataPtr)
@@ -891,6 +914,15 @@ void AhdCameraPool::onPreviewFrameFromSdk(void *dvrUser, char *dataPtr)
         }
     }
     if (channelIndex < 0) {
+        return;
+    }
+
+    m_previewStreamAlive[channelIndex] = true;
+    if (!m_qtPreviewDeliveryEnabled) {
+        if (isRecordingActive()) {
+            recordFrameForFaultCheck(channelIndex);
+        }
+        tryStartRecordingWhenReady();
         return;
     }
 
@@ -1143,7 +1175,13 @@ void AhdCameraPool::tryStartRecordingWhenReady()
     }
 
     bool hasFrame = false;
-    {
+    for (int i = 0; i < kChannelCount; ++i) {
+        if (m_previewStreamAlive[i]) {
+            hasFrame = true;
+            break;
+        }
+    }
+    if (!hasFrame) {
         QMutexLocker lock(&m_frameMutex);
         for (int i = 0; i < kChannelCount; ++i) {
             if (m_frames[i].generation != 0 && !m_frames[i].nv21.isEmpty()) {
@@ -1348,6 +1386,16 @@ bool AhdCameraPool::copyLatestFrame(int channelIndex, FrameSlot *out) const
     Q_UNUSED(channelIndex);
     Q_UNUSED(out);
     return false;
+}
+
+void AhdCameraPool::setQtPreviewDeliveryEnabled(bool enabled)
+{
+    m_qtPreviewDeliveryEnabled = enabled;
+}
+
+bool AhdCameraPool::isQtPreviewDeliveryEnabled() const
+{
+    return m_qtPreviewDeliveryEnabled;
 }
 
 void AhdCameraPool::applySafetyWatermarks(const QString &text)
