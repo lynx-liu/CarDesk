@@ -27,6 +27,7 @@
 #include <QGesture>
 #include <QGestureEvent>
 #include "appsignals.h"
+#include "imageloader.h"
 
 static const QString kUsbMountDir    = QStringLiteral("/mnt/usb");
 static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
@@ -375,7 +376,7 @@ void ImageViewingWindow::updateImageView()
 
     // Re-load from disk only when file or rotation changes (not on every zoom step)
     if (filePath != m_cachedImagePath || m_rotationAngle != m_cachedRotation) {
-        QPixmap raw(filePath);
+        QPixmap raw = QPixmap::fromImage(loadImageFile(filePath));
         if (raw.isNull())
             raw = QPixmap(QStringLiteral(":/images/image_view.png"));
         if (!raw.isNull() && m_rotationAngle != 0) {

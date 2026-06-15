@@ -133,6 +133,7 @@ HEADERS += \
     src/xplayercedarx.h \
     src/tfcarddetect.h \
     src/imageviewingwindow.h \
+    src/imageloader.h \
     src/t507sdkbridge.h \
     src/ahdmanager.h \
     src/ahdlayout.h \
@@ -178,6 +179,7 @@ SOURCES += \
     src/xplayercedarx.cpp \
     src/tfcarddetect.cpp \
     src/imageviewingwindow.cpp \
+    src/imageloader.cpp \
     src/t507sdkbridge.cpp \
     src/ahdmanager.cpp \
     src/ahdlayout.cpp \

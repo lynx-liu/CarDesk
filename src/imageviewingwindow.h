@@ -9,6 +9,8 @@
 #include <QThread>
 #include <QImage>
 
+#include "imageloader.h"
+
 class ImageListItemDelegate : public QStyledItemDelegate {
 public:
     explicit ImageListItemDelegate(QObject *parent = nullptr) : QStyledItemDelegate(parent) {}
@@ -67,7 +69,7 @@ public slots:
         m_cancel = false;
         for (const QString &p : paths) {
             if (m_cancel) break;
-            QImage img(p);
+            QImage img = loadImageFile(p);
             QImage thumb(160, 117, QImage::Format_RGB32);
             thumb.fill(Qt::black);
             if (!img.isNull()) {
