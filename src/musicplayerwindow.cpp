@@ -38,6 +38,8 @@ static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
 #include <QStorageInfo>
 #include <QShowEvent>
 #include <QtConcurrent/QtConcurrent>
+#include "imageloader.h"
+#include <QTemporaryFile>
 
 // 与 m_musicFiles 中路径匹配（含 QDir::cleanPath 归一化）
 static int indexOfPathInStringList(const QStringList &list, const QString &path)
@@ -181,6 +183,24 @@ static QByteArray findImageData(const QByteArray &data)
 static QPixmap loadPixmapFromData(const QByteArray &data)
 {
     QByteArray payload = findImageData(data);
+    // If data looks like a JPEG, avoid Qt's JPEG plugin and use MuPDF-based loader
+    // via loadImageFile (which handles JPEGs through MuPDF) to prevent libjpeg ABI
+    // clashes between MuPDF and Qt plugins.
+    if (payload.size() >= 3 && static_cast<unsigned char>(payload[0]) == 0xFF
+            && static_cast<unsigned char>(payload[1]) == 0xD8
+            && static_cast<unsigned char>(payload[2]) == 0xFF) {
+        QTemporaryFile tf(QDir::tempPath() + "/cardesk_cover_XXXXXX.jpg");
+        if (tf.open()) {
+            tf.write(payload);
+            tf.flush();
+            const QString tmpPath = tf.fileName();
+            QImage img = loadImageFile(tmpPath);
+            // QTemporaryFile will be removed when it goes out of scope if autoRemove is true
+            if (!img.isNull()) return QPixmap::fromImage(img);
+            // fallback to trying Qt loader below
+        }
+    }
+
     QImage image;
     if (image.loadFromData(payload)) {
         return QPixmap::fromImage(image);
