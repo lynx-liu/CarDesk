@@ -203,7 +203,8 @@ void poolNotifyCallback(int32_t msgType, int32_t ext1, int32_t ext2, void *user)
 
 bool isPreviewFrameMsg(int32_t msgType)
 {
-    return msgType == CAMERA_MSG_PREVIEW_FRAME || msgType == CAMERA_MSG_VIDEO_FRAME;
+    // Qt 实时预览只消费 PREVIEW_FRAME；VIDEO_FRAME 仅留给录像编码，避免录像水印叠到前台预览。
+    return msgType == CAMERA_MSG_PREVIEW_FRAME;
 }
 
 void poolDataCallback(int32_t msgType, char *dataPtr, camera_frame_metadata_t *metadata, void *user)
@@ -390,22 +391,50 @@ void applyRecordDirToSdk(int cameraId, const QString &rootPath)
     }
 }
 
-void applySdkWatermark(dvr_factory *dvr, const QString &line1, const QString &line2)
+bool isMultiCamFactory(int cameraId)
+{
+    return cameraId == 360 || cameraId == 180 || cameraId == 270 || cameraId == 271
+        || cameraId == 272;
+}
+
+CameraHardware *recordingWatermarkHardware(dvr_factory *dvr)
+{
+    if (!dvr) {
+        return nullptr;
+    }
+    if (isMultiCamFactory(dvr->mCameraId)) {
+        return (dvr->m360Hardware && dvr->m360Hardware[0]) ? dvr->m360Hardware[0] : nullptr;
+    }
+    return dvr->mHardwareCameras;
+}
+
+void disableSdkWatermark(dvr_factory *dvr)
 {
     if (!dvr) {
         return;
     }
-    if (line1.isEmpty() && line2.isEmpty()) {
-        // 通道名由 Qt 绘制；必须关闭 SDK 预览水印，否则 NV21 里会残留斜角 OSD 与 Qt 叠影。
-        dvr->disableWaterMark();
+    // 通道名由 Qt 绘制；关闭 SDK 预览水印，避免 NV21 里残留斜角 OSD 与 Qt 叠影。
+    dvr->disableWaterMark();
+    if (CameraHardware *hw = recordingWatermarkHardware(dvr)) {
+        if (hw != dvr->mHardwareCameras) {
+            hw->sendCommand(CAMERA_CMD_STOP_WATER_MARK, 0, 0);
+        }
+    }
+}
+
+void applyRecordingTimestampWatermark(dvr_factory *dvr)
+{
+    CameraHardware *hw = recordingWatermarkHardware(dvr);
+    if (!hw) {
         return;
     }
-    dvr->enableWaterMark();
-    const QByteArray l1 = line1.toUtf8();
-    const QByteArray l2 = line2.toUtf8();
-    char bufname[512];
-    snprintf(bufname, sizeof(bufname), "64,64,0,64,150,%s,64,250,%s", l1.constData(), l2.constData());
-    dvr->setWaterMarkMultiple(bufname);
+    if (hw->sendCommand(CAMERA_CMD_START_WATER_MARK, 0, 0) != NO_ERROR) {
+        qWarning() << "[Ahd] enable recording watermark failed camera" << dvr->mCameraId;
+        return;
+    }
+    usleep(50000);
+    // 仅一行：SDK 在录像帧上自动刷新时间；VIDEO_ONLY 不画到预览帧。
+    hw->setWaterMarkMultiple(const_cast<char *>("64,64,0"), WATER_MARK_DISP_MODE_VIDEO_ONLY);
 }
 
 } // namespace
@@ -527,7 +556,7 @@ bool AhdCameraPool::resumePreview(const QVector<int> &cameraIds, bool hideHwOver
             return false;
         }
         ch.previewOn = true;
-        applySdkWatermark(dvr, QString(), QString());
+        disableSdkWatermark(dvr);
         if (hideHwOverlayImmediately) {
             applyHideHwOverlayOnly(cameraId);
         }
@@ -768,7 +797,7 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
             return false;
         }
         ch.previewOn = true;
-        applySdkWatermark(e.dvr, QString(), QString());
+        disableSdkWatermark(e.dvr);
         if (hideHwOverlayImmediately) {
             applyHideHwOverlayOnly(e.cameraId);
         }
@@ -813,7 +842,6 @@ void AhdCameraPool::stopAll()
     if (m_recordingDeferTimer) {
         m_recordingDeferTimer->stop();
     }
-
     qDebug() << "[Ahd] stopAll (stopPriview only, keep dvr_factory — never delete)";
     m_shuttingDown = true;
     const bool wasRecording = isRecordingActive();
@@ -879,12 +907,8 @@ void AhdCameraPool::setQtPreviewDeliveryEnabled(bool enabled)
         return;
     }
     m_qtPreviewDeliveryEnabled = enabled;
-    if (!enabled) {
-        QMutexLocker lock(&m_frameMutex);
-        for (int i = 0; i < kChannelCount; ++i) {
-            m_frames[i] = FrameSlot();
-        }
-    }
+    // 退出预览时不要清空 m_frames：保留最后一帧，使再次进入能立即显示上一帧画面，
+    // 避免等待首帧到来期间出现黑屏闪烁。新帧到来后会自动覆盖。
 }
 
 bool AhdCameraPool::isQtPreviewDeliveryEnabled() const
@@ -1273,6 +1297,7 @@ void AhdCameraPool::syncRecordingState()
                     continue;
                 }
                 ch.recordOn = true;
+                applyRecordingTimestampWatermark(dvr);
                 qDebug() << "[Ahd] storage recording started camera" << ch.cameraId;
             } else if (!want && (ch.recordOn || isDvrStorageWriting(dvr))) {
                 ch.recordOn = false;
@@ -1292,6 +1317,7 @@ void AhdCameraPool::syncRecordingState()
                 continue;
             }
             stopDvrStoragePipeline(entry.dvr);
+            disableSdkWatermark(entry.dvr);
             startPreviewVideoPipeline(entry.dvr, entry.cameraId);
             qDebug() << "[Ahd] storage stopped (display kept) camera" << entry.cameraId;
         }
@@ -1322,15 +1348,11 @@ bool AhdCameraPool::isRecordingActive() const
 
 void AhdCameraPool::applySafetyWatermarks(const QString &text)
 {
+    // 水印状态完全由录像开始/停止（syncRecordingState）驱动，且 SDK 后台常驻、
+    // 水印会一直保持。进入/恢复预览时不要在此（主线程）重设或阻塞水印——
+    // applyRecordingTimestampWatermark 内含 usleep，曾导致再次进入时主线程被阻塞、
+    // 预览窗口来不及绘制而黑屏闪烁。这里保持空操作。
     Q_UNUSED(text);
-    for (int i = 0; i < kChannelCount; ++i) {
-        if (!m_channels[i].dvr) {
-            continue;
-        }
-        auto *dvr = static_cast<dvr_factory *>(m_channels[i].dvr);
-        // 前/后/左/右角标由 Qt 预览控件绘制；关闭 SDK 预览水印（含时间戳/OSD），避免斜字叠影。
-        applySdkWatermark(dvr, QString(), QString());
-    }
 }
 
 bool AhdCameraPool::copyLatestFrame(int channelIndex, FrameSlot *out) const

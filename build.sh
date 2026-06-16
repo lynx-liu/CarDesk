@@ -251,7 +251,9 @@ build_t507() {
     
     # 避免 x86/ARM 目标文件混用导致链接错误（EM:62 等）
     rm -rf "$BUILD_DIR/arm64/.obj" "$BUILD_DIR/arm64/.moc"
-    mkdir -p "$BUILD_DIR/arm64"
+    # 重建编译产物目录：qmake 生成的 Makefile 不会自动创建 OBJECTS_DIR/MOC_DIR，
+    # 删除后若不重建，编译会写不进 .o 而最终在链接阶段报“.o 不存在”。
+    mkdir -p "$BUILD_DIR/arm64/.obj" "$BUILD_DIR/arm64/.moc"
     cd "$BUILD_DIR/arm64"
     
     if ! command -v "$arm_qmake" &> /dev/null; then
