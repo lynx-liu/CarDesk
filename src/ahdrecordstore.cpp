@@ -95,6 +95,19 @@ QString dateKeyFromFileInfo(const QFileInfo &fi)
     return fi.lastModified().toString(QStringLiteral("yyyy.MM.dd"));
 }
 
+quint64 recordFileTimeSortKey(const QString &path)
+{
+    static const QRegularExpression re(
+        QStringLiteral(R"((\d{4})(\d{2})(\d{2})_(\d{6}))"));
+    const QRegularExpressionMatch match =
+        re.match(QFileInfo(path).completeBaseName());
+    if (match.hasMatch()) {
+        return match.captured(1).toUInt() * 10000000000ULL + match.captured(2).toUInt() * 100000000ULL
+               + match.captured(3).toUInt() * 1000000ULL + match.captured(4).toUInt();
+    }
+    return static_cast<quint64>(QFileInfo(path).lastModified().toSecsSinceEpoch());
+}
+
 } // namespace
 
 void AhdRecordStore::updateStorageCache(bool present, const QStringList &roots)
@@ -143,6 +156,11 @@ QStringList AhdRecordStore::listVideoFilesForDate(const QString &dateKey)
         }
     }
     std::sort(matched.begin(), matched.end(), [](const QString &a, const QString &b) {
+        const quint64 ka = recordFileTimeSortKey(a);
+        const quint64 kb = recordFileTimeSortKey(b);
+        if (ka != kb) {
+            return ka < kb;
+        }
         return QFileInfo(a).fileName().compare(QFileInfo(b).fileName(), Qt::CaseInsensitive) < 0;
     });
     return matched;
