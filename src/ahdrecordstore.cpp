@@ -37,7 +37,7 @@ QStringList cachedRecordRoots()
     return storageCache().roots;
 }
 
-bool parseRecordTimestamp(const QString &baseName, QString *dateKey, QString *displayName)
+bool parseRecordTimestamp(const QString &baseName, QString *dateKey)
 {
     static const QRegularExpression re(
         QStringLiteral(R"((\d{4})(\d{2})(\d{2})_(\d{6}))"));
@@ -45,13 +45,9 @@ bool parseRecordTimestamp(const QString &baseName, QString *dateKey, QString *di
     if (!match.hasMatch()) {
         return false;
     }
-    const QString dateKeyValue =
-        QStringLiteral("%1.%2.%3").arg(match.captured(1), match.captured(2), match.captured(3));
     if (dateKey) {
-        *dateKey = dateKeyValue;
-    }
-    if (displayName) {
-        *displayName = QStringLiteral("%1_%2").arg(dateKeyValue, match.captured(4));
+        *dateKey = QStringLiteral("%1.%2.%3")
+                       .arg(match.captured(1), match.captured(2), match.captured(3));
     }
     return true;
 }
@@ -76,7 +72,7 @@ QString dateKeyFromFileInfo(const QFileInfo &fi)
 {
     const QString baseName = fi.completeBaseName();
     QString dateKey;
-    if (parseRecordTimestamp(baseName, &dateKey, nullptr)) {
+    if (parseRecordTimestamp(baseName, &dateKey)) {
         return dateKey;
     }
 
@@ -146,25 +142,15 @@ QStringList AhdRecordStore::listVideoFilesForDate(const QString &dateKey)
             matched.append(path);
         }
     }
-    std::sort(matched.begin(), matched.end());
+    std::sort(matched.begin(), matched.end(), [](const QString &a, const QString &b) {
+        return QFileInfo(a).fileName().compare(QFileInfo(b).fileName(), Qt::CaseInsensitive) < 0;
+    });
     return matched;
 }
 
 QString AhdRecordStore::displayNameForFile(const QString &filePath)
 {
-    const QFileInfo fi(filePath);
-    QString displayName;
-    if (parseRecordTimestamp(fi.completeBaseName(), nullptr, &displayName)) {
-        return displayName;
-    }
-
-    QString name = fi.completeBaseName();
-    name.replace(QLatin1Char('-'), QLatin1Char('_'));
-    if (name.size() > 10 && name.at(4) == QLatin1Char('.') && name.at(7) == QLatin1Char('.')) {
-        return name;
-    }
-    const QDateTime dt = fi.lastModified();
-    return dt.toString(QStringLiteral("yyyy.MM.dd_hhmmss"));
+    return QFileInfo(filePath).completeBaseName();
 }
 
 bool AhdRecordStore::formatStorage(QString *errorMessage)

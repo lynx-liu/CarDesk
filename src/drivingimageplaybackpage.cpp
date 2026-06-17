@@ -12,6 +12,9 @@
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QSizePolicy>
+#include <QTextDocument>
+#include <QTextCursor>
+#include <QTextOption>
 #include <QVBoxLayout>
 
 namespace {
@@ -53,11 +56,30 @@ protected:
         }
 
         QFont font = painter.font();
-        font.setPixelSize(18);
+        font.setPixelSize(15);
         painter.setFont(font);
         painter.setPen(isDown() || underMouse() ? QColor(0, 250, 255) : QColor(255, 255, 255));
-        painter.drawText(QRect(0, 117, width(), height() - 117), Qt::AlignHCenter | Qt::AlignTop,
-                         m_text);
+        const QRect textRect(6, 110, width() - 12, height() - 110);
+
+        QTextOption option(Qt::AlignHCenter | Qt::AlignVCenter);
+        option.setWrapMode(QTextOption::WrapAnywhere);
+        QTextDocument doc;
+        doc.setDefaultFont(font);
+        doc.setDefaultTextOption(option);
+        doc.setTextWidth(textRect.width());
+        doc.setPlainText(m_text);
+        QTextCharFormat fmt;
+        fmt.setForeground(isDown() || underMouse() ? QColor(0, 250, 255) : QColor(255, 255, 255));
+        QTextCursor cursor(&doc);
+        cursor.select(QTextCursor::Document);
+        cursor.mergeCharFormat(fmt);
+
+        painter.save();
+        painter.translate(textRect.left(), textRect.top());
+        const qreal yOffset = qMax<qreal>(0, (textRect.height() - doc.size().height()) / 2.0);
+        painter.translate(0, yOffset);
+        doc.drawContents(&painter);
+        painter.restore();
     }
 
 private:
