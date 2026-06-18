@@ -237,7 +237,7 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     });
 
     connect(AppSignals::instance(), &AppSignals::recordFilesChanged, this, [this]() {
-        if (m_recordDateKey.isEmpty() || !isVisible()) {
+        if (!isDrivingRecordPlayback() || !isVisible()) {
             return;
         }
         refreshRecordPlaylistIfNeeded();
@@ -673,7 +673,7 @@ void VideoPlayWindow::onPlayVideo() {
     if (m_speedHighLocked) {
         return;
     }
-    if (!m_recordDateKey.isEmpty() && !ensureCurrentFilePlayable()) {
+    if (isDrivingRecordPlayback() && !ensureCurrentFilePlayable()) {
         qWarning() << "No playable record file in playlist";
         return;
     }
@@ -760,13 +760,14 @@ void VideoPlayWindow::onNextVideo() {
     if (m_speedHighLocked || m_videoFiles.isEmpty()) {
         return;
     }
-    if (!m_recordDateKey.isEmpty()) {
-        refreshRecordPlaylistIfNeeded();
-        if (m_videoFiles.isEmpty()) {
+    m_switchDirection = 1;
+    if (isDrivingRecordPlayback()) {
+        if (!selectAdjacentRecordFile(1)) {
             return;
         }
+    } else {
+        m_currentIndex = (m_currentIndex + 1) % m_videoFiles.count();
     }
-    m_currentIndex = (m_currentIndex + 1) % m_videoFiles.count();
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer) {
         updateTitle();
@@ -781,13 +782,14 @@ void VideoPlayWindow::onPreviousVideo() {
     if (m_speedHighLocked || m_videoFiles.isEmpty()) {
         return;
     }
-    if (!m_recordDateKey.isEmpty()) {
-        refreshRecordPlaylistIfNeeded();
-        if (m_videoFiles.isEmpty()) {
+    m_switchDirection = -1;
+    if (isDrivingRecordPlayback()) {
+        if (!selectAdjacentRecordFile(-1)) {
             return;
         }
+    } else {
+        m_currentIndex = (m_currentIndex - 1 + m_videoFiles.count()) % m_videoFiles.count();
     }
-    m_currentIndex = (m_currentIndex - 1 + m_videoFiles.count()) % m_videoFiles.count();
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer) {
         updateTitle();
@@ -805,17 +807,65 @@ void VideoPlayWindow::updateTitle() {
     }
 }
 
-void VideoPlayWindow::refreshRecordPlaylistIfNeeded()
+bool VideoPlayWindow::isDrivingRecordPlayback() const
+{
+    return m_playbackOrigin == VideoPlaybackOrigin::DrivingRecord && !m_recordDateKey.isEmpty();
+}
+
+void VideoPlayWindow::reloadDrivingRecordPlaylist()
 {
     if (m_recordDateKey.isEmpty()) {
+        return;
+    }
+    m_videoFiles = AhdRecordStore::filterExistingFiles(
+        AhdRecordStore::listVideoFilesForDate(m_recordDateKey));
+}
+
+bool VideoPlayWindow::selectAdjacentRecordFile(int direction)
+{
+    if (!isDrivingRecordPlayback()) {
+        return false;
+    }
+
+    const QString playingPath = (m_currentIndex >= 0 && m_currentIndex < m_videoFiles.count())
+        ? m_videoFiles.at(m_currentIndex)
+        : QString();
+    reloadDrivingRecordPlaylist();
+    if (m_videoFiles.isEmpty()) {
+        m_currentIndex = -1;
+        return false;
+    }
+
+    int idx = playingPath.isEmpty() ? m_currentIndex : m_videoFiles.indexOf(playingPath);
+    if (idx < 0) {
+        idx = qBound(0, m_currentIndex, m_videoFiles.count() - 1);
+    }
+
+    const int count = m_videoFiles.count();
+    for (int step = 1; step <= count; ++step) {
+        const int tryIdx = direction >= 0
+            ? (idx + step) % count
+            : (idx - step + count) % count;
+        if (QFileInfo::exists(m_videoFiles.at(tryIdx))) {
+            m_currentIndex = tryIdx;
+            return true;
+        }
+    }
+
+    m_currentIndex = -1;
+    return false;
+}
+
+void VideoPlayWindow::refreshRecordPlaylistIfNeeded()
+{
+    if (!isDrivingRecordPlayback()) {
         return;
     }
 
     const QString anchorPath = (m_currentIndex >= 0 && m_currentIndex < m_videoFiles.count())
         ? m_videoFiles.at(m_currentIndex)
         : QString();
-    m_videoFiles = AhdRecordStore::filterExistingFiles(
-        AhdRecordStore::listVideoFilesForDate(m_recordDateKey));
+    reloadDrivingRecordPlaylist();
     if (m_videoFiles.isEmpty()) {
         m_currentIndex = -1;
         return;
@@ -833,11 +883,19 @@ void VideoPlayWindow::refreshRecordPlaylistIfNeeded()
 
 bool VideoPlayWindow::ensureCurrentFilePlayable()
 {
+    if (!isDrivingRecordPlayback()) {
+        return m_currentIndex >= 0 && m_currentIndex < m_videoFiles.count();
+    }
+
     refreshRecordPlaylistIfNeeded();
     if (m_videoFiles.isEmpty() || m_currentIndex < 0 || m_currentIndex >= m_videoFiles.count()) {
         return false;
     }
-    return QFileInfo::exists(m_videoFiles.at(m_currentIndex));
+    if (QFileInfo::exists(m_videoFiles.at(m_currentIndex))) {
+        return true;
+    }
+
+    return selectAdjacentRecordFile(m_switchDirection >= 0 ? 1 : -1);
 }
 
 void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex,
@@ -858,7 +916,8 @@ void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex,
     m_currentIndex = currentIndex;
     if (!files.isEmpty()) {
         const int anchorIdx = qBound(0, currentIndex, files.count() - 1);
-        if (cedarxIsAhdRecordVideoPath(files.at(anchorIdx))) {
+        if (origin == VideoPlaybackOrigin::DrivingRecord
+            || cedarxIsAhdRecordVideoPath(files.at(anchorIdx))) {
             m_recordDateKey = AhdRecordStore::dateKeyForFile(files.at(anchorIdx));
             refreshRecordPlaylistIfNeeded();
             if (m_videoFiles.isEmpty()) {
@@ -1277,13 +1336,14 @@ void VideoPlayWindow::onSdkPlaybackComplete()
         m_sdkTimer->stop();
     }
 
-    if (!m_recordDateKey.isEmpty()) {
-        refreshRecordPlaylistIfNeeded();
-        if (m_videoFiles.isEmpty()) {
+    m_switchDirection = 1;
+    if (isDrivingRecordPlayback()) {
+        if (!selectAdjacentRecordFile(1)) {
             return;
         }
+    } else {
+        m_currentIndex = (m_currentIndex + 1) % m_videoFiles.count();
     }
-    m_currentIndex = (m_currentIndex + 1) % m_videoFiles.count();
     updateTitle();
     requestSdkVideoSwitch();
 #endif
@@ -1312,11 +1372,8 @@ void VideoPlayWindow::requestSdkVideoSwitch()
     if (m_speedHighLocked || !m_useSdkPlayer || m_videoFiles.isEmpty()) {
         return;
     }
-    if (!m_recordDateKey.isEmpty()) {
-        refreshRecordPlaylistIfNeeded();
-        if (m_videoFiles.isEmpty()) {
-            return;
-        }
+    if (isDrivingRecordPlayback() && !ensureCurrentFilePlayable()) {
+        return;
     }
     if (m_currentIndex < 0 || m_currentIndex >= m_videoFiles.count()) {
         return;
@@ -1555,7 +1612,7 @@ void VideoPlayWindow::continueSdkVideoSwitch()
     if (m_pendingRelease) {
         return;
     }
-    if (!m_recordDateKey.isEmpty() && !ensureCurrentFilePlayable()) {
+    if (isDrivingRecordPlayback() && !ensureCurrentFilePlayable()) {
         m_sdkSwitching = false;
         if (!m_speedHighLocked) {
             m_prevButton->setEnabled(true);
@@ -1573,7 +1630,12 @@ void VideoPlayWindow::continueSdkVideoSwitch()
     }
 
     const QString videoPath = m_videoFiles.at(m_currentIndex);
-    const bool ok = startSdkPlayer(videoPath);
+    bool ok = startSdkPlayer(videoPath);
+
+    if (!ok && isDrivingRecordPlayback() && selectAdjacentRecordFile(m_switchDirection)) {
+        updateTitle();
+        ok = startSdkPlayer(m_videoFiles.at(m_currentIndex));
+    }
 
     m_sdkSwitching = false;
     if (!m_speedHighLocked) {
