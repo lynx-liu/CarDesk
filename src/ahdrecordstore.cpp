@@ -143,6 +143,23 @@ QStringList AhdRecordStore::listDateFolders()
     return sorted;
 }
 
+QString AhdRecordStore::dateKeyForFile(const QString &filePath)
+{
+    return dateKeyFromFileInfo(QFileInfo(filePath));
+}
+
+QStringList AhdRecordStore::filterExistingFiles(const QStringList &paths)
+{
+    QStringList existing;
+    existing.reserve(paths.size());
+    for (const QString &path : paths) {
+        if (QFileInfo::exists(path)) {
+            existing.append(path);
+        }
+    }
+    return existing;
+}
+
 QStringList AhdRecordStore::listVideoFilesForDate(const QString &dateKey)
 {
     QStringList matched;

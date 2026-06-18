@@ -1,20 +1,24 @@
 #include "drivingimageplaybackpage.h"
 
 #include "ahdrecordstore.h"
+#include "appsignals.h"
 #include "drivingimagesubtopbar.h"
 
 #include <QFileInfo>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QPushButton>
+#include <QShowEvent>
 #include <QStackedWidget>
 #include <QSizePolicy>
 #include <QTextDocument>
 #include <QTextCursor>
 #include <QTextOption>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace {
@@ -40,17 +44,53 @@ public:
         setFixedSize(kTileW, kTileH);
         setFlat(true);
         setFocusPolicy(Qt::NoFocus);
+        setAutoDefault(false);
+        setDefault(false);
+        setCheckable(false);
         setStyleSheet(QStringLiteral("QPushButton{border:none;background:transparent;outline:none;}"));
     }
 
+    void clearPressedState()
+    {
+        m_pressed = false;
+        setDown(false);
+        update();
+    }
+
 protected:
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        QPushButton::mousePressEvent(event);
+        if (event->button() == Qt::LeftButton) {
+            m_pressed = true;
+            update();
+        }
+    }
+
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        QPushButton::mouseReleaseEvent(event);
+        m_pressed = false;
+        setDown(false);
+        update();
+    }
+
+    void leaveEvent(QEvent *event) override
+    {
+        QPushButton::leaveEvent(event);
+        m_pressed = false;
+        setDown(false);
+        update();
+    }
+
     void paintEvent(QPaintEvent *event) override
     {
         Q_UNUSED(event);
         QPainter painter(this);
         painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
 
-        const QPixmap bg(isDown() || underMouse() ? m_downImage : m_upImage);
+        const bool highlight = m_pressed || underMouse();
+        const QPixmap bg(highlight ? m_downImage : m_upImage);
         if (!bg.isNull()) {
             painter.drawPixmap(0, 0, width(), height(), bg);
         }
@@ -58,7 +98,7 @@ protected:
         QFont font = painter.font();
         font.setPixelSize(15);
         painter.setFont(font);
-        painter.setPen(isDown() || underMouse() ? QColor(0, 250, 255) : QColor(255, 255, 255));
+        painter.setPen(highlight ? QColor(0, 250, 255) : QColor(255, 255, 255));
         const QRect textRect(6, 110, width() - 12, height() - 110);
 
         QTextOption option(Qt::AlignHCenter | Qt::AlignVCenter);
@@ -69,7 +109,7 @@ protected:
         doc.setTextWidth(textRect.width());
         doc.setPlainText(m_text);
         QTextCharFormat fmt;
-        fmt.setForeground(isDown() || underMouse() ? QColor(0, 250, 255) : QColor(255, 255, 255));
+        fmt.setForeground(highlight ? QColor(0, 250, 255) : QColor(255, 255, 255));
         QTextCursor cursor(&doc);
         cursor.select(QTextCursor::Document);
         cursor.mergeCharFormat(fmt);
@@ -86,6 +126,7 @@ private:
     QString m_text;
     QString m_upImage;
     QString m_downImage;
+    bool m_pressed = false;
 };
 
 QWidget *createGridHost(QGridLayout **gridOut)
@@ -114,6 +155,18 @@ void clearGrid(QGridLayout *grid)
     }
 }
 
+void clearTilePressedStates(QGridLayout *grid)
+{
+    if (!grid) {
+        return;
+    }
+    for (int i = 0; i < grid->count(); ++i) {
+        if (auto *tile = dynamic_cast<PlaybackTileButton *>(grid->itemAt(i)->widget())) {
+            tile->clearPressedState();
+        }
+    }
+}
+
 } // namespace
 
 DrivingImagePlaybackPage::DrivingImagePlaybackPage(QWidget *parent)
@@ -124,6 +177,18 @@ DrivingImagePlaybackPage::DrivingImagePlaybackPage(QWidget *parent)
     setMinimumSize(0, 0);
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     setupUI();
+
+    m_recordRefreshDebounce = new QTimer(this);
+    m_recordRefreshDebounce->setSingleShot(true);
+    m_recordRefreshDebounce->setInterval(400);
+    connect(m_recordRefreshDebounce, &QTimer::timeout, this,
+            &DrivingImagePlaybackPage::refreshCurrentView);
+    connect(AppSignals::instance(), &AppSignals::recordFilesChanged, this, [this]() {
+        if (isVisible()) {
+            m_recordRefreshDebounce->start();
+        }
+    });
+
     reloadDates();
 }
 
@@ -248,6 +313,34 @@ void DrivingImagePlaybackPage::setupUI()
     });
 }
 
+void DrivingImagePlaybackPage::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    m_launchingPlayback = false;
+    clearTilePressedStates(m_fileGrid);
+    clearTilePressedStates(m_dateGrid);
+    refreshCurrentView();
+}
+
+void DrivingImagePlaybackPage::refreshCurrentView()
+{
+    if (m_showingFiles && !m_currentDate.isEmpty()) {
+        const int page = m_currentPage;
+        m_allFiles = AhdRecordStore::filterExistingFiles(
+            AhdRecordStore::listVideoFilesForDate(m_currentDate));
+        const int maxPage = m_allFiles.isEmpty()
+            ? 0
+            : qMax(0, (m_allFiles.size() - 1) / kItemsPerPage);
+        m_currentPage = qMin(page, maxPage);
+        if (m_emptyHint) {
+            m_emptyHint->setVisible(m_allFiles.isEmpty());
+        }
+        populateFileGrid();
+        return;
+    }
+    reloadDates();
+}
+
 void DrivingImagePlaybackPage::reloadDates()
 {
     m_allDates = AhdRecordStore::listDateFolders();
@@ -266,6 +359,7 @@ void DrivingImagePlaybackPage::reloadDates()
 
 void DrivingImagePlaybackPage::restoreAfterVideoPlayback()
 {
+    m_launchingPlayback = false;
     if (!m_currentDate.isEmpty()) {
         showFileList(m_currentDate);
         return;
@@ -286,7 +380,7 @@ void DrivingImagePlaybackPage::populateDateGrid()
             QStringLiteral(":/images/butt_driving_image_playback_folder_up.png"),
             QStringLiteral(":/images/butt_driving_image_playback_folder_down.png"),
             m_dateGridHost);
-        connect(tile, &QPushButton::clicked, this, [this, dateKey]() { showFileList(dateKey); });
+        connect(tile, &QPushButton::released, this, [this, dateKey]() { showFileList(dateKey); });
         m_dateGrid->addWidget(tile, slot / kGridCols, slot % kGridCols);
         ++slot;
     }
@@ -306,7 +400,7 @@ void DrivingImagePlaybackPage::populateFileGrid()
             QStringLiteral(":/images/butt_driving_image_playback_filelist_up.png"),
             QStringLiteral(":/images/butt_driving_image_playback_filelist_down.png"),
             m_fileGridHost);
-        connect(tile, &QPushButton::clicked, this, [this, path]() { playFile(path); });
+        connect(tile, &QPushButton::released, this, [this, path]() { playFile(path); });
         m_fileGrid->addWidget(tile, slot / kGridCols, slot % kGridCols);
         ++slot;
     }
@@ -337,7 +431,7 @@ void DrivingImagePlaybackPage::showDateList()
 void DrivingImagePlaybackPage::showFileList(const QString &dateKey)
 {
     m_currentDate = dateKey;
-    m_allFiles = AhdRecordStore::listVideoFilesForDate(dateKey);
+    m_allFiles = AhdRecordStore::filterExistingFiles(AhdRecordStore::listVideoFilesForDate(dateKey));
     m_showingFiles = true;
     m_currentPage = 0;
     populateFileGrid();
@@ -348,16 +442,24 @@ void DrivingImagePlaybackPage::showFileList(const QString &dateKey)
 
 void DrivingImagePlaybackPage::playFile(const QString &path)
 {
-    if (path.isEmpty() || !QFileInfo::exists(path)) {
+    if (m_launchingPlayback) {
         return;
     }
 
-    QStringList files = AhdRecordStore::listVideoFilesForDate(m_currentDate);
-    int index = files.indexOf(path);
-    if (index < 0) {
-        files = QStringList(path);
-        index = 0;
+    m_allFiles = AhdRecordStore::filterExistingFiles(AhdRecordStore::listVideoFilesForDate(m_currentDate));
+    if (m_allFiles.isEmpty()) {
+        populateFileGrid();
+        return;
     }
 
-    emit requestPlayVideo(files, index);
+    int index = m_allFiles.indexOf(path);
+    if (index < 0 || !QFileInfo::exists(path)) {
+        clearTilePressedStates(m_fileGrid);
+        populateFileGrid();
+        return;
+    }
+
+    clearTilePressedStates(m_fileGrid);
+    m_launchingPlayback = true;
+    emit requestPlayVideo(m_allFiles, index);
 }

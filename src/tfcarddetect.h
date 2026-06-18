@@ -43,6 +43,7 @@ private slots:
     void onInotifyReady();
     void onDelayedRescan();
     void onMountWatchTriggered(const QString &path);
+    void onRecordDirChanged(const QString &path);
 
 private:
     explicit TfCardMonitor(QObject *parent = nullptr);
@@ -54,6 +55,9 @@ private:
     void closeInotify();
     void rescanStorageState();
     bool scanRecordVolumes(QStringList *volumeRootsOut);
+    void syncRecordDirWatches();
+    void watchRecordSubdirs(const QString &dirPath);
+    void notifyRecordFilesChanged();
 
     int m_nlSock = -1;
     class QSocketNotifier *m_nlNotifier = nullptr;
@@ -62,6 +66,8 @@ private:
     class QFileSystemWatcher *m_mountWatcher = nullptr;
     class QTimer *m_mountDebounce = nullptr;
     class QTimer *m_fallbackTimer = nullptr;
+    class QFileSystemWatcher *m_recordDirWatcher = nullptr;
+    class QTimer *m_recordDirDebounce = nullptr;
 
     bool m_recordReady = false;
     QStringList m_recordRoots;

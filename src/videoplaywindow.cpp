@@ -1,4 +1,5 @@
 #include "videoplaywindow.h"
+#include "ahdrecordstore.h"
 #include "bluetoothmanager.h"
 #include "devicedetect.h"
 #include "t507sdkbridge.h"
@@ -233,6 +234,13 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
             m_speedWarningLabel->hide();
             // 不自动恢复播放
         }
+    });
+
+    connect(AppSignals::instance(), &AppSignals::recordFilesChanged, this, [this]() {
+        if (m_recordDateKey.isEmpty() || !isVisible()) {
+            return;
+        }
+        refreshRecordPlaylistIfNeeded();
     });
 
     setupUI();
@@ -665,6 +673,10 @@ void VideoPlayWindow::onPlayVideo() {
     if (m_speedHighLocked) {
         return;
     }
+    if (!m_recordDateKey.isEmpty() && !ensureCurrentFilePlayable()) {
+        qWarning() << "No playable record file in playlist";
+        return;
+    }
     if (m_currentIndex < 0 || m_currentIndex >= m_videoFiles.count()) {
         m_currentIndex = 0;
     }
@@ -748,6 +760,12 @@ void VideoPlayWindow::onNextVideo() {
     if (m_speedHighLocked || m_videoFiles.isEmpty()) {
         return;
     }
+    if (!m_recordDateKey.isEmpty()) {
+        refreshRecordPlaylistIfNeeded();
+        if (m_videoFiles.isEmpty()) {
+            return;
+        }
+    }
     m_currentIndex = (m_currentIndex + 1) % m_videoFiles.count();
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer) {
@@ -762,6 +780,12 @@ void VideoPlayWindow::onNextVideo() {
 void VideoPlayWindow::onPreviousVideo() {
     if (m_speedHighLocked || m_videoFiles.isEmpty()) {
         return;
+    }
+    if (!m_recordDateKey.isEmpty()) {
+        refreshRecordPlaylistIfNeeded();
+        if (m_videoFiles.isEmpty()) {
+            return;
+        }
     }
     m_currentIndex = (m_currentIndex - 1 + m_videoFiles.count()) % m_videoFiles.count();
 #ifdef CAR_DESK_USE_T507_SDK
@@ -781,6 +805,41 @@ void VideoPlayWindow::updateTitle() {
     }
 }
 
+void VideoPlayWindow::refreshRecordPlaylistIfNeeded()
+{
+    if (m_recordDateKey.isEmpty()) {
+        return;
+    }
+
+    const QString anchorPath = (m_currentIndex >= 0 && m_currentIndex < m_videoFiles.count())
+        ? m_videoFiles.at(m_currentIndex)
+        : QString();
+    m_videoFiles = AhdRecordStore::filterExistingFiles(
+        AhdRecordStore::listVideoFilesForDate(m_recordDateKey));
+    if (m_videoFiles.isEmpty()) {
+        m_currentIndex = -1;
+        return;
+    }
+
+    if (!anchorPath.isEmpty()) {
+        const int idx = m_videoFiles.indexOf(anchorPath);
+        if (idx >= 0) {
+            m_currentIndex = idx;
+            return;
+        }
+    }
+    m_currentIndex = qBound(0, m_currentIndex, m_videoFiles.count() - 1);
+}
+
+bool VideoPlayWindow::ensureCurrentFilePlayable()
+{
+    refreshRecordPlaylistIfNeeded();
+    if (m_videoFiles.isEmpty() || m_currentIndex < 0 || m_currentIndex >= m_videoFiles.count()) {
+        return false;
+    }
+    return QFileInfo::exists(m_videoFiles.at(m_currentIndex));
+}
+
 void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex,
                                     VideoPlaybackOrigin origin) {
     m_pausedForHome = false;
@@ -789,6 +848,7 @@ void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex,
     m_resumePath.clear();
     m_resumePositionMs = 0;
     m_playbackOrigin = origin;
+    m_recordDateKey.clear();
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer) {
         forceReleaseSdkPlayer();
@@ -796,6 +856,18 @@ void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex,
 #endif
     m_videoFiles = files;
     m_currentIndex = currentIndex;
+    if (!files.isEmpty()) {
+        const int anchorIdx = qBound(0, currentIndex, files.count() - 1);
+        if (cedarxIsAhdRecordVideoPath(files.at(anchorIdx))) {
+            m_recordDateKey = AhdRecordStore::dateKeyForFile(files.at(anchorIdx));
+            refreshRecordPlaylistIfNeeded();
+            if (m_videoFiles.isEmpty()) {
+                m_currentIndex = -1;
+            } else if (m_currentIndex < 0 || m_currentIndex >= m_videoFiles.count()) {
+                m_currentIndex = 0;
+            }
+        }
+    }
     if (m_currentIndex >= 0 && m_currentIndex < m_videoFiles.count()) {
         updateTitle();
         // 立即播放视频
@@ -1205,6 +1277,12 @@ void VideoPlayWindow::onSdkPlaybackComplete()
         m_sdkTimer->stop();
     }
 
+    if (!m_recordDateKey.isEmpty()) {
+        refreshRecordPlaylistIfNeeded();
+        if (m_videoFiles.isEmpty()) {
+            return;
+        }
+    }
     m_currentIndex = (m_currentIndex + 1) % m_videoFiles.count();
     updateTitle();
     requestSdkVideoSwitch();
@@ -1233,6 +1311,12 @@ void VideoPlayWindow::requestSdkVideoSwitch()
 {
     if (m_speedHighLocked || !m_useSdkPlayer || m_videoFiles.isEmpty()) {
         return;
+    }
+    if (!m_recordDateKey.isEmpty()) {
+        refreshRecordPlaylistIfNeeded();
+        if (m_videoFiles.isEmpty()) {
+            return;
+        }
     }
     if (m_currentIndex < 0 || m_currentIndex >= m_videoFiles.count()) {
         return;
@@ -1469,6 +1553,14 @@ void VideoPlayWindow::continueSdkVideoSwitch()
         return;
     }
     if (m_pendingRelease) {
+        return;
+    }
+    if (!m_recordDateKey.isEmpty() && !ensureCurrentFilePlayable()) {
+        m_sdkSwitching = false;
+        if (!m_speedHighLocked) {
+            m_prevButton->setEnabled(true);
+            m_nextButton->setEnabled(true);
+        }
         return;
     }
     if (m_currentIndex < 0 || m_currentIndex >= m_videoFiles.count()) {

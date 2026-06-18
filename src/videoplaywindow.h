@@ -85,6 +85,8 @@ private:
     void beginSliderSeek(int value);
     void previewSliderSeek(int value);
     void finalizeSliderSeek(int value);
+    void refreshRecordPlaylistIfNeeded();
+    bool ensureCurrentFilePlayable();
 
 #ifdef CAR_DESK_USE_T507_SDK
     bool initSdkPlayer(const QString &videoPath);
@@ -129,6 +131,7 @@ private:
     int m_resumePositionMs;    // HOME 退出前的播放位置（ms）
     int m_resumeInterruptPositionMs; // 其他中断时的视频恢复位置（ms）
     VideoPlaybackOrigin m_playbackOrigin = VideoPlaybackOrigin::None;
+    QString m_recordDateKey;
 
 #ifdef CAR_DESK_USE_T507_SDK
     XPlayer *m_sdkPlayer;

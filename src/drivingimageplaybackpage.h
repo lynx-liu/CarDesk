@@ -8,6 +8,8 @@ class QGridLayout;
 class QLabel;
 class QPushButton;
 class QStackedWidget;
+class QShowEvent;
+class QTimer;
 class DrivingImageSubTopBar;
 
 class DrivingImagePlaybackPage : public QWidget {
@@ -33,6 +35,8 @@ private:
     void populateDateGrid();
     void populateFileGrid();
     void updatePageButtons();
+    void refreshCurrentView();
+    void showEvent(QShowEvent *event) override;
 
     DrivingImageSubTopBar *m_topBar = nullptr;
     QPushButton *m_backBtn = nullptr;
@@ -50,6 +54,8 @@ private:
     int m_datePageIndex = 0;
     int m_currentPage = 0;
     bool m_showingFiles = false;
+    bool m_launchingPlayback = false;
+    QTimer *m_recordRefreshDebounce = nullptr;
 };
 
 #endif // DRIVINGIMAGEPLAYBACKPAGE_H

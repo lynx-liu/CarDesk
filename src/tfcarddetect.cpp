@@ -464,6 +464,78 @@ void TfCardMonitor::rescanStorageState()
     qDebug() << "[TfCard] record storage" << (ready ? "ready" : "absent") << roots;
     emit recordStorageChanged(ready);
     emit AppSignals::instance()->sdcardStateChanged(ready);
+    syncRecordDirWatches();
+    if (ready) {
+        notifyRecordFilesChanged();
+    }
+}
+
+void TfCardMonitor::syncRecordDirWatches()
+{
+    if (!m_recordDirWatcher) {
+        return;
+    }
+
+    if (!m_recordReady) {
+        const QStringList watched = m_recordDirWatcher->directories();
+        for (const QString &path : watched) {
+            m_recordDirWatcher->removePath(path);
+        }
+        return;
+    }
+
+    for (const QString &root : m_recordRoots) {
+        watchRecordSubdirs(root);
+    }
+}
+
+void TfCardMonitor::watchRecordSubdirs(const QString &dirPath)
+{
+    if (!m_recordDirWatcher || !m_recordReady) {
+        return;
+    }
+
+    QDir dir(dirPath);
+    if (!dir.exists()) {
+        return;
+    }
+
+    const QString canon = dir.canonicalPath();
+    if (canon.isEmpty()) {
+        return;
+    }
+
+    auto ensureWatched = [this](const QString &path) {
+        if (path.isEmpty()) {
+            return;
+        }
+        if (!m_recordDirWatcher->directories().contains(path)) {
+            m_recordDirWatcher->addPath(path);
+        }
+    };
+
+    ensureWatched(canon);
+
+    const QFileInfoList subdirs = dir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QFileInfo &sub : subdirs) {
+        if (sub.fileName().startsWith(QLatin1Char('.'))) {
+            continue;
+        }
+        ensureWatched(sub.canonicalFilePath());
+    }
+}
+
+void TfCardMonitor::onRecordDirChanged(const QString &path)
+{
+    watchRecordSubdirs(path);
+    if (m_recordDirDebounce) {
+        m_recordDirDebounce->start();
+    }
+}
+
+void TfCardMonitor::notifyRecordFilesChanged()
+{
+    emit AppSignals::instance()->recordFilesChanged();
 }
 
 void TfCardMonitor::onUeventReady()
@@ -558,6 +630,15 @@ void TfCardMonitor::start()
     m_fallbackTimer->setInterval(30000);
     connect(m_fallbackTimer, &QTimer::timeout, this, &TfCardMonitor::onDelayedRescan);
     m_fallbackTimer->start();
+
+    m_recordDirWatcher = new QFileSystemWatcher(this);
+    connect(m_recordDirWatcher, &QFileSystemWatcher::directoryChanged, this,
+            &TfCardMonitor::onRecordDirChanged);
+    m_recordDirDebounce = new QTimer(this);
+    m_recordDirDebounce->setSingleShot(true);
+    m_recordDirDebounce->setInterval(400);
+    connect(m_recordDirDebounce, &QTimer::timeout, this, &TfCardMonitor::notifyRecordFilesChanged);
+    syncRecordDirWatches();
 }
 
 void TfCardMonitor::stop()
@@ -576,5 +657,13 @@ void TfCardMonitor::stop()
     if (m_mountWatcher) {
         m_mountWatcher->deleteLater();
         m_mountWatcher = nullptr;
+    }
+    if (m_recordDirDebounce) {
+        m_recordDirDebounce->deleteLater();
+        m_recordDirDebounce = nullptr;
+    }
+    if (m_recordDirWatcher) {
+        m_recordDirWatcher->deleteLater();
+        m_recordDirWatcher = nullptr;
     }
 }

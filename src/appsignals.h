@@ -44,6 +44,9 @@ signals:
     /** TF 卡插拔状态变化：true=已插入且已挂载，false=未检测到有效存储 */
     void sdcardStateChanged(bool connected);
 
+    /** TF 录像目录内容变化（新增/删除分段等） */
+    void recordFilesChanged();
+
     /** 车速变化（km/h，来自 CAN TCO1 报文） */
     void vehicleSpeedChanged(float speedKmh);
 
