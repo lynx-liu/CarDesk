@@ -1290,8 +1290,7 @@ void AhdCameraPool::syncRecordingState()
                     ch.recordInited = true;
                 }
                 if (dvr->mRecordCamera) {
-                    const int segmentSec = AppSettings::debugMode() ? 60 : 180;
-                    dvr->mRecordCamera->setDuration(segmentSec);
+                    dvr->mRecordCamera->setDuration(60);
                 }
                 if (!startStorageRecordingSafe(dvr, ch.cameraId, ch.previewOn)) {
                     qWarning() << "[Ahd] start storage recording failed camera" << ch.cameraId;
