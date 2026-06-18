@@ -29,6 +29,8 @@ public:
     int drivingMode() const;
     void showPlaybackPage();
     bool allowsIncomingCallOverlay() const;
+    void suspendForRecordPlayback();
+    void resumeAfterRecordPlayback();
 
 signals:
     void requestReturnToMain();
@@ -94,6 +96,7 @@ private:
     bool m_exitInProgress;
     bool m_startScheduled;
     bool m_lastRecordStoragePresent = false;
+    bool m_ahdSuspendedForPlayback = false;
     bool m_isFullscreen;
     int m_fullscreenCameraId;
     int m_cameraMode;

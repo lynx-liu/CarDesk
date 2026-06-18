@@ -85,6 +85,7 @@ private:
     bool initSdkPlayer(const QString &videoPath);
     bool startSdkPlayer(const QString &videoPath);
     void releaseSdkPlayer();
+    void forceReleaseSdkPlayer();
     void resetSdkPlayerForCall();
     bool restoreSdkPlaybackAfterInterruption();
     void requestSdkVideoSwitch();

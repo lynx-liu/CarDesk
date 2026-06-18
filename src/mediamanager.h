@@ -28,7 +28,7 @@ public:
     
     void setBluetoothManager(BluetoothManager *manager);
     void setRadioWindow(RadioWindow *window);
-    void openVideoList();
+    void openVideoList(bool tryResume = true);
     void openMusicPlayer();
     void prepareForBluetoothMusic();
     void prepareForNonBluetoothAudio();

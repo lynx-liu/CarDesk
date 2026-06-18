@@ -819,6 +819,36 @@ bool DrivingImageWindow::allowsIncomingCallOverlay() const
     return m_stack && m_stack->currentIndex() != 0;
 }
 
+void DrivingImageWindow::suspendForRecordPlayback()
+{
+    m_ahdSuspendedForPlayback = true;
+    if (!m_ahdManager) {
+        return;
+    }
+    cancelPreviewChromeAutoHide();
+    m_previewChromeVisible = false;
+    m_ahdManager->stopPreview();
+    m_ahdManager->stopCamera();
+    qDebug() << "[Driving] suspend AHD for record file playback";
+}
+
+void DrivingImageWindow::resumeAfterRecordPlayback()
+{
+    if (!m_ahdSuspendedForPlayback) {
+        return;
+    }
+    m_ahdSuspendedForPlayback = false;
+    qDebug() << "[Driving] resume AHD after record file playback";
+    if (!m_ahdManager) {
+        return;
+    }
+    QTimer::singleShot(0, this, [this]() {
+        if (m_ahdManager) {
+            m_ahdManager->warmupHardware();
+        }
+    });
+}
+
 void DrivingImageWindow::showPlaybackPage()
 {
     if (!m_stack) {
@@ -950,7 +980,7 @@ void DrivingImageWindow::updatePreviewLayout()
 
 void DrivingImageWindow::startPreviewIfNeeded()
 {
-    if (m_exitInProgress || !isVisible()) {
+    if (m_exitInProgress || !isVisible() || m_ahdSuspendedForPlayback) {
         return;
     }
 

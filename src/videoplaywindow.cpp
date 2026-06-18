@@ -241,7 +241,7 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
     connect(m_backButton, &QPushButton::clicked, this, [this]() {
 #ifdef CAR_DESK_USE_T507_SDK
         if (m_useSdkPlayer) {
-            releaseSdkPlayer();
+            forceReleaseSdkPlayer();
         }
 #endif
         emit requestReturnToList();
@@ -381,7 +381,7 @@ void VideoPlayWindow::setBluetoothManager(BluetoothManager *manager) {
 
 VideoPlayWindow::~VideoPlayWindow() {
 #ifdef CAR_DESK_USE_T507_SDK
-    releaseSdkPlayer();
+    forceReleaseSdkPlayer();
 #endif
 
     if (m_mediaPlayer) {
@@ -777,11 +777,16 @@ void VideoPlayWindow::updateTitle() {
 }
 
 void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex) {
-    m_pausedForHome = false;  // 选择了新视频，放弃原暂停状态
-    m_pausedForInterruption = false;  // 清除 HOME 暂停状态，避免新视频从旧进度恢复
+    m_pausedForHome = false;
+    m_pausedForInterruption = false;
     m_resumeInterruptPositionMs = 0;
     m_resumePath.clear();
     m_resumePositionMs = 0;
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        forceReleaseSdkPlayer();
+    }
+#endif
     m_videoFiles = files;
     m_currentIndex = currentIndex;
     if (m_currentIndex >= 0 && m_currentIndex < m_videoFiles.count()) {
@@ -1273,15 +1278,9 @@ bool VideoPlayWindow::initSdkPlayer(const QString &videoPath)
         return false;
     }
 
-    if (m_pendingRelease) {
-        qWarning() << "initSdkPlayer: deferred release pending, cannot init now";
-        return false;
-    }
-
     releaseSdkPlayer();
     if (m_pendingRelease) {
-        qWarning() << "initSdkPlayer: release still pending after seek";
-        return false;
+        forceReleaseSdkPlayer();
     }
 
     return startSdkPlayer(videoPath);
@@ -1369,6 +1368,30 @@ void VideoPlayWindow::releaseSdkPlayer()
     }
     m_sdkSeeking = false;
     m_pendingRelease = false;
+    m_sdkSoundCtrl = nullptr;
+    m_sdkLayerCtrl = nullptr;
+    m_sdkSubCtrl = nullptr;
+    m_sdkDi = nullptr;
+}
+
+void VideoPlayWindow::forceReleaseSdkPlayer()
+{
+    if (m_sdkTimer) {
+        m_sdkTimer->stop();
+    }
+    m_sdkPlaying = false;
+    m_sdkDurationMs = 0;
+    m_sdkSeeking = false;
+    m_pendingRelease = false;
+    m_sdkSwitching = false;
+    m_switchPending = false;
+
+    if (m_sdkPlayer) {
+        XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
+        XPlayerPause(m_sdkPlayer);
+        XPlayerReset(m_sdkPlayer);
+        m_sdkPlayer = nullptr;
+    }
     m_sdkSoundCtrl = nullptr;
     m_sdkLayerCtrl = nullptr;
     m_sdkSubCtrl = nullptr;
@@ -1512,7 +1535,7 @@ void VideoPlayWindow::keyPressEvent(QKeyEvent *event)
             }
             m_pausedForHome = false;
             m_pausedForOcclusion = false;
-            releaseSdkPlayer();  // 释放 PCM 设备，允许音乐播放器使用
+            forceReleaseSdkPlayer();
         } else
 #endif
         {
@@ -1530,7 +1553,7 @@ void VideoPlayWindow::keyPressEvent(QKeyEvent *event)
     case Qt::Key_Escape:
 #ifdef CAR_DESK_USE_T507_SDK
         if (m_useSdkPlayer) {
-            releaseSdkPlayer();
+            forceReleaseSdkPlayer();
         }
 #endif
         emit requestReturnToList();
@@ -1647,7 +1670,7 @@ void VideoPlayWindow::hideEvent(QHideEvent *event)
     QMainWindow::hideEvent(event);
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer && !m_pausedForOcclusion && !m_pausedForHome && !m_pausedForInterruption) {
-        releaseSdkPlayer();
+        forceReleaseSdkPlayer();
     }
 #endif
 }

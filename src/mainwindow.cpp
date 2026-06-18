@@ -339,6 +339,9 @@ void MainWindow::connectVideoListReturnToMain(VideoListWindow *listWindow)
         return;
     }
     connect(listWindow, &VideoListWindow::requestReturnToMain, this, [this]() {
+        if (m_drivingImageWindow) {
+            m_drivingImageWindow->resumeAfterRecordPlayback();
+        }
         this->show();
         this->raise();
         this->activateWindow();
@@ -361,7 +364,7 @@ void MainWindow::openVideoPlayback(const QStringList &files, int currentIndex,
         m_mediaManager->musicWindow()->pauseForInterruption();
     }
     m_mediaManager->prepareForNonBluetoothAudio();
-    m_mediaManager->openVideoList();
+    m_mediaManager->openVideoList(false);
 
     auto *listWindow = m_mediaManager->videoListWindow();
     if (!listWindow) {
@@ -386,12 +389,14 @@ void MainWindow::onDrivingRecordPlayRequested(const QStringList &files, int curr
 
     ensureDrivingImageWindow();
 
-    if (m_drivingImageWindow && m_drivingImageWindow->isVisible()) {
+    if (m_drivingImageWindow) {
+        m_drivingImageWindow->suspendForRecordPlayback();
         m_drivingImageWindow->hide();
     }
 
     openVideoPlayback(files, currentIndex, [this]() {
         if (m_drivingImageWindow) {
+            m_drivingImageWindow->resumeAfterRecordPlayback();
             m_drivingImageWindow->showPlaybackPage();
         }
     });
