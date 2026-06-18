@@ -378,7 +378,7 @@ void MainWindow::openVideoPlayback(const QStringList &files, int currentIndex,
         listWindow->setMusicWindow(m_mediaManager->musicWindow());
     }
     connectVideoListReturnToMain(listWindow);
-    listWindow->playVideoFiles(files, currentIndex, returnToList);
+    listWindow->playVideoFiles(files, currentIndex, returnToList, VideoPlaybackOrigin::DrivingRecord);
     this->hide();
 }
 

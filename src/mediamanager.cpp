@@ -31,7 +31,7 @@ MediaManager::~MediaManager() {
     if (m_musicWindow) delete m_musicWindow;
 }
 
-void MediaManager::openVideoList(bool tryResume) {
+void MediaManager::openVideoList(bool tryResume, VideoPlaybackOrigin resumeOrigin) {
     qDebug() << "Opening video list...";
     
     if (!m_videoListWindow) {
@@ -49,7 +49,7 @@ void MediaManager::openVideoList(bool tryResume) {
     }
     // 若视频播放器处于 HOME 键暂停状态，直接恢复播放，跳过文件列表界面
     // 避免在 showEvent 内 hide() 后再 raise() 引发的窗口状态混乱
-    if (tryResume && m_videoListWindow->tryResumeVideo()) {
+    if (tryResume && m_videoListWindow->tryResumeVideo(resumeOrigin)) {
         return;
     }
     m_videoListWindow->showNormal();

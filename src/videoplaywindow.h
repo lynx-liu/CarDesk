@@ -13,6 +13,8 @@
 
 class BluetoothManager;
 
+#include "videoplaybackorigin.h"
+
 #ifdef CAR_DESK_USE_T507_SDK
 #include <xplayer.h>
 #include <outputCtrl.h>
@@ -26,11 +28,14 @@ public:
     explicit VideoPlayWindow(QWidget *parent = nullptr);
     ~VideoPlayWindow();
     
-    void setVideoFiles(const QStringList &files, int currentIndex = 0);
+    void setVideoFiles(const QStringList &files, int currentIndex = 0,
+                       VideoPlaybackOrigin origin = VideoPlaybackOrigin::UsbVideoList);
     void setCurrentVideo(const QString &filePath);
     void setBluetoothManager(BluetoothManager *manager);
     bool isPausedForHome() const { return m_pausedForHome; }
     bool hasPendingResume() const { return m_pausedForHome || m_pausedForOcclusion || m_pausedForInterruption; }
+    bool hasPendingResumeFor(VideoPlaybackOrigin origin) const;
+    VideoPlaybackOrigin playbackOrigin() const { return m_playbackOrigin; }
     bool isPlaying() const;
     void pauseIfPlaying();
     void pauseForInterruption();
@@ -123,6 +128,7 @@ private:
     QString m_resumePath;      // HOME 退出前的视频文件路径
     int m_resumePositionMs;    // HOME 退出前的播放位置（ms）
     int m_resumeInterruptPositionMs; // 其他中断时的视频恢复位置（ms）
+    VideoPlaybackOrigin m_playbackOrigin = VideoPlaybackOrigin::None;
 
 #ifdef CAR_DESK_USE_T507_SDK
     XPlayer *m_sdkPlayer;

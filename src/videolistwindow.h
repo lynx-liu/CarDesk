@@ -9,6 +9,8 @@
 #include <QPainter>
 #include <functional>
 
+#include "videoplaybackorigin.h"
+
 class BluetoothManager;
 class MusicPlayerWindow;
 class VideoPlayWindow;
@@ -64,7 +66,7 @@ public:
     ~VideoListWindow();
 
     // 若视频播放器处于 HOME 键暂停状态，直接恢复播放并返回 true
-    bool tryResumeVideo();
+    bool tryResumeVideo(VideoPlaybackOrigin origin = VideoPlaybackOrigin::UsbVideoList);
     bool pauseVideoIfPlaying();
     bool pauseVideoForOcclusion();
     bool resumeVideoAfterInterruption();
@@ -72,7 +74,8 @@ public:
     void setBluetoothManager(BluetoothManager *manager);
     void setMusicWindow(MusicPlayerWindow *musicWindow);
     void playVideoFiles(const QStringList &videoList, int currentIdx,
-                        const std::function<void()> &returnToList = {});
+                        const std::function<void()> &returnToList = {},
+                        VideoPlaybackOrigin origin = VideoPlaybackOrigin::UsbVideoList);
 
 signals:
     void requestReturnToMain();

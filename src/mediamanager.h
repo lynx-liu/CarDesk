@@ -10,6 +10,8 @@ class VideoPlayWindow;
 class MusicPlayerWindow;
 class RadioWindow;
 
+#include "videoplaybackorigin.h"
+
 class BluetoothManager;
 
 class MediaManager : public QObject {
@@ -28,7 +30,8 @@ public:
     
     void setBluetoothManager(BluetoothManager *manager);
     void setRadioWindow(RadioWindow *window);
-    void openVideoList(bool tryResume = true);
+    void openVideoList(bool tryResume = true,
+                       VideoPlaybackOrigin resumeOrigin = VideoPlaybackOrigin::UsbVideoList);
     void openMusicPlayer();
     void prepareForBluetoothMusic();
     void prepareForNonBluetoothAudio();

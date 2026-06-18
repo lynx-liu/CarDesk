@@ -379,6 +379,11 @@ void VideoPlayWindow::setBluetoothManager(BluetoothManager *manager) {
     m_bluetoothManager = manager;
 }
 
+bool VideoPlayWindow::hasPendingResumeFor(VideoPlaybackOrigin origin) const
+{
+    return hasPendingResume() && m_playbackOrigin == origin;
+}
+
 VideoPlayWindow::~VideoPlayWindow() {
 #ifdef CAR_DESK_USE_T507_SDK
     forceReleaseSdkPlayer();
@@ -776,12 +781,14 @@ void VideoPlayWindow::updateTitle() {
     }
 }
 
-void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex) {
+void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex,
+                                    VideoPlaybackOrigin origin) {
     m_pausedForHome = false;
     m_pausedForInterruption = false;
     m_resumeInterruptPositionMs = 0;
     m_resumePath.clear();
     m_resumePositionMs = 0;
+    m_playbackOrigin = origin;
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer) {
         forceReleaseSdkPlayer();

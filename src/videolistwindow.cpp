@@ -413,9 +413,9 @@ void VideoListWindow::keyPressEvent(QKeyEvent *event)
     }
 }
 
-bool VideoListWindow::tryResumeVideo()
+bool VideoListWindow::tryResumeVideo(VideoPlaybackOrigin origin)
 {
-    if (m_playWindow && m_playWindow->hasPendingResume()) {
+    if (m_playWindow && m_playWindow->hasPendingResumeFor(origin)) {
         if (m_musicWindow) {
             m_musicWindow->stopIfPlaying();
         }
@@ -484,7 +484,8 @@ void VideoListWindow::setMusicWindow(MusicPlayerWindow *musicWindow) {
 }
 
 void VideoListWindow::playVideoFiles(const QStringList &videoList, int currentIdx,
-                                     const std::function<void()> &returnToList)
+                                     const std::function<void()> &returnToList,
+                                     VideoPlaybackOrigin origin)
 {
     if (videoList.isEmpty() || currentIdx < 0 || currentIdx >= videoList.size()) {
         return;
@@ -505,6 +506,7 @@ void VideoListWindow::playVideoFiles(const QStringList &videoList, int currentId
             }
         });
         connect(m_playWindow, &VideoPlayWindow::requestReturnToMain, this, [this]() {
+            m_returnToListHandler = nullptr;
             if (m_playWindow) {
                 m_playWindow->hide();
             }
@@ -515,7 +517,7 @@ void VideoListWindow::playVideoFiles(const QStringList &videoList, int currentId
     if (m_musicWindow) {
         m_musicWindow->stopIfPlaying();
     }
-    m_playWindow->setVideoFiles(videoList, currentIdx);
+    m_playWindow->setVideoFiles(videoList, currentIdx, origin);
     this->hide();
     m_playWindow->show();
     m_playWindow->raise();
