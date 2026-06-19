@@ -391,6 +391,37 @@ void applyRecordDirToSdk(int cameraId, const QString &rootPath)
     }
 }
 
+static constexpr unsigned int kCarDeskRecordBitrateMbps = 3;
+static constexpr int kCarDeskRecordFrameRate = 30;
+
+bool initDvrRecordPipeline(dvr_factory *dvr, int cameraId)
+{
+    if (!dvr || dvr->recordInit() != 0) {
+        return false;
+    }
+    if (!dvr->mRecordCamera) {
+        return true;
+    }
+
+    const int w = config_get_weith(cameraId);
+    const int h = config_get_heigth(cameraId);
+    if (w <= 0 || h <= 0) {
+        qWarning() << "[Ahd] recordInit ok but skip encode override, bad resolution camera"
+                   << cameraId;
+        return true;
+    }
+
+    if (dvr->mRecordCamera->videoEncParmInit(
+            w, h, w, h, kCarDeskRecordBitrateMbps, kCarDeskRecordFrameRate, VENC_CODEC_H264) != 0) {
+        qWarning() << "[Ahd] H264 3Mbps videoEncParmInit failed camera" << cameraId;
+        return true;
+    }
+
+    qDebug() << "[Ahd] record encode H264" << kCarDeskRecordBitrateMbps << "Mbps"
+             << w << "x" << h << "@" << kCarDeskRecordFrameRate << "camera" << cameraId;
+    return true;
+}
+
 bool isMultiCamFactory(int cameraId)
 {
     return cameraId == 360 || cameraId == 180 || cameraId == 270 || cameraId == 271
@@ -542,7 +573,7 @@ bool AhdCameraPool::resumePreview(const QVector<int> &cameraIds, bool hideHwOver
 
         qDebug() << "[Ahd] resume camera" << cameraId << dvr;
         if (!ch.recordInited) {
-            if (dvr->recordInit() != 0) {
+            if (!initDvrRecordPipeline(dvr, cameraId)) {
                 qWarning() << "[Ahd] resume recordInit failed camera" << cameraId;
             } else {
                 ch.recordInited = true;
@@ -751,7 +782,7 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
                 applyRecordDirToSdk(e.cameraId, recordRoots.first());
             }
             qDebug() << "[Ahd] phase2 recordInit camera" << e.cameraId;
-            if (e.dvr->recordInit() != 0) {
+            if (!initDvrRecordPipeline(e.dvr, e.cameraId)) {
                 qWarning() << "[Ahd] recordInit failed camera" << e.cameraId;
             } else {
                 ch.recordInited = true;
@@ -1283,7 +1314,7 @@ void AhdCameraPool::syncRecordingState()
                 }
                 applyRecordDirToSdk(ch.cameraId, root);
                 if (!ch.recordInited) {
-                    if (dvr->recordInit() != 0) {
+                    if (!initDvrRecordPipeline(dvr, ch.cameraId)) {
                         qWarning() << "[Ahd] recordInit failed camera" << ch.cameraId;
                         continue;
                     }
