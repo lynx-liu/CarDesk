@@ -827,9 +827,9 @@ void DrivingImageWindow::suspendForRecordPlayback()
     }
     cancelPreviewChromeAutoHide();
     m_previewChromeVisible = false;
+    // 仅隐藏 Qt 预览层，勿 stopCamera()：行车录像回放不应中断后台写盘。
     m_ahdManager->stopPreview();
-    m_ahdManager->stopCamera();
-    qDebug() << "[Driving] suspend AHD for record file playback";
+    qDebug() << "[Driving] hide AHD preview for record playback (recording continues)";
 }
 
 void DrivingImageWindow::resumeAfterRecordPlayback()
@@ -838,15 +838,7 @@ void DrivingImageWindow::resumeAfterRecordPlayback()
         return;
     }
     m_ahdSuspendedForPlayback = false;
-    qDebug() << "[Driving] resume AHD after record file playback";
-    if (!m_ahdManager) {
-        return;
-    }
-    QTimer::singleShot(0, this, [this]() {
-        if (m_ahdManager) {
-            m_ahdManager->warmupHardware();
-        }
-    });
+    qDebug() << "[Driving] record playback ended (recording was not stopped)";
 }
 
 void DrivingImageWindow::showPlaybackPage(const QString &anchorPath)
