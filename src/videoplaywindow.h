@@ -81,6 +81,7 @@ private:
     void hideControls();
     void showControls();
     void handleUserActivity();
+    void refreshControlsProgressUi();
     int sliderValueFromContainerPos(const QPoint &pos) const;
     void beginSliderSeek(int value);
     void previewSliderSeek(int value);

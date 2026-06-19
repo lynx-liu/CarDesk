@@ -1048,10 +1048,18 @@ void VideoPlayWindow::hideControls()
     m_controlsHidden = true;
     if (m_topBar) {
         m_topBar->hide();
+        m_topBar->lower();
     }
     if (m_bottomBar) {
         m_bottomBar->hide();
+        m_bottomBar->lower();
     }
+
+    if (QWidget *cw = centralWidget()) {
+        cw->update();
+        cw->repaint();
+    }
+    update();
 }
 
 void VideoPlayWindow::showControls()
@@ -1062,11 +1070,27 @@ void VideoPlayWindow::showControls()
     m_controlsHidden = false;
     if (m_topBar) {
         m_topBar->show();
+        m_topBar->raise();
     }
     if (m_bottomBar) {
         m_bottomBar->show();
+        m_bottomBar->raise();
     }
     resetInactivityTimer();
+    refreshControlsProgressUi();
+}
+
+void VideoPlayWindow::refreshControlsProgressUi()
+{
+#ifdef CAR_DESK_USE_T507_SDK
+    if (!m_useSdkPlayer || !m_sdkPlayer || m_controlsHidden) {
+        return;
+    }
+    int posMs = 0;
+    if (XPlayerGetCurrentPosition(m_sdkPlayer, &posMs) == 0) {
+        updateTimeAndSlider(posMs, m_sdkDurationMs);
+    }
+#endif
 }
 
 void VideoPlayWindow::handleUserActivity()
@@ -1076,6 +1100,7 @@ void VideoPlayWindow::handleUserActivity()
         return;
     }
     resetInactivityTimer();
+    refreshControlsProgressUi();
 }
 
 bool VideoPlayWindow::event(QEvent *event)
@@ -1126,7 +1151,6 @@ bool VideoPlayWindow::event(QEvent *event)
     case QEvent::MouseButtonRelease:
     case QEvent::TouchBegin:
     case QEvent::TouchEnd:
-    case QEvent::MouseMove:
     case QEvent::KeyPress:
     case QEvent::Wheel:
         handleUserActivity();
@@ -1151,7 +1175,6 @@ void VideoPlayWindow::mouseReleaseEvent(QMouseEvent *event)
 
 void VideoPlayWindow::mouseMoveEvent(QMouseEvent *event)
 {
-    handleUserActivity();
     QMainWindow::mouseMoveEvent(event);
 }
 
@@ -1194,7 +1217,6 @@ bool VideoPlayWindow::eventFilter(QObject *obj, QEvent *event)
     case QEvent::MouseButtonRelease:
     case QEvent::TouchBegin:
     case QEvent::TouchEnd:
-    case QEvent::MouseMove:
     case QEvent::KeyPress:
     case QEvent::Wheel:
         handleUserActivity();
@@ -1319,6 +1341,14 @@ void VideoPlayWindow::onSdkTick()
     int posMs = 0;
     if (XPlayerGetCurrentPosition(m_sdkPlayer, &posMs) == 0) {
         updateTimeAndSlider(posMs, m_sdkDurationMs);
+        if (!m_controlsHidden) {
+            if (m_topBar) {
+                m_topBar->raise();
+            }
+            if (m_bottomBar) {
+                m_bottomBar->raise();
+            }
+        }
     }
 #endif
 }
@@ -1646,6 +1676,9 @@ void VideoPlayWindow::continueSdkVideoSwitch()
     if (ok) {
         m_sdkPlaying = true;
         setPlayButtonState(true);
+        showControls();
+        resetInactivityTimer();
+        refreshControlsProgressUi();
         if (m_sdkTimer && !m_sdkTimer->isActive()) {
             m_sdkTimer->start();
         }
