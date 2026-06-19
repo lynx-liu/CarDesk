@@ -167,6 +167,20 @@ void clearTilePressedStates(QGridLayout *grid)
     }
 }
 
+int indexOfRecordPath(const QStringList &files, const QString &path)
+{
+    if (path.isEmpty()) {
+        return -1;
+    }
+    const QString anchor = QFileInfo(path).absoluteFilePath();
+    for (int i = 0; i < files.size(); ++i) {
+        if (QFileInfo(files.at(i)).absoluteFilePath() == anchor) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 } // namespace
 
 DrivingImagePlaybackPage::DrivingImagePlaybackPage(QWidget *parent)
@@ -319,6 +333,10 @@ void DrivingImagePlaybackPage::showEvent(QShowEvent *event)
     m_launchingPlayback = false;
     clearTilePressedStates(m_fileGrid);
     clearTilePressedStates(m_dateGrid);
+    if (m_skipRefreshOnNextShow) {
+        m_skipRefreshOnNextShow = false;
+        return;
+    }
     refreshCurrentView();
 }
 
@@ -357,11 +375,12 @@ void DrivingImagePlaybackPage::reloadDates()
     showDateList();
 }
 
-void DrivingImagePlaybackPage::restoreAfterVideoPlayback()
+void DrivingImagePlaybackPage::restoreAfterVideoPlayback(const QString &anchorPath)
 {
     m_launchingPlayback = false;
     if (!m_currentDate.isEmpty()) {
-        showFileList(m_currentDate);
+        m_skipRefreshOnNextShow = true;
+        showFileList(m_currentDate, anchorPath);
         return;
     }
     reloadDates();
@@ -428,12 +447,19 @@ void DrivingImagePlaybackPage::showDateList()
     populateDateGrid();
 }
 
-void DrivingImagePlaybackPage::showFileList(const QString &dateKey)
+void DrivingImagePlaybackPage::showFileList(const QString &dateKey, const QString &anchorPath)
 {
     m_currentDate = dateKey;
     m_allFiles = AhdRecordStore::filterExistingFiles(AhdRecordStore::listVideoFilesForDate(dateKey));
     m_showingFiles = true;
-    m_currentPage = 0;
+
+    const int maxPage = m_allFiles.isEmpty()
+        ? 0
+        : qMax(0, (m_allFiles.size() - 1) / kItemsPerPage);
+    const int fileIndex = indexOfRecordPath(m_allFiles, anchorPath);
+    m_currentPage = fileIndex >= 0 ? (fileIndex / kItemsPerPage) : 0;
+    m_currentPage = qBound(0, m_currentPage, maxPage);
+
     populateFileGrid();
     m_stack->setCurrentIndex(1);
     m_backBtn->show();

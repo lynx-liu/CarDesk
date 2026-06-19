@@ -472,6 +472,12 @@ QWidget *VideoListWindow::videoPlayWindow() const
     return m_playWindow;
 }
 
+QString VideoListWindow::currentPlayingVideoPath() const
+{
+    const auto *playWindow = qobject_cast<const VideoPlayWindow *>(m_playWindow);
+    return playWindow ? playWindow->currentVideoPath() : QString();
+}
+
 void VideoListWindow::setBluetoothManager(BluetoothManager *manager) {
     m_bluetoothManager = manager;
     if (m_playWindow) {

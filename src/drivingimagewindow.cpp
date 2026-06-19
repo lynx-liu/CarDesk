@@ -849,7 +849,7 @@ void DrivingImageWindow::resumeAfterRecordPlayback()
     });
 }
 
-void DrivingImageWindow::showPlaybackPage()
+void DrivingImageWindow::showPlaybackPage(const QString &anchorPath)
 {
     if (!m_stack) {
         return;
@@ -864,7 +864,7 @@ void DrivingImageWindow::showPlaybackPage()
         m_ahdManager->stopPreview();
     }
     if (m_playbackPage) {
-        m_playbackPage->restoreAfterVideoPlayback();
+        m_playbackPage->restoreAfterVideoPlayback(anchorPath);
     }
     updatePreviewChrome();
     show();

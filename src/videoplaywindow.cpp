@@ -1766,6 +1766,14 @@ bool VideoPlayWindow::isPlaying() const
     return m_mediaPlayer && m_mediaPlayer->state() == QMediaPlayer::PlayingState;
 }
 
+QString VideoPlayWindow::currentVideoPath() const
+{
+    if (m_currentIndex >= 0 && m_currentIndex < m_videoFiles.count()) {
+        return m_videoFiles.at(m_currentIndex);
+    }
+    return QString();
+}
+
 void VideoPlayWindow::pauseIfPlaying()
 {
 #ifdef CAR_DESK_USE_T507_SDK

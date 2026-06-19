@@ -395,9 +395,13 @@ void MainWindow::onDrivingRecordPlayRequested(const QStringList &files, int curr
     }
 
     openVideoPlayback(files, currentIndex, [this]() {
+        QString anchorPath;
+        if (m_mediaManager && m_mediaManager->videoListWindow()) {
+            anchorPath = m_mediaManager->videoListWindow()->currentPlayingVideoPath();
+        }
         if (m_drivingImageWindow) {
             m_drivingImageWindow->resumeAfterRecordPlayback();
-            m_drivingImageWindow->showPlaybackPage();
+            m_drivingImageWindow->showPlaybackPage(anchorPath);
         }
     });
 }

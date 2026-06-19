@@ -71,6 +71,7 @@ public:
     bool pauseVideoForOcclusion();
     bool resumeVideoAfterInterruption();
     QWidget *videoPlayWindow() const;
+    QString currentPlayingVideoPath() const;
     void setBluetoothManager(BluetoothManager *manager);
     void setMusicWindow(MusicPlayerWindow *musicWindow);
     void playVideoFiles(const QStringList &videoList, int currentIdx,

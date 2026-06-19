@@ -27,7 +27,7 @@ public:
     void setDrivingMode(int mode);
     void applyAutomotiveMode(int mode, bool forceReengage = false);
     int drivingMode() const;
-    void showPlaybackPage();
+    void showPlaybackPage(const QString &anchorPath = QString());
     bool allowsIncomingCallOverlay() const;
     void suspendForRecordPlayback();
     void resumeAfterRecordPlayback();

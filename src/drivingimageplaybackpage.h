@@ -19,8 +19,8 @@ public:
     explicit DrivingImagePlaybackPage(QWidget *parent = nullptr);
 
     void reloadDates();
-    /** 从录像播放器返回：有当前日期则回到该日期的文件列表，否则刷新日期列表 */
-    void restoreAfterVideoPlayback();
+    /** 从录像播放器返回：回到当前播放文件所在页，找不到则第一页 */
+    void restoreAfterVideoPlayback(const QString &anchorPath = QString());
 
 signals:
     void requestReturnToMain();
@@ -30,7 +30,7 @@ signals:
 private:
     void setupUI();
     void showDateList();
-    void showFileList(const QString &dateKey);
+    void showFileList(const QString &dateKey, const QString &anchorPath = QString());
     void playFile(const QString &path);
     void populateDateGrid();
     void populateFileGrid();
@@ -55,6 +55,7 @@ private:
     int m_currentPage = 0;
     bool m_showingFiles = false;
     bool m_launchingPlayback = false;
+    bool m_skipRefreshOnNextShow = false;
     QTimer *m_recordRefreshDebounce = nullptr;
 };
 

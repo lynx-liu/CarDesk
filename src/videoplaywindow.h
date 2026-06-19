@@ -36,6 +36,7 @@ public:
     bool hasPendingResume() const { return m_pausedForHome || m_pausedForOcclusion || m_pausedForInterruption; }
     bool hasPendingResumeFor(VideoPlaybackOrigin origin) const;
     VideoPlaybackOrigin playbackOrigin() const { return m_playbackOrigin; }
+    QString currentVideoPath() const;
     bool isPlaying() const;
     void pauseIfPlaying();
     void pauseForInterruption();
