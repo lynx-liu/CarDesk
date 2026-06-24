@@ -83,7 +83,8 @@ contains(CONFIG, arm_build)|contains(CONFIG, arm64_build) {
 
 # 编译时注入构建日期，供系统更新日期展示层兼容处理
 DEFINES += APP_BUILD_DATE=\\\"$$system(date +%Y-%m-%d)\\\"
-DEFINES += APP_BUILD_DATETIME=\\\"$$system(date +%Y-%m-%d\\ %H:%M:%S)\\\"
+# qmake 时写入，无空格（避免 -D 宏非法）；形如 2026-06-20T14:30:33
+DEFINES += APP_BUILD_DATETIME=\\\"$$system(date +%Y-%m-%dT%H:%M:%S)\\\"
 
 # 编译输出目录
 CONFIG(debug, debug|release) {

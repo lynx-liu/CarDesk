@@ -62,8 +62,7 @@ void installAppLogHandler()
 
 void logBuildInfo()
 {
-#ifndef APP_BUILD_DATETIME
-#define APP_BUILD_DATETIME "unknown"
-#endif
+#ifdef APP_BUILD_DATETIME
     qDebug().noquote() << QStringLiteral("CarDesk build time:") << QStringLiteral(APP_BUILD_DATETIME);
+#endif
 }
