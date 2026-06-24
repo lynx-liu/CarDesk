@@ -65,7 +65,7 @@ void prepareSdkRuntimeOnce()
     sigemptyset(&mask);
     sigaddset(&mask, SIGIO);
     pthread_sigmask(SIG_BLOCK, &mask, nullptr);
-    sdk_log_setlevel(0);
+    sdk_log_setlevel(2);
     g_sdkRuntimePrepared = true;
     qDebug() << "[Ahd] SDK runtime prepared (SIGIO blocked, log level=0)";
 }

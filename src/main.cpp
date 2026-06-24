@@ -46,6 +46,7 @@
 #include "ahdmanager.h"
 #include "tfcarddetect.h"
 #include "processguard.h"
+#include "applog.h"
 
 // ── 背光控制（POWER 键关/亮屏，SLEEP 键关机，具体 dispdbg 操作在 backlight.cpp）─
 static MainWindow *findMainWindow();
@@ -1006,6 +1007,8 @@ static bool routeMediaKeyToBackground(int qtKey)
 }
 
 int main(int argc, char *argv[]) {
+    installAppLogHandler();
+
     QStringList rawArgs;
     rawArgs.reserve(qMax(0, argc - 1));
     for (int i = 1; i < argc; ++i) {
@@ -1044,6 +1047,7 @@ int main(int argc, char *argv[]) {
 
     QApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
+    logBuildInfo();
     QObject::connect(&app, &QCoreApplication::aboutToQuit, []() { ProcessGuard::releaseInstanceLock(); });
     if (s_debugMode) {
         AppSettings::setDebugMode(true);

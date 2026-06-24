@@ -51,7 +51,7 @@ contains(CONFIG, arm_build)|contains(CONFIG, arm64_build) {
     DEFINES += HAVE_PTHREADS HAVE_SYS_UIO_H HAVE_POSIX_CLOCKS HAVE_PRCTL
     DEFINES += WATERMARK CDX_V27 SUPPORT_NEW_DRIVER
     DEFINES += _GNU_SOURCE CONFIG_CHIP=7 CONFIG_PRODUCT=2
-    DEFINES += VE_PHY_OFFSET=0x40000000 CONFIG_LOG_LEVEL=0
+    DEFINES += VE_PHY_OFFSET=0x40000000 CONFIG_LOG_LEVEL=7
     # 不定义 DMAFD_TEST，避免 SDK PreviewWindow 与 Qt EGL 同时消费同一 dma 缓冲
 
     LIBS += -L$$SDK_LIB/lib64
@@ -83,6 +83,7 @@ contains(CONFIG, arm_build)|contains(CONFIG, arm64_build) {
 
 # 编译时注入构建日期，供系统更新日期展示层兼容处理
 DEFINES += APP_BUILD_DATE=\\\"$$system(date +%Y-%m-%d)\\\"
+DEFINES += APP_BUILD_DATETIME=\\\"$$system(date +%Y-%m-%d\\ %H:%M:%S)\\\"
 
 # 编译输出目录
 CONFIG(debug, debug|release) {
@@ -151,10 +152,12 @@ HEADERS += \
     src/backlight.h \
     src/mupdfdocument.h \
     src/pinyin_dictionary.h \
-    src/processguard.h
+    src/processguard.h \
+    src/applog.h
 
 SOURCES += \
     src/main.cpp \
+    src/applog.cpp \
     src/processguard.cpp \
     src/automotivedriving.cpp \
     src/mainwindow.cpp \
