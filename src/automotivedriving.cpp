@@ -81,22 +81,18 @@ void activateDrivingImageMode(int mode, bool forceReengage)
         return;
     }
 
-    // CAN 弹出：forceReengage 或行车窗未 visible 时走完整 show；持连期间仅换布局。
+    // 行车窗已在前台：只换布局，禁止 hide→delay show（会闪主界面）。
+    // forceReengage 仅对「从主界面再次弹出」有意义。
     const bool drivingOnScreen = drive->isVisible();
     qDebug() << "[Automotive] present driving mainVisible=" << (main && main->isVisible())
              << "driveVisible=" << drive->isVisible() << "onScreen=" << drivingOnScreen
              << "mode=" << mode << "force=" << forceReengage;
 
-    if (drivingOnScreen && !forceReengage) {
+    if (drivingOnScreen) {
         drive->applyAutomotiveMode(mode, forceReengage);
         drive->raise();
         drive->activateWindow();
         return;
-    }
-
-    if (forceReengage && drive->isVisible()) {
-        drive->hide();
-        QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 30);
     }
 
     if (main) {
