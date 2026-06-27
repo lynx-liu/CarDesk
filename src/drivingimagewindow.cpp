@@ -870,7 +870,9 @@ void DrivingImageWindow::applyAutomotiveMode(int mode, bool forceReengage)
         showPage(0, mode);
         return;
     }
-    if (forceReengage && mode == m_cameraMode && m_ahdManager) {
+    if (forceReengage && mode == m_cameraMode && m_ahdManager && m_ahdManager->isPreviewActive()) {
+        // 仅在同模式且预览仍在跑时强制重启；hideEvent 已 stopPreview 后再次 CAN 弹窗
+        // （271→271）不应再 stop，否则 eglfs 上第二次 show 只见主界面、触摸被挡。
         m_ahdManager->stopPreview();
         m_cameraMode = -1;
     }
@@ -1117,9 +1119,7 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
         if (QApplication::primaryScreen()) {
             setGeometry(QApplication::primaryScreen()->geometry());
         }
-        if (!isFullScreen()) {
-            showFullScreen();
-        }
+        showFullScreen();
         setWindowState(windowState() | Qt::WindowFullScreen | Qt::WindowActive);
     }
 

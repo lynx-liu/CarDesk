@@ -95,6 +95,7 @@ private:
     SystemSettingWindow *m_systemSettingWindow;
     DrivingImageWindow *m_drivingImageWindow;
     ImageViewingWindow *m_imageViewingWindow;
+    int m_drivingImageShowGen = 0;
     struct RestoreState {
         QPointer<QWidget> widget;
     };

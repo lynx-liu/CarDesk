@@ -18,6 +18,7 @@
 #include "t507sdkbridge.h"
 
 #include <QApplication>
+#include <QEventLoop>
 #include <QKeyEvent>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -633,10 +634,31 @@ void MainWindow::showDrivingImageForAutomotive(int mode)
     if (!m_drivingImageWindow) {
         return;
     }
-    m_drivingImageWindow->applyAutomotiveMode(mode);
-    m_drivingImageWindow->show();
-    m_drivingImageWindow->raise();
-    m_drivingImageWindow->activateWindow();
+
+    ++m_drivingImageShowGen;
+    const int showGen = m_drivingImageShowGen;
+
+    // 底层主界面保持 visible（同设置页发 CAN）；勿 delete 行车窗——AhdCameraPool 的
+    // dvr_factory 进程内常驻，重建会再 open /dev/video* → Device or resource busy。
+    m_drivingImageWindow->setDrivingMode(mode);
+
+    QPointer<DrivingImageWindow> win = m_drivingImageWindow;
+    QPointer<MainWindow> self = this;
+    QTimer::singleShot(150, this, [self, win, showGen]() {
+        if (!self || showGen != self->m_drivingImageShowGen || !win) {
+            return;
+        }
+        win->show();
+        win->raise();
+        win->activateWindow();
+        QTimer::singleShot(0, qApp, []() {
+            for (QWidget *tw : QApplication::topLevelWidgets()) {
+                if (tw->isVisible() && tw->isWindow()) {
+                    tw->update();
+                }
+            }
+        });
+    });
 }
 
 void MainWindow::ensureDrivingImageWindow()

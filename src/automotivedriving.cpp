@@ -10,6 +10,7 @@
 #include <QApplication>
 #include <QDateTime>
 #include <QDebug>
+#include <QPointer>
 #include <QTimer>
 #include <QWidget>
 
@@ -63,14 +64,6 @@ DrivingImageWindow *findDrivingImageWindow()
     return nullptr;
 }
 
-bool isDrivingImageWindowVisible()
-{
-    if (DrivingImageWindow *drive = findDrivingImageWindow()) {
-        return drive->isVisible();
-    }
-    return false;
-}
-
 void activateDrivingImageMode(int mode, bool forceReengage)
 {
     MainWindow *main = findMainWindow();
@@ -84,13 +77,30 @@ void activateDrivingImageMode(int mode, bool forceReengage)
         return;
     }
 
-    if (drive) {
-        if (!drive->isVisible()) {
-            drive->show();
-        }
+    if (!drive) {
+        return;
+    }
+
+    // CAN 弹出：forceReengage 或行车窗未 visible 时走完整 show；持连期间仅换布局。
+    const bool drivingOnScreen = drive->isVisible();
+    qDebug() << "[Automotive] present driving mainVisible=" << (main && main->isVisible())
+             << "driveVisible=" << drive->isVisible() << "onScreen=" << drivingOnScreen
+             << "mode=" << mode << "force=" << forceReengage;
+
+    if (drivingOnScreen && !forceReengage) {
         drive->applyAutomotiveMode(mode, forceReengage);
         drive->raise();
         drive->activateWindow();
+        return;
+    }
+
+    if (forceReengage && drive->isVisible()) {
+        drive->hide();
+        QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 30);
+    }
+
+    if (main) {
+        main->showDrivingImageForAutomotive(mode);
     }
 }
 
@@ -112,6 +122,7 @@ void hideDrivingImageWindow()
     DrivingImageWindow *drive = findDrivingImageWindow();
     if (drive && drive->isVisible()) {
         drive->hide();
+        QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 20);
     }
 
     MainWindow *main = findMainWindow();
@@ -120,9 +131,25 @@ void hideDrivingImageWindow()
     }
 
     if (main && !hasOtherVisibleTopLevel(drive)) {
-        main->show();
+        if (!main->isVisible()) {
+            main->show();
+        }
         main->raise();
         main->activateWindow();
+        main->update();
+        main->repaint();
+        QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 20);
+        QPointer<MainWindow> mainPtr = main;
+        QTimer::singleShot(0, qApp, [mainPtr]() {
+            for (QWidget *tw : QApplication::topLevelWidgets()) {
+                if (tw->isVisible() && tw->isWindow()) {
+                    tw->update();
+                }
+            }
+            if (mainPtr && mainPtr->isVisible()) {
+                mainPtr->repaint();
+            }
+        });
     }
 }
 
@@ -192,14 +219,13 @@ int resolveAutomotiveLayoutMode()
 
 void applySpeedLayoutIfDrivingImageVisible()
 {
-    if (!isDrivingImageWindowVisible()) {
+    DrivingImageWindow *drive = findDrivingImageWindow();
+    if (!drive || !drive->isVisible()) {
         return;
     }
 
     const int mode = resolveAutomotiveLayoutMode();
-    if (DrivingImageWindow *drive = findDrivingImageWindow()) {
-        drive->applyAutomotiveMode(mode);
-    }
+    drive->applyAutomotiveMode(mode);
 }
 
 void applyCanAutomotiveDisplayState(bool forceReengage)
