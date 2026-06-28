@@ -312,11 +312,14 @@ void applyCanSignalTransition()
 
     if (rawMode != 0) {
         const bool newlyEngaged = (s_activeSignalMode == 0);
+        const int prevMode = s_activeSignalMode;
         s_noTurnReverseSinceMs = 0;
         ensureCanReleaseWatchdog();
         s_activeSignalMode = rawMode;
-        applyCanAutomotiveDisplayState(newlyEngaged);
-        applySpeedLayoutIfDrivingImageVisible();
+        if (prevMode != rawMode || newlyEngaged) {
+            applyCanAutomotiveDisplayState(newlyEngaged);
+            applySpeedLayoutIfDrivingImageVisible();
+        }
         return;
     }
 

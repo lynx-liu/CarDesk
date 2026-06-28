@@ -870,9 +870,16 @@ void DrivingImageWindow::applyAutomotiveMode(int mode, bool forceReengage)
         showPage(0, mode);
         return;
     }
-    if (forceReengage && mode == m_cameraMode && m_ahdManager && m_ahdManager->isPreviewActive()) {
-        // 仅在同模式且预览仍在跑时强制重启；hideEvent 已 stopPreview 后再次 CAN 弹窗
-        // （271→271）不应再 stop，否则 eglfs 上第二次 show 只见主界面、触摸被挡。
+
+    const bool previewActive = m_ahdManager && m_ahdManager->isPreviewActive();
+    const bool sameLayout = mode == m_cameraMode && !m_isFullscreen;
+
+    // 连续相同 CAN 布局且预览已在跑：跳过，避免每帧 OEL 反复 startPreview 卡画面。
+    if (isVisible() && sameLayout && previewActive) {
+        return;
+    }
+
+    if (forceReengage && sameLayout && previewActive) {
         m_ahdManager->stopPreview();
         m_cameraMode = -1;
     }
