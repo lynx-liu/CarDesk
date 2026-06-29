@@ -194,25 +194,25 @@ void MainWindow::createNavigationBar() {
         const char *slot;
         bool suppressTouchSound;
         bool debugOnly;
-        QString menuLabel;
     };
 
     const bool showBluetooth = AppSettings::debugMode();
     QVector<NavItem> navItems;
     navItems.reserve(8);
-    navItems.append({0, ":/images/butt_home_radio_up.png", ":/images/butt_home_radio_down.png", SLOT(onRadioClicked()), false, false, {}});
-    navItems.append({0, ":/images/butt_home_driving_image_up.png", ":/images/butt_home_driving_image_down.png", SLOT(onDrivingImageClicked()), false, false, {}});
-    navItems.append({0, ":/images/butt_home_video_play_up.png", ":/images/butt_home_video_play_down.png", SLOT(onVideoListClicked()), true, false, {}});
-    navItems.append({0, ":/images/butt_home_image_viewing_up.png", ":/images/butt_home_image_viewing_down.png", SLOT(onImageViewingClicked()), false, false, {}});
+    navItems.append({0, ":/images/butt_home_radio_up.png", ":/images/butt_home_radio_down.png", SLOT(onRadioClicked()), false, false});
+    navItems.append({0, ":/images/butt_home_driving_image_up.png", ":/images/butt_home_driving_image_down.png", SLOT(onDrivingImageClicked()), false, false});
+    navItems.append({0, ":/images/butt_home_video_play_up.png", ":/images/butt_home_video_play_down.png", SLOT(onVideoListClicked()), true, false});
+    navItems.append({0, ":/images/butt_home_image_viewing_up.png", ":/images/butt_home_image_viewing_down.png", SLOT(onImageViewingClicked()), false, false});
     if (showBluetooth) {
-        navItems.append({1, ":/images/butt_home_diagnostic_maintenance_up.png", ":/images/butt_home_diagnostic_maintenance_down.png", SLOT(onDiagnosticClicked()), false, false, {}});
-        navItems.append({1, ":/images/butt_home_bluetooth_phone_up.png", ":/images/butt_home_bluetooth_phone_down.png", SLOT(onPhoneClicked()), false, true, {}});
+        navItems.append({1, ":/images/butt_home_diagnostic_maintenance_up.png", ":/images/butt_home_diagnostic_maintenance_down.png", SLOT(onDiagnosticClicked()), false, false});
+        navItems.append({1, ":/images/butt_home_bluetooth_phone_up.png", ":/images/butt_home_bluetooth_phone_down.png", SLOT(onPhoneClicked()), false, true});
     } else {
-        navItems.append({1, ":/images/butt_home_fault_up.png", ":/images/butt_home_fault_down.png", SLOT(onFaultDiagnosticClicked()), false, false, {}});
-        navItems.append({1, ":/images/butt_home_diagnostic_up.png", ":/images/butt_home_diagnostic_down.png", SLOT(onUsageMaintenanceClicked()), false, false, {}});
+        // 图标对调：文字随切图走，功能不变
+        navItems.append({1, ":/images/butt_home_diagnostic_up.png", ":/images/butt_home_diagnostic_down.png", SLOT(onFaultDiagnosticClicked()), false, false});
+        navItems.append({1, ":/images/butt_home_fault_up.png", ":/images/butt_home_fault_down.png", SLOT(onUsageMaintenanceClicked()), false, false});
     }
-    navItems.append({1, ":/images/butt_home_audio_play_up.png", ":/images/butt_home_audio_play_down.png", SLOT(onMusicUSBClicked()), true, false, {}});
-    navItems.append({1, ":/images/butt_home_system_settings_up.png", ":/images/butt_home_system_settings_down.png", SLOT(onSystemSettingsClicked()), false, false, {}});
+    navItems.append({1, ":/images/butt_home_audio_play_up.png", ":/images/butt_home_audio_play_down.png", SLOT(onMusicUSBClicked()), true, false});
+    navItems.append({1, ":/images/butt_home_system_settings_up.png", ":/images/butt_home_system_settings_down.png", SLOT(onSystemSettingsClicked()), false, false});
 
     QVector<NavItem> row0Items;
     QVector<NavItem> row1Items;
@@ -230,24 +230,14 @@ void MainWindow::createNavigationBar() {
     }
 
     const auto makeNavButton = [this](const NavItem &item) -> QPushButton * {
-        QPushButton *btn = item.menuLabel.isEmpty() ? new QPushButton(this)
-                                                      : new QPushButton(item.menuLabel, this);
+        QPushButton *btn = new QPushButton(this);
         btn->setProperty("nav", true);
         btn->setFixedSize(216, 271);
         btn->setCursor(Qt::PointingHandCursor);
-        if (item.menuLabel.isEmpty()) {
-            btn->setStyleSheet(QString(
-                "QPushButton { border: none; background-image: url(%1); }"
-                "QPushButton:hover { background-image: url(%2); }"
-            ).arg(item.upImage, item.downImage));
-        } else {
-            // 与 diagnostic_maintenance.html 一致：图标在上、文字在下，勿拉伸整图
-            btn->setStyleSheet(QString(
-                "QPushButton{border:none;background:url(%1) no-repeat top center;padding-top:208px;"
-                "font-size:24px;color:#fff;}"
-                "QPushButton:hover{background-image:url(%2);}"
-            ).arg(item.upImage, item.downImage));
-        }
+        btn->setStyleSheet(QString(
+            "QPushButton { border: none; background-image: url(%1); }"
+            "QPushButton:hover { background-image: url(%2); }"
+        ).arg(item.upImage, item.downImage));
 
         if (item.slot) {
             connect(btn, SIGNAL(clicked()), this, item.slot);
