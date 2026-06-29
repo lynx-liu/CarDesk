@@ -18,6 +18,10 @@
         <file alias="butt_home_image_viewing_down.png">ui/images/butt_home_image_viewing_down.png</file>
         <file alias="butt_home_diagnostic_maintenance_up.png">ui/images/butt_home_diagnostic_maintenance_up.png</file>
         <file alias="butt_home_diagnostic_maintenance_down.png">ui/images/butt_home_diagnostic_maintenance_down.png</file>
+        <file alias="butt_home_fault_up.png">ui/images/butt_home_fault_up.png</file>
+        <file alias="butt_home_fault_down.png">ui/images/butt_home_fault_down.png</file>
+        <file alias="butt_home_diagnostic_up.png">ui/images/butt_home_diagnostic_up.png</file>
+        <file alias="butt_home_diagnostic_down.png">ui/images/butt_home_diagnostic_down.png</file>
         <file alias="butt_home_bluetooth_phone_up.png">ui/images/butt_home_bluetooth_phone_up.png</file>
         <file alias="butt_home_bluetooth_phone_down.png">ui/images/butt_home_bluetooth_phone_down.png</file>
         <file alias="butt_home_audio_play_up.png">ui/images/butt_home_audio_play_up.png</file>

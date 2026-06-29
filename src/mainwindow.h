@@ -42,6 +42,8 @@ private slots:
     void onPhoneClicked();
     void onRadioClicked();
     void onDiagnosticClicked();
+    void onFaultDiagnosticClicked();
+    void onUsageMaintenanceClicked();
     void onSystemSettingsClicked();
     void onDrivingImageClicked();
     void onImageViewingClicked();
@@ -70,6 +72,7 @@ private:
     void ensurePhoneWindow();
     void ensureRadioWindow();
     void ensureDiagnosticWindow();
+    void openDiagnosticAtPage(int pageIndex, bool directFromMain = false);
     void ensureSystemSettingWindow();
     void ensureImageViewingWindow();
     void ensureDrivingImageWindow();

@@ -215,7 +215,7 @@ QWidget *DiagnosticWindow::createFaultPage()
         "QPushButton{border:none;background:url(:/images/butt_back_up.png) no-repeat;}"
         "QPushButton:hover{background:url(:/images/butt_back_down.png) no-repeat;}"
     );
-    connect(backBtn, &QPushButton::clicked, this, [this]() { openPage(0); });
+    connect(backBtn, &QPushButton::clicked, this, &DiagnosticWindow::onBackFromTopLevelSubPage);
 
     const QStringList names = {
         QStringLiteral("ABS系统"),
@@ -306,7 +306,7 @@ QWidget *DiagnosticWindow::createMaintenanceBookPage()
         "QPushButton{border:none;background:url(:/images/butt_back_up.png) no-repeat;}"
         "QPushButton:hover{background:url(:/images/butt_back_down.png) no-repeat;}"
     );
-    connect(backBtn, &QPushButton::clicked, this, [this]() { openPage(0); });
+    connect(backBtn, &QPushButton::clicked, this, &DiagnosticWindow::onBackFromTopLevelSubPage);
 
     auto *bookWrap = new QWidget(page);
     // CSS .diagnostic_maintenance_book { width:944; margin:24px auto }
@@ -1437,6 +1437,23 @@ void DiagnosticWindow::openPage(int index)
     m_pages->setCurrentIndex(index);
 }
 
+void DiagnosticWindow::presentPage(int pageIndex, bool directFromMain)
+{
+    m_directEntryFromMain = directFromMain && pageIndex != 0;
+    openPage(pageIndex);
+}
+
+void DiagnosticWindow::onBackFromTopLevelSubPage()
+{
+    if (m_directEntryFromMain) {
+        m_directEntryFromMain = false;
+        emit requestReturnToMain();
+        hide();
+        return;
+    }
+    openPage(0);
+}
+
 void DiagnosticWindow::appendCharToInput(QLineEdit *target, const QString &text)
 {
     if (!target) {
@@ -1563,9 +1580,9 @@ void DiagnosticWindow::keyPressEvent(QKeyEvent *event)
             emit requestReturnToMain();
             hide();
             break;
-        case 1:  // 故障列表 → 主菜单
-        case 2:  // 维护资料列表 → 主菜单
-            openPage(0);
+        case 1:  // 故障列表
+        case 2:  // 维护资料列表
+            onBackFromTopLevelSubPage();
             break;
         case 3:  // PDF阅读 → 维护资料列表
             openPage(2);

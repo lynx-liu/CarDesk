@@ -22,6 +22,8 @@ public:
     explicit DiagnosticWindow(QWidget *parent = nullptr);
     ~DiagnosticWindow() override;
 
+    void presentPage(int pageIndex, bool directFromMain = false);
+
 signals:
     void requestReturnToMain();
 
@@ -61,6 +63,7 @@ private:
     void updateSearchResultHeader();
     void showFaultDetail(const QString &controller);
     void populateFaultDetailContent();
+    void onBackFromTopLevelSubPage();
     static int controllerIndex(const QString &ctrl);
 
     QStackedWidget *m_pages;
@@ -94,6 +97,7 @@ private:
     QString                               m_currentFaultController;
     QLabel                               *m_faultDetailTitleLabel;
     QScrollArea                          *m_faultDetailScrollArea;
+    bool                                  m_directEntryFromMain = false;
 };
 
 #endif // DIAGNOSTICWINDOW_H
