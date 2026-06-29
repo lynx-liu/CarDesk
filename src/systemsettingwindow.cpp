@@ -1,4 +1,5 @@
 #include "systemsettingwindow.h"
+#include "app_version.h"
 #include "pagebgwidget.h"
 #include "bluetoothmanager.h"
 #include "otamanager.h"
@@ -2090,8 +2091,7 @@ void SystemSettingWindow::setBluetoothManager(BluetoothManager *bluetoothManager
 
 QWidget *SystemSettingWindow::createInfoPage()
 {
-    // 软件版本：从 U-Boot 环境变量读取（fw_printenv -n swu_version）
-    auto readSoftVersion = []() -> QString {
+    auto readFirmwareVersion = []() -> QString {
         QProcess p;
         p.start(QStringLiteral("fw_printenv"), {QStringLiteral("-n"), QStringLiteral("swu_version")});
         if (p.waitForFinished(800)) {
@@ -2099,28 +2099,6 @@ QWidget *SystemSettingWindow::createInfoPage()
             if (!v.isEmpty()) return v;
         }
         return QStringLiteral("-");
-    };
-
-    // 硬件型号：从设备树读取
-    auto readHardwareModel = []() -> QString {
-        QFile f(QStringLiteral("/proc/device-tree/model"));
-        if (f.open(QIODevice::ReadOnly)) {
-            const QString m = QString::fromLocal8Bit(f.readAll()).trimmed().replace(QChar('\0'), QString());
-            f.close();
-            if (!m.isEmpty()) return m;
-        }
-        return QStringLiteral("-");
-    };
-
-    // 系统更新日期：优先读 OTA 写入的 swu_date，无则用编译时日期
-    auto readUpdateDate = []() -> QString {
-        QProcess p;
-        p.start(QStringLiteral("fw_printenv"), {QStringLiteral("-n"), QStringLiteral("swu_date")});
-        if (p.waitForFinished(800)) {
-            const QString d = QString::fromLocal8Bit(p.readAllStandardOutput()).trimmed();
-            if (!d.isEmpty()) return d;
-        }
-        return QStringLiteral(APP_BUILD_DATE);
     };
 
     auto *page = new QWidget();
@@ -2135,9 +2113,9 @@ QWidget *SystemSettingWindow::createInfoPage()
     listLayout->setSpacing(24);
 
     const QList<QPair<QString, QString>> rows = {
-        {QStringLiteral("软件版本："), readSoftVersion()},
-        {QStringLiteral("硬件型号："), readHardwareModel()},
-        {QStringLiteral("系统更新日期："), readUpdateDate()}
+        {QStringLiteral("软件版本："), QStringLiteral(APP_VERSION)},
+        {QStringLiteral("固件版本："), readFirmwareVersion()},
+        {QStringLiteral("系统更新日期："), QStringLiteral(APP_BUILD_DATE)}
     };
 
     for (const auto &row : rows) {

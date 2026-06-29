@@ -81,10 +81,15 @@ contains(CONFIG, arm_build)|contains(CONFIG, arm64_build) {
     message("Building for x86/x64 (PC)")
 }
 
-# 编译时注入构建日期，供系统更新日期展示层兼容处理
+# 编译时注入构建日期，供系统更新日期展示
 DEFINES += APP_BUILD_DATE=\\\"$$system(date +%Y-%m-%d)\\\"
 # qmake 时写入，无空格（避免 -D 宏非法）；形如 2026-06-20T14:30:33
 DEFINES += APP_BUILD_DATETIME=\\\"$$system(date +%Y-%m-%dT%H:%M:%S)\\\"
+# 软件版本：每次 qmake 时 patch +1（从 VERSION 起始 2.0.1）
+exists($$PWD/scripts/gen_app_version.sh) {
+    APP_VERSION_DISPLAY = $$system(bash $$PWD/scripts/gen_app_version.sh $$PWD/VERSION $$PWD/src/app_version.h)
+    !isEmpty(APP_VERSION_DISPLAY): message("App version: $$APP_VERSION_DISPLAY")
+}
 
 # 编译输出目录
 CONFIG(debug, debug|release) {
@@ -154,7 +159,8 @@ HEADERS += \
     src/mupdfdocument.h \
     src/pinyin_dictionary.h \
     src/processguard.h \
-    src/applog.h
+    src/applog.h \
+    src/app_version.h
 
 SOURCES += \
     src/main.cpp \

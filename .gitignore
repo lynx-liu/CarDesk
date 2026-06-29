@@ -6,3 +6,4 @@ release/
 Makefile
 .qmake.stash
 qrc_resources.cpp
+src/app_version.h

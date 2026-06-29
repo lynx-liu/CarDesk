@@ -1,4 +1,5 @@
 #include "applog.h"
+#include "app_version.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -62,6 +63,9 @@ void installAppLogHandler()
 
 void logBuildInfo()
 {
+#ifdef APP_VERSION
+    qDebug().noquote() << QStringLiteral("CarDesk version:") << QStringLiteral(APP_VERSION);
+#endif
 #ifdef APP_BUILD_DATETIME
     qDebug().noquote() << QStringLiteral("CarDesk build time:") << QStringLiteral(APP_BUILD_DATETIME);
 #endif
