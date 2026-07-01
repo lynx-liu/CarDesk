@@ -1306,20 +1306,35 @@ int main(int argc, char *argv[]) {
             automotiveUpdateVehicleSpeed(speedKmh);
         });
 
-        // TD 时间日期 → 同步系统时钟（至多每分钟同步一次）
+        // TD：程序启动后仅同步一次；须在不播视频时收到才执行（date -s 会打断 XPlayer）
         QObject::connect(txrxReader, &McuSerialReader::tdReceived,
-                         &app, [](int year, int month, int day, int hour, int min) {
+                         &app, [&window](int year, int month, int day, int hour, int min) {
+            static bool canTdTimeSynced = false;
+            if (canTdTimeSynced) {
+                return;
+            }
+
+            if (MediaManager *mm = window.mediaManager()) {
+                if (VideoListWindow *list = mm->videoListWindow()) {
+                    if (QWidget *pw = list->videoPlayWindow()) {
+                        if (pw->isVisible()) {
+                            const auto *video = qobject_cast<const VideoPlayWindow *>(pw);
+                            if (video && video->isPlaying()) {
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+
+            canTdTimeSynced = true;
             const QString dateStr = QString("%1-%2-%3 %4:%5:00")
                 .arg(year)
                 .arg(month, 2, 10, QChar('0'))
                 .arg(day,   2, 10, QChar('0'))
                 .arg(hour,  2, 10, QChar('0'))
                 .arg(min,   2, 10, QChar('0'));
-            static QString lastSyncKey;
-            if (dateStr == lastSyncKey) return;
-            lastSyncKey = dateStr;
-            qDebug() << "[TXRX] sync system time:" << dateStr;
-            // date -s "YYYY-MM-DD HH:mm:00" && hwclock -w
+            qDebug() << "[TXRX] sync system time (once after boot):" << dateStr;
             const QString cmd = QStringLiteral("date -s \"%1\" && hwclock -w").arg(dateStr);
             QProcess::startDetached(QStringLiteral("/bin/sh"), {QStringLiteral("-c"), cmd});
         });
