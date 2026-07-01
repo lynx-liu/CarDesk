@@ -11,6 +11,9 @@ void automotiveUpdateVehicleSpeed(float speedKmh);
 
 void automotiveSyncCanSignals(int rTurn, int lTurn, int backup);
 
+// 信号未变时仅刷新 CAN 活动时间戳，避免每帧重复走布局/预览逻辑
+void automotiveRefreshCanBusActivity();
+
 void automotiveSetBackupSignal(bool on);
 void automotiveSetLeftTurnSignal(bool on);
 void automotiveSetRightTurnSignal(bool on);

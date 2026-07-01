@@ -872,14 +872,14 @@ void DrivingImageWindow::applyAutomotiveMode(int mode, bool forceReengage)
     }
 
     const bool previewActive = m_ahdManager && m_ahdManager->isPreviewActive();
-    const bool sameLayout = mode == m_cameraMode && !m_isFullscreen;
+    const bool sameMode = mode == m_cameraMode;
 
-    // 连续相同 CAN 布局且预览已在跑：跳过，避免每帧 OEL 反复 startPreview 卡画面。
-    if (isVisible() && sameLayout && previewActive) {
+    // 布局未变（含用户手动单摄）：跳过，避免 TCO1/OEL 背景帧反复 startPreview。
+    if (isVisible() && sameMode && previewActive && !forceReengage) {
         return;
     }
 
-    if (forceReengage && sameLayout && previewActive) {
+    if (forceReengage && sameMode && previewActive && !m_isFullscreen) {
         m_ahdManager->stopPreview();
         m_cameraMode = -1;
     }
@@ -1049,14 +1049,21 @@ void DrivingImageWindow::setDrivingMode(int mode)
 {
     const bool modeChanged = mode != m_cameraMode;
     const bool previewInactive = !m_ahdManager || !m_ahdManager->isPreviewActive();
-    if (mode == m_cameraMode && !m_isFullscreen && isVisible() && !previewInactive) {
+    if (!modeChanged && isVisible() && !previewInactive) {
+        if (!m_isFullscreen) {
+            updatePreviewChrome();
+            return;
+        }
+        // 四分屏下单摄：同布局重复下发时保持单摄，只同步预览通道索引
+        updatePreviewLayout();
         updatePreviewChrome();
         return;
     }
+
     m_cameraMode = mode;
-    m_isFullscreen = false;
-    m_fullscreenCameraId = -1;
     if (modeChanged) {
+        m_isFullscreen = false;
+        m_fullscreenCameraId = -1;
         cancelPreviewChromeAutoHide();
         m_previewChromeVisible = false;
     }

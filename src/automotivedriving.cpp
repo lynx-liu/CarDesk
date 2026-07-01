@@ -377,9 +377,13 @@ void notifyUserClosedDrivingImage()
 void updateVehicleSpeed(float speedKmh)
 {
     s_vehicleSpeedKmh = speedKmh;
+    const bool wasSpeedDriving = s_speedDrivingMode;
     updateSpeedDrivingMode();
     tickCanReleaseWatchdog();
-    applySpeedLayoutIfDrivingImageVisible();
+    // TCO1 高频上报：仅在行车/普通布局滞回区跨越时改布局，勿每帧打断用户单摄
+    if (wasSpeedDriving != s_speedDrivingMode) {
+        applySpeedLayoutIfDrivingImageVisible();
+    }
 }
 
 void syncCanSignals(int rTurn, int lTurn, int backup)
@@ -442,6 +446,11 @@ void setIllumination(bool on)
     s_illuminationOn = on;
 }
 
+void refreshCanBusActivity()
+{
+    g_lastLcFrameMs = nowMs();
+}
+
 } // namespace
 
 void automotiveOnDrivingVideoSettingChanged()
@@ -477,6 +486,11 @@ void automotiveUpdateVehicleSpeed(float speedKmh)
 void automotiveSyncCanSignals(int rTurn, int lTurn, int backup)
 {
     syncCanSignals(rTurn, lTurn, backup);
+}
+
+void automotiveRefreshCanBusActivity()
+{
+    refreshCanBusActivity();
 }
 
 void automotiveSetBackupSignal(bool on)

@@ -223,12 +223,14 @@ void McuSerialReader::processLine(const QByteArray &raw)
 
 void McuSerialReader::emitLcIfChanged()
 {
-    automotiveSyncCanSignals(m_canRTurn, m_canLTurn, m_canBackup);
-
     if (m_canRTurn == m_lastEmittedRTurn && m_canLTurn == m_lastEmittedLTurn
         && m_canBackup == m_lastEmittedBackup) {
+        automotiveRefreshCanBusActivity();
         return;
     }
+
+    automotiveSyncCanSignals(m_canRTurn, m_canLTurn, m_canBackup);
+
     m_lastEmittedRTurn = m_canRTurn;
     m_lastEmittedLTurn = m_canLTurn;
     m_lastEmittedBackup = m_canBackup;
