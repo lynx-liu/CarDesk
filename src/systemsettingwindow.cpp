@@ -2115,7 +2115,8 @@ QWidget *SystemSettingWindow::createInfoPage()
     const QList<QPair<QString, QString>> rows = {
         {QStringLiteral("软件版本："), QStringLiteral(APP_VERSION)},
         {QStringLiteral("固件版本："), readFirmwareVersion()},
-        {QStringLiteral("系统更新日期："), QStringLiteral(APP_BUILD_DATE)}
+        {QStringLiteral("系统更新日期："), QStringLiteral(APP_BUILD_DATE)},
+        {QStringLiteral("电子手册版本："), QStringLiteral("1.0")}
     };
 
     for (const auto &row : rows) {
