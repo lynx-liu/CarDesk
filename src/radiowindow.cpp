@@ -170,7 +170,66 @@ static void findBarScaleBounds(const QPixmap &pixmap, int &scaleStart, int &scal
         }
     }
 }
-// ─────────────────────────────────────────────────────────────────────────────
+
+struct BarScaleConfig {
+    int layoutStart = 0;
+    int layoutEnd = 0;
+    int scrollMin = 0;
+    int scrollMax = 0;
+    double minFreq = 87.0;
+    double maxFreq = 108.0;
+    bool amTwoPxPerKhz = false;
+};
+
+static constexpr double kAmFreqOriginKhz = 511.0;
+static constexpr int kAmPxPerKhz = 2;
+static constexpr int kAmScalePxEnd = 1140;  // 刻度区宽 1140px（2px/kHz => 570 kHz）
+
+static BarScaleConfig barScaleConfig(bool isFm, const QPixmap &pixmap)
+{
+    BarScaleConfig cfg;
+    if (isFm) {
+        cfg.layoutStart = 0;
+        cfg.layoutEnd = pixmap.width() - 1;
+        findBarScaleBounds(pixmap, cfg.layoutStart, cfg.layoutEnd);
+        cfg.scrollMin = 0;
+        cfg.scrollMax = qMax(1, cfg.layoutEnd - cfg.layoutStart);
+        cfg.minFreq = 87.0;
+        cfg.maxFreq = 108.0;
+        return cfg;
+    }
+
+    // AM：图像 x=0 对应 511 kHz，2px/kHz；531 kHz 在 x=40，可滑到 1629 kHz（x=2236）
+    cfg.layoutStart = 0;
+    cfg.layoutEnd = kAmScalePxEnd;
+    cfg.amTwoPxPerKhz = true;
+    cfg.minFreq = 531.0;
+    cfg.maxFreq = 1629.0;
+    cfg.scrollMin = kAmPxPerKhz * (531 - 511);
+    cfg.scrollMax = kAmPxPerKhz * (1629 - 511);
+    return cfg;
+}
+
+static double frequencyFromScroll(const BarScaleConfig &cfg, int scrollValue)
+{
+    if (cfg.amTwoPxPerKhz) {
+        return kAmFreqOriginKhz + scrollValue / double(kAmPxPerKhz);
+    }
+    const int span = qMax(1, cfg.scrollMax - cfg.scrollMin);
+    const double ratio = double(scrollValue - cfg.scrollMin) / span;
+    return cfg.minFreq + ratio * (cfg.maxFreq - cfg.minFreq);
+}
+
+static int scrollFromFrequency(const BarScaleConfig &cfg, double frequency)
+{
+    if (cfg.amTwoPxPerKhz) {
+        const double clamped = qBound(cfg.minFreq, frequency, cfg.maxFreq);
+        return qRound(kAmPxPerKhz * (clamped - kAmFreqOriginKhz));
+    }
+    const double clamped = qBound(cfg.minFreq, frequency, cfg.maxFreq);
+    const double ratio = (clamped - cfg.minFreq) / (cfg.maxFreq - cfg.minFreq);
+    return cfg.scrollMin + qRound(ratio * (cfg.scrollMax - cfg.scrollMin));
+}
 
 // ── 电台列表 Delegate ──────────────────────────────────────────────────────────
 // CSS: .radio_list_con ul li { 212×212; bg:radio_list_up/down.png }
@@ -463,19 +522,14 @@ bool RadioWindow::eventFilter(QObject *obj, QEvent *event)
                 // 向左拖 → 滚动条增大 → 频率升高（与 HTML 拖动一致）
                 const int delta = m_barDragStartX - me->x();
                 QScrollBar *sb = m_barScrollArea->horizontalScrollBar();
-                sb->setValue(qBound(0, m_barDragStartScroll + delta, sb->maximum()));
-                // 实时更新频率显示（不向驱动写入，避免过多 ioctl）
                 const QPixmap *pix = m_barLabel->pixmap();
-                const int barWidth = pix ? pix->width() : (m_isFM ? 2160 : 2480);
-                int scaleStart = 0, scaleEnd = barWidth - 1;
-                if (pix)
-                    findBarScaleBounds(*pix, scaleStart, scaleEnd);
-                const int scaleWidth = qMax(1, scaleEnd - scaleStart);
-                const int maxScroll = scaleWidth;
-                const double minFreq = m_isFM ? 87.0  : 531.0;
-                const double maxFreq = m_isFM ? 108.0 : 1629.0;
-                const double freq = minFreq + sb->value() / double(maxScroll) * (maxFreq - minFreq);
-                const double clamped = qBound(minFreq, freq, maxFreq);
+                const BarScaleConfig cfg = pix
+                    ? barScaleConfig(m_isFM, *pix)
+                    : barScaleConfig(m_isFM, QPixmap());
+                sb->setValue(qBound(cfg.scrollMin, m_barDragStartScroll + delta, cfg.scrollMax));
+                // 实时更新频率显示（不向驱动写入，避免过多 ioctl）
+                const double freq = frequencyFromScroll(cfg, sb->value());
+                const double clamped = qBound(cfg.minFreq, freq, cfg.maxFreq);
                 if (m_freqLabel)
                     m_freqLabel->setText(m_isFM ? QString::number(clamped, 'f', 1)
                                                 : QString::number(clamped, 'f', 0));
@@ -996,25 +1050,24 @@ void RadioWindow::updateFrequencyView() {
             // markerX = 915.4 - 568 = 347; mark widget center = scrollArea_left + markerX = 280+347=627
             const int markerX = 347;
             const int barWidth = barPixmap.width();
-            int scaleStart = 0, scaleEnd = barWidth - 1;
-            findBarScaleBounds(barPixmap, scaleStart, scaleEnd);
-            const int scaleWidth = qMax(1, scaleEnd - scaleStart);
-            const int leftPadding = markerX - scaleStart;
-            const int rightPadding = viewportWidth - markerX - (barWidth - 1 - scaleEnd);
-            const int totalWidth = leftPadding + barWidth + rightPadding;
-                const int maxScroll = scaleWidth;
-                const double minFreq = m_isFM ? 87.0 : 531.0;
-                const double maxFreq = m_isFM ? 108.0 : 1629.0;
-            const double clamped = qBound(minFreq, m_frequency, maxFreq);
-            const double ratio = (clamped - minFreq) / (maxFreq - minFreq);
-            const int scrollPos = qRound(ratio * maxScroll);
+            const BarScaleConfig cfg = barScaleConfig(m_isFM, barPixmap);
+            const int leftPadding = markerX - cfg.layoutStart;
+            int rightPadding = viewportWidth - markerX - (barWidth - 1 - cfg.layoutEnd);
+            int totalWidth = leftPadding + barWidth + rightPadding;
+            if (cfg.amTwoPxPerKhz) {
+                const int needWidth = cfg.scrollMax + viewportWidth;
+                if (totalWidth < needWidth)
+                    totalWidth = needWidth;
+            }
+            const double clamped = qBound(cfg.minFreq, m_frequency, cfg.maxFreq);
+            const int scrollPos = scrollFromFrequency(cfg, clamped);
             m_barLabel->setPixmap(barPixmap);
             m_barLabel->setFixedSize(barWidth, 106);
             m_barLabel->move(leftPadding, 0);
             if (m_barContent)
                 m_barContent->setFixedSize(totalWidth, 106);
-            m_barScrollArea->horizontalScrollBar()->setRange(0, maxScroll);
-            m_barScrollArea->horizontalScrollBar()->setValue(qBound(0, scrollPos, maxScroll));
+            m_barScrollArea->horizontalScrollBar()->setRange(cfg.scrollMin, cfg.scrollMax);
+            m_barScrollArea->horizontalScrollBar()->setValue(qBound(cfg.scrollMin, scrollPos, cfg.scrollMax));
         }
     }
 
