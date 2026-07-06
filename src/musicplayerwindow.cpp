@@ -914,6 +914,7 @@ void MusicPlayerWindow::setupPlayerPage(QWidget *page)
         "QPushButton:pressed { border: none; background: url(:/images/butt_tab_right_down.png); color: #fff; font-size: 28px; }");
     m_btTab->setCursor(Qt::PointingHandCursor);
     if (!AppSettings::debugMode()) {
+        m_usbTab->hide();
         m_btTab->hide();
     }
 

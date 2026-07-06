@@ -197,7 +197,7 @@ QWidget *DiagnosticWindow::createFaultPage()
         hide();
     });
 
-    auto *title = new QLabel(QStringLiteral("诊断维护"), topBar);
+    auto *title = new QLabel(QStringLiteral("故障诊断"), topBar);
     title->setGeometry(0, 0, 1280, 72);
     title->setAlignment(Qt::AlignCenter);
     title->setStyleSheet("QLabel{color:#fff;font-size:36px;font-weight:700;background:transparent;}");
@@ -1195,7 +1195,7 @@ QWidget *DiagnosticWindow::createFaultDetailPage()
         hide();
     });
 
-    auto *title = new QLabel(QStringLiteral("诊断维护"), topBar);
+    auto *title = new QLabel(QStringLiteral("故障诊断"), topBar);
     title->setGeometry(0, 0, 1280, 72);
     title->setAlignment(Qt::AlignCenter);
     title->setStyleSheet("QLabel{color:#fff;font-size:36px;font-weight:700;background:transparent;}");
