@@ -336,6 +336,8 @@ RadioWindow::RadioWindow(QWidget *parent)
     , m_fmStations({"88.7", "90.6", "91.2", "92.5", "95.9", "96.3", "97.7", "99.8", "101.1", "106.6"})
     , m_amStations({"554", "639", "756", "855", "937", "955", "981", "1008", "1143", "1323"})
     , m_isFM(true)
+    , m_fmFrequency(95.9)
+    , m_amFrequency(937.0)
     , m_frequency(95.9)
     , m_tunerCapLow(true)
     , m_tunerIndex(0)
@@ -399,27 +401,20 @@ RadioWindow::RadioWindow(QWidget *parent)
         normalizeFavorites(m_amFavorites);
     }
 
+    loadRadioState();
+
     // 尝试打开硬件设备
     if (openDevice()) {
-        // tea685x 通过频率值自动切换 FM/AM，无需 VIDIOC_S_TUNER
-        // 读回硬件当前频率；根据返回值判断驱动当前是 FM 还是 AM 并设置显示
+        setFrequencyHz(m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency));
         quint32 v = getFrequencyHz();
         if (v > 0) {
-            const double mhz = v4l2ToMhz(v);
-            const double khz = v4l2ToKhz(v);
-            if (mhz >= 87.0 && mhz <= 108.0) {
-                m_isFM = true;
-                m_frequency = mhz;
-            } else if (khz >= 531.0 && khz <= 1710.0) {
-                m_isFM = false;
-                m_frequency = khz;
-            } else {
-                // 未识别频率，保持当前 m_isFM 并写回默认频率到硬件
-                setFrequencyHz(m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency));
+            double freq = m_isFM ? v4l2ToMhz(v) : v4l2ToKhz(v);
+            const double minFreq = m_isFM ? 87.0 : 531.0;
+            const double maxFreq = m_isFM ? 108.0 : 1629.0;
+            if (freq >= minFreq && freq <= maxFreq) {
+                m_frequency = freq;
+                syncCurrentBandFrequency();
             }
-        } else {
-            // 硬件未返回频率，主动写入当前默认频率
-            setFrequencyHz(m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency));
         }
         rebuildStationStrip();
     }
@@ -441,6 +436,7 @@ RadioWindow::~RadioWindow()
 }
 
 void RadioWindow::closeEvent(QCloseEvent *event) {
+    persistRadioState();
     stopScan();
     closeDevice();
     // 退出收音机：将 TM2313 功放输入切回媒体声道（IN2 = SoC DAC）
@@ -464,6 +460,7 @@ void RadioWindow::showEvent(QShowEvent *event)
 
 void RadioWindow::hideEvent(QHideEvent *event)
 {
+    persistRadioState();
     QMainWindow::hideEvent(event);
     if (m_preserveAudioOnHide) {
         qDebug() << "RadioWindow::hideEvent preserving audio source";
@@ -548,6 +545,7 @@ bool RadioWindow::eventFilter(QObject *obj, QEvent *event)
                     QTimer::singleShot(300, this, [this]() { updateTunerStatus(); });
                 }
                 updateFrequencyView();
+                persistRadioState();
                 return true;
             }
             break;
@@ -1015,6 +1013,7 @@ void RadioWindow::setupUI() {
         quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
         setFrequencyHz(fhz);
         updateFrequencyView();
+        persistRadioState();
     });
 }
 
@@ -1127,6 +1126,7 @@ void RadioWindow::onPrev() {
     const double maxFreq = m_isFM ? 108.0 : 1629.0;
     m_frequency = qBound(minFreq, m_frequency - step, maxFreq);
     updateFrequencyView();
+    persistRadioState();
 }
 
 void RadioWindow::onNext() {
@@ -1140,6 +1140,7 @@ void RadioWindow::onNext() {
     const double maxFreq = m_isFM ? 108.0 : 1629.0;
     m_frequency = qBound(minFreq, m_frequency + step, maxFreq);
     updateFrequencyView();
+    persistRadioState();
 }
 
 void RadioWindow::onToggleFavorite() {
@@ -1186,6 +1187,8 @@ void RadioWindow::onToggleScan() {
         stopScan();
     }
     updateFrequencyView();
+    if (!m_scanMode)
+        persistRadioState();
 }
 
 void RadioWindow::onScanTick() {
@@ -1214,6 +1217,7 @@ void RadioWindow::onScanTick() {
                 m_scanTimer->stop();
                 setRadioMute(false);  // 扫到台了先取消静音
                 updateFrequencyView();
+                persistRadioState();
                 if (m_scanMode) {
                     // 连续扫台：停留1.5s后继续
                     QTimer::singleShot(1500, this, [this]() {
@@ -1234,6 +1238,7 @@ void RadioWindow::onScanTick() {
     if (m_seekStepCount >= maxSteps) {
         stopScan();
         updateFrequencyView();
+        persistRadioState();
         return;
     }
 
@@ -1417,6 +1422,7 @@ void RadioWindow::onSearch() {
         quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
         setFrequencyHz(fhz);
         updateFrequencyView();
+        persistRadioState();
     }
 }
 
@@ -1582,6 +1588,7 @@ void RadioWindow::onOpenListDialog() {
         quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
         setFrequencyHz(fhz);
         updateFrequencyView();
+        persistRadioState();
         dialog.accept();
     });
 
@@ -1611,8 +1618,9 @@ void RadioWindow::rebuildStationStrip() {
 
 void RadioWindow::switchBand(bool fm) {
     stopScan();
+    syncCurrentBandFrequency();
     m_isFM = fm;
-    m_frequency = m_isFM ? 95.9 : 937.0;
+    m_frequency = m_isFM ? m_fmFrequency : m_amFrequency;
 
     if (m_fd >= 0) {
         // 按驱动实现：仅使用 VIDIOC_S_TUNER 携带 rangelow/rangehigh 切换频段
@@ -1646,8 +1654,38 @@ void RadioWindow::switchBand(bool fm) {
             m_frequency = freq;
     }
 
+    syncCurrentBandFrequency();
+    persistRadioState();
     rebuildStationStrip();
     updateFrequencyView();
+}
+
+void RadioWindow::loadRadioState()
+{
+    QSettings settings;
+    m_isFM = settings.value(QStringLiteral("radio/isFm"), true).toBool();
+    m_fmFrequency = settings.value(QStringLiteral("radio/fmFrequency"), 95.9).toDouble();
+    m_amFrequency = settings.value(QStringLiteral("radio/amFrequency"), 937.0).toDouble();
+    m_fmFrequency = qBound(87.0, m_fmFrequency, 108.0);
+    m_amFrequency = qBound(531.0, m_amFrequency, 1629.0);
+    m_frequency = m_isFM ? m_fmFrequency : m_amFrequency;
+}
+
+void RadioWindow::syncCurrentBandFrequency()
+{
+    if (m_isFM)
+        m_fmFrequency = m_frequency;
+    else
+        m_amFrequency = m_frequency;
+}
+
+void RadioWindow::persistRadioState()
+{
+    syncCurrentBandFrequency();
+    QSettings settings;
+    settings.setValue(QStringLiteral("radio/isFm"), m_isFM);
+    settings.setValue(QStringLiteral("radio/fmFrequency"), m_fmFrequency);
+    settings.setValue(QStringLiteral("radio/amFrequency"), m_amFrequency);
 }
 
 void RadioWindow::keyPressEvent(QKeyEvent *event)

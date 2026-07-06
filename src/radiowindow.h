@@ -49,6 +49,9 @@ private:
     void setupTopStatusIcons(QWidget *topBar);
     void rebuildStationStrip();
     void switchBand(bool fm);
+    void loadRadioState();
+    void syncCurrentBandFrequency();
+    void persistRadioState();
 
     // ── V4L2 /dev/radio0 ─────────────────────────────────────────────────
     bool openDevice();
@@ -83,7 +86,9 @@ private:
     QStringList m_fmFavorites;  // 用户收藏的 FM 频率（如 "95.9"）
     QStringList m_amFavorites;  // 用户收藏的 AM 频率（如 "990"）
     bool    m_isFM;
-    double  m_frequency;    // 用户可见频率（FM: MHz；AM: kHz）
+    double  m_fmFrequency;  // 上次 FM 频率（MHz）
+    double  m_amFrequency;  // 上次 AM 频率（kHz）
+    double  m_frequency;    // 当前波段频率（FM: MHz；AM: kHz）
     bool    m_tunerCapLow;  // 驱动是否使用 V4L2_TUNER_CAP_LOW 频率单位（62.5 Hz）
     int     m_tunerIndex;   // 当前使用的 V4L2 tuner 索引（0=FM/默认，部分驱动 1=AM）
     bool    m_favorite;
