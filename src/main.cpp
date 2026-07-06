@@ -255,20 +255,27 @@ public:
     }
     void unblank() {
         if (!m_blanked) return;
-        m_blanked = false;
 
         if (isVisible())
             hideClock(false);
-        Backlight::set(m_savedBrightness);
-        
-        if (MainWindow *main = findMainWindow()) {
-            if (main->mediaManager()) {
-                QTimer::singleShot(0, this, [main]() {
-                    qDebug() << "unblank: executing deferred resumePlaybackAfterInterruption";
-                    main->mediaManager()->resumePlaybackAfterInterruption();
-                });
+
+        const int brightness = m_savedBrightness;
+        QTimer::singleShot(50, this, [this, brightness]() {
+            if (!m_blanked) {
+                return;
             }
-        }
+            m_blanked = false;
+            Backlight::set(brightness);
+
+            if (MainWindow *main = findMainWindow()) {
+                if (main->mediaManager()) {
+                    QTimer::singleShot(0, this, [main]() {
+                        qDebug() << "unblank: executing deferred resumePlaybackAfterInterruption";
+                        main->mediaManager()->resumePlaybackAfterInterruption();
+                    });
+                }
+            }
+        });
     }
 
 private:
