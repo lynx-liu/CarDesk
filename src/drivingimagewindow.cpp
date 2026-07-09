@@ -220,6 +220,17 @@ void DrivingImageWindow::returnToMainSafely()
     m_returning = true;
     m_exitInProgress = true;
 
+    // 离开行车影像时回到摄像头预览页，下次进入不再停留在设置/录像列表
+    if (m_stack && m_stack->currentIndex() != 0) {
+        m_stack->setCurrentIndex(0);
+        if (m_navBar) {
+            m_navBar->setActiveTab(DrivingImageNavBar::TabPreview);
+        }
+        cancelPreviewChromeAutoHide();
+        m_previewChromeVisible = false;
+        updatePreviewChrome();
+    }
+
     if (m_ahdManager) {
         m_ahdManager->stopPreview();
     }

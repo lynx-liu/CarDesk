@@ -715,7 +715,8 @@ void MainWindow::onDrivingImageClicked() {
     qDebug() << "[Driving] step3: DrivingImageWindow ready";
 
     automotiveNotifyUserOpenedDrivingImage();
-    m_drivingImageWindow->setDrivingMode(automotiveLayoutForUserOpen());
+    // 从主界面进入时始终打开摄像头预览（离开设置/录像列表时已复位；此处再兜底一次）
+    m_drivingImageWindow->applyAutomotiveMode(automotiveLayoutForUserOpen(), false);
     qDebug() << "[Driving] step5: schedule show (defer SDK until media paused)";
 
     QPointer<DrivingImageWindow> win = m_drivingImageWindow;
