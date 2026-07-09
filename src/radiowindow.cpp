@@ -333,8 +333,6 @@ RadioWindow::RadioWindow(QWidget *parent)
     , m_scanBtn(nullptr)
     , m_stationList(nullptr)
     , m_stereoLabel(nullptr)
-    , m_fmStations({"88.7", "90.6", "91.2", "92.5", "95.9", "96.3", "97.7", "99.8", "101.1", "106.6"})
-    , m_amStations({"554", "639", "756", "855", "937", "955", "981", "1008", "1143", "1323"})
     , m_isFM(true)
     , m_fmFrequency(95.9)
     , m_amFrequency(937.0)
@@ -1464,27 +1462,7 @@ void RadioWindow::onOpenListDialog() {
     backBtn->setCursor(Qt::PointingHandCursor);
     connect(backBtn, &QPushButton::clicked, &dialog, &QDialog::reject);
 
-    // Tab (480,100,160×66)：favTab 默认选中（_on），localTab 未选中（_down），互斥切换
-    auto styleTabOn  = [](bool left) {
-        return QString("QPushButton{border:none;background:url(:/images/%1);color:#fff;font-size:28px;}")
-            .arg(left ? "butt_tab_left_on.png" : "butt_tab_right_on.png");
-    };
-    auto styleTabOff = [](bool left) {
-        return QString("QPushButton{border:none;background:url(:/images/%1);color:#fff;font-size:28px;}")
-            .arg(left ? "butt_tab_left_down.png" : "butt_tab_right_down.png");
-    };
-
-    QPushButton *favTab = new QPushButton("我的收藏", &dialog);
-    favTab->setGeometry(480, 100, 160, 66);
-    favTab->setStyleSheet(styleTabOn(true));
-    favTab->setCursor(Qt::PointingHandCursor);
-
-    QPushButton *localTab = new QPushButton("本地电台", &dialog);
-    localTab->setGeometry(640, 100, 160, 66);
-    localTab->setStyleSheet(styleTabOff(false));
-    localTab->setCursor(Qt::PointingHandCursor);
-
-    // 电台网格（必须在 Tab connect 之前创建，供 lambda 捕获）
+    // 电台网格：仅显示用户收藏
     // CSS .radio_list_con { width:1060; margin:16px auto }
     // 宽度改为 1092，以便出现垂直滚动条时仍能保持5列布局
     QListWidget *list = new QListWidget(&dialog);
@@ -1522,17 +1500,11 @@ void RadioWindow::onOpenListDialog() {
         "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical{background:transparent;}");
     list->setItemDelegate(new RadioListDelegate(m_isFM, list));
 
-    // ── Tab 切换逻辑：0=我的收藏  1=本地电台 ──────────────────────────────
-    int currentTab = 0;
-    QLabel *hint = nullptr;   // viewport 子 Widget，切换时必须先销毁
+    QLabel *hint = nullptr;
     auto refillList = [&]() {
-        // 先销毁上一次的提示标签，再清空列表
         if (hint) { delete hint; hint = nullptr; }
         list->clear();
-        // 我的收藏：用户通过 ♡ 按钮加入；本地电台：默认预置列表
-        const QStringList &src = (currentTab == 0)
-            ? (m_isFM ? m_fmFavorites : m_amFavorites)
-            : (m_isFM ? m_fmStations  : m_amStations);
+        const QStringList &src = m_isFM ? m_fmFavorites : m_amFavorites;
         const int maxItems = 30;
         const QStringList srcLimited = src.mid(0, qMin(src.size(), maxItems));
         for (const QString &s : srcLimited) {
@@ -1540,8 +1512,7 @@ void RadioWindow::onOpenListDialog() {
             it->setData(Qt::UserRole, s);
             it->setSizeHint(QSize(212, 212));
         }
-        // 收藏为空时显示提示
-        if (currentTab == 0 && src.isEmpty()) {
+        if (src.isEmpty()) {
             hint = new QLabel(m_isFM ? "暂无收藏的 FM 电台\n\n在播放界面点击 ♡ 收藏当前频率"
                                      : "暂无收藏的 AM 电台\n\n在播放界面点击 ♡ 收藏当前频率",
                               list->viewport());
@@ -1552,20 +1523,7 @@ void RadioWindow::onOpenListDialog() {
         }
     };
 
-    connect(favTab, &QPushButton::clicked, &dialog, [&]() {
-        currentTab = 0;
-        favTab->setStyleSheet(styleTabOn(true));
-        localTab->setStyleSheet(styleTabOff(false));
-        refillList();
-    });
-    connect(localTab, &QPushButton::clicked, &dialog, [&]() {
-        currentTab = 1;
-        localTab->setStyleSheet(styleTabOn(false));
-        favTab->setStyleSheet(styleTabOff(true));
-        refillList();
-    });
-
-    refillList();   // 初始填充（我的收藏）
+    refillList();
 
     // 搜索按钮：用 setIcon 使图标与文字紧挨在一起
     QPushButton *searchLinkBtn = new QPushButton("搜索", &dialog);

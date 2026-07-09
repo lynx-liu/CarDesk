@@ -81,8 +81,6 @@ private:
     QLabel      *m_stereoLabel;     // STEREO 指示
 
     // ── 状态 ─────────────────────────────────────────────────────────────
-    QStringList m_fmStations;
-    QStringList m_amStations;
     QStringList m_fmFavorites;  // 用户收藏的 FM 频率（如 "95.9"）
     QStringList m_amFavorites;  // 用户收藏的 AM 频率（如 "990"）
     bool    m_isFM;
