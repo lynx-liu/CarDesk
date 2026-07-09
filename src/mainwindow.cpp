@@ -1,5 +1,4 @@
 #include "mainwindow.h"
-#include "pagebgwidget.h"
 #include "devicedetect.h"
 #include "appsettings.h"
 #include "appsignals.h"
@@ -56,21 +55,10 @@ MainWindow::MainWindow(QWidget *parent)
     setupConnections();
     setupSystemInfo();
 
-    // 启动即后台预热：解码背景图 + 预创建所有子页面窗口，
-    // 确保用户首次点击时无需等待构建控件树。
-    QTimer::singleShot(0, this, [this]() {
-        PageBgWidget::prewarm();
-        if (AppSettings::debugMode()) {
-            ensurePhoneWindow();
-        }
-        // RadioWindow 构造函数会打开硬件设备并切换声道，不能后台预创建
-        ensureDiagnosticWindow();
-        ensureSystemSettingWindow();
-        ensureImageViewingWindow();
+    // 仅后台预热摄像头：延后到主界面可交互之后，避免 show 后立刻占满主线程导致点不了。
+    // 诊断/设置等子窗口改为按需创建，不再启动时批量预建。
+    QTimer::singleShot(2000, this, [this]() {
         ensureDrivingImageWindow();
-    });
-    // 摄像头 SDK 初始化较重，主界面首帧显示后再后台打开
-    QTimer::singleShot(400, this, [this]() {
         if (m_drivingImageWindow) {
             m_drivingImageWindow->warmupCamera();
         }

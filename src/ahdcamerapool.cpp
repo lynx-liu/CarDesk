@@ -9,6 +9,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDebug>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QMetaObject>
@@ -55,6 +56,24 @@ static bool g_displayInited = false;
 static bool g_uncleanHardwareRecovery = false;
 static bool g_recordStorageAvailable = false;
 static qint64 g_lastStoreErrNotifyMs = 0;
+
+// 摄像头冷启动会在主线程 sleep；分片等待并处理输入事件，避免主界面已显示却点不了。
+static void sleepYieldingUi(int totalMs)
+{
+    if (totalMs <= 0) {
+        return;
+    }
+    const int sliceMs = 40;
+    int left = totalMs;
+    while (left > 0) {
+        const int step = qMin(sliceMs, left);
+        QThread::msleep(step);
+        left -= step;
+        if (QCoreApplication::instance()) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        }
+    }
+}
 
 void prepareSdkRuntimeOnce()
 {
@@ -104,7 +123,7 @@ void performHardwareRecovery(const char *reason)
     if (!qEnvironmentVariableIsSet("CARDESK_AHD_RESET_VIDEO")) {
         qWarning() << "[Ahd] hardware recovery:" << reason << ", warmup" << kColdStartWarmupMs
                    << "ms (set CARDESK_AHD_RESET_VIDEO=1 to fuser -k video nodes)";
-        QThread::msleep(kColdStartWarmupMs);
+        sleepYieldingUi(kColdStartWarmupMs);
         return;
     }
     static const char *kVideoNodes[] = {"/dev/video2", "/dev/video3", "/dev/video4",
@@ -114,7 +133,7 @@ void performHardwareRecovery(const char *reason)
         const QByteArray cmd = QByteArray("fuser -k ") + node + " 2>/dev/null";
         ::system(cmd.constData());
     }
-    QThread::msleep(kColdStartWarmupMs);
+    sleepYieldingUi(kColdStartWarmupMs);
 }
 
 void detectUncleanShutdown()
@@ -742,7 +761,7 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
             }
             qWarning() << "[Ahd] dvr_factory(" << cameraId << ") init incomplete, retry (leak partial)";
             dvr = nullptr;
-            QThread::msleep(kFactoryRetryDelayMs);
+            sleepYieldingUi(kFactoryRetryDelayMs);
         }
 
         if (!dvr) {
@@ -768,7 +787,7 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
         }
 
         if (n + 1 < cameraIds.size()) {
-            QThread::msleep(kChannelStartDelayMs);
+            sleepYieldingUi(kChannelStartDelayMs);
         }
     }
 
@@ -789,7 +808,7 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
             }
         }
         if (n + 1 < opened.size()) {
-            QThread::msleep(kChannelStartDelayMs);
+            sleepYieldingUi(kChannelStartDelayMs);
         }
     }
 
