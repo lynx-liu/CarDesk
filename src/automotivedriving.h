@@ -18,6 +18,7 @@ void automotiveSetBackupSignal(bool on);
 void automotiveSetLeftTurnSignal(bool on);
 void automotiveSetRightTurnSignal(bool on);
 void automotiveSetIllumination(bool on);
+bool automotiveIlluminationOn();
 
 bool automotiveCanUserCloseDrivingImage();
 

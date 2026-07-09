@@ -50,6 +50,9 @@ signals:
     /** 车速变化（km/h，来自 CAN TCO1 报文） */
     void vehicleSpeedChanged(float speedKmh);
 
+    /** 大灯/仪表照明状态：true=开（夜晚），false=关（白天） */
+    void illuminationChanged(bool on);
+
 private:
     AppSignals() = default;
 };

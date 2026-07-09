@@ -1313,7 +1313,8 @@ int main(int argc, char *argv[]) {
             if (mode == 1) {
                 sliderVal = nightSlider;
             } else if (mode == 2) {
-                sliderVal = qBound(0, settings.value(QStringLiteral("brightness/auto"), daySlider).toInt(), 100);
+                // 自动：大灯开=夜晚，大灯关=白天（启动时大灯状态通常为关）
+                sliderVal = automotiveIlluminationOn() ? nightSlider : daySlider;
             }
             const int bl = Backlight::sliderToBacklight(sliderVal);
             Backlight::set(bl);

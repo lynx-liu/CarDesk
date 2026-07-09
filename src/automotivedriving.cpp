@@ -1,7 +1,9 @@
 #include "automotivedriving.h"
 
 #include "appsettings.h"
+#include "appsignals.h"
 #include "ahdsettings.h"
+#include "backlight.h"
 #include "drivingimagewindow.h"
 #include "mainwindow.h"
 #include "mcuserialreader.h"
@@ -11,6 +13,7 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QPointer>
+#include <QSettings>
 #include <QTimer>
 #include <QWidget>
 
@@ -444,6 +447,19 @@ void setIllumination(bool on)
         return;
     }
     s_illuminationOn = on;
+    qDebug() << "[Automotive] illumination" << (on ? "ON (night)" : "OFF (day)");
+    emit AppSignals::instance()->illuminationChanged(on);
+
+    // 亮度「自动」：大灯开=夜晚亮度，大灯关=白天亮度
+    QSettings settings;
+    if (settings.value(QStringLiteral("brightness/mode"), 0).toInt() == 2) {
+        const int daySlider = qBound(0, settings.value(QStringLiteral("brightness/day"), 100).toInt(), 100);
+        const int nightSlider = qBound(0, settings.value(QStringLiteral("brightness/night"), 20).toInt(), 100);
+        const int sliderVal = on ? nightSlider : daySlider;
+        Backlight::set(Backlight::sliderToBacklight(sliderVal));
+        qDebug() << "[Automotive] auto brightness =>" << (on ? "night" : "day")
+                 << "slider=" << sliderVal;
+    }
 }
 
 void refreshCanBusActivity()
@@ -511,4 +527,9 @@ void automotiveSetRightTurnSignal(bool on)
 void automotiveSetIllumination(bool on)
 {
     setIllumination(on);
+}
+
+bool automotiveIlluminationOn()
+{
+    return s_illuminationOn;
 }

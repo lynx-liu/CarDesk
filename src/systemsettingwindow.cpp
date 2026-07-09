@@ -47,6 +47,7 @@ static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
 #include <QCoreApplication>
 #include <QFutureWatcher>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QtConcurrent>
 
 #include <QScreen>
@@ -905,7 +906,6 @@ QWidget *SystemSettingWindow::createDisplayPage()
     QSettings settings;
     const int daySlider   = settings.value("brightness/day", kDefaultDay).toInt();
     const int nightSlider = settings.value("brightness/night", kDefaultNight).toInt();
-    const int autoSlider  = settings.value("brightness/auto", actualSlider).toInt();
     int savedMode = settings.value("brightness/mode", -1).toInt();
     if (savedMode < 0) {
         if (actualSlider == daySlider) savedMode = 0;
@@ -915,7 +915,9 @@ QWidget *SystemSettingWindow::createDisplayPage()
     const bool initDay   = (savedMode == 0);
     const bool initNight = (savedMode == 1);
     const bool initAuto  = (savedMode == 2);
-    const int initSliderVal = initDay ? daySlider : (initNight ? nightSlider : autoSlider);
+    // 自动模式：大灯开=夜晚亮度，大灯关=白天亮度
+    const int autoSliderVal = automotiveIlluminationOn() ? nightSlider : daySlider;
+    const int initSliderVal = initDay ? daySlider : (initNight ? nightSlider : autoSliderVal);
 
     auto *dayBtn = makeModeButton(QStringLiteral("白天"), initDay,
                                   "QPushButton{border-top-left-radius:22px;border-bottom-left-radius:22px;border-top-right-radius:0;border-bottom-right-radius:0;}");
@@ -966,7 +968,12 @@ QWidget *SystemSettingWindow::createDisplayPage()
             settings.setValue("brightness/night", v);
             settings.setValue("brightness/mode", 1);
         } else if (autoBtn->isChecked()) {
-            settings.setValue("brightness/auto", v);
+            // 自动模式下拖动滑条：按当前大灯状态写入白天或夜晚亮度
+            if (automotiveIlluminationOn()) {
+                settings.setValue("brightness/night", v);
+            } else {
+                settings.setValue("brightness/day", v);
+            }
             settings.setValue("brightness/mode", 2);
         }
         settings.sync();
@@ -977,9 +984,46 @@ QWidget *SystemSettingWindow::createDisplayPage()
         Backlight::set(Backlight::sliderToBacklight(v));
         saveModeValue(v);
     });
-    connect(dayBtn,   &QPushButton::toggled, this, [slider, daySlider](bool on){ if (on) slider->setValue(daySlider); });
-    connect(nightBtn, &QPushButton::toggled, this, [slider, nightSlider](bool on){ if (on) slider->setValue(nightSlider); });
-    connect(autoBtn,  &QPushButton::toggled, this, [slider, autoSlider ](bool on){ if (on) slider->setValue(autoSlider);  });
+    connect(dayBtn, &QPushButton::toggled, this, [slider, dayBtn](bool on) {
+        if (!on) return;
+        QSettings settings;
+        settings.setValue("brightness/mode", 0);
+        settings.sync();
+        slider->setValue(qBound(0, settings.value("brightness/day", 100).toInt(), 100));
+        Q_UNUSED(dayBtn);
+    });
+    connect(nightBtn, &QPushButton::toggled, this, [slider](bool on) {
+        if (!on) return;
+        QSettings settings;
+        settings.setValue("brightness/mode", 1);
+        settings.sync();
+        slider->setValue(qBound(0, settings.value("brightness/night", 20).toInt(), 100));
+    });
+    connect(autoBtn, &QPushButton::toggled, this, [slider](bool on) {
+        if (!on) return;
+        QSettings settings;
+        settings.setValue("brightness/mode", 2);
+        settings.sync();
+        const int day = qBound(0, settings.value("brightness/day", 100).toInt(), 100);
+        const int night = qBound(0, settings.value("brightness/night", 20).toInt(), 100);
+        slider->setValue(automotiveIlluminationOn() ? night : day);
+    });
+    // 自动模式下大灯变化时同步滑条显示（不重复写 backlight，由 automotive 侧已设置）
+    connect(AppSignals::instance(), &AppSignals::illuminationChanged, slider,
+            [slider, tips, autoBtn](bool illumOn) {
+        if (!autoBtn->isChecked()) {
+            return;
+        }
+        QSettings settings;
+        const int day = qBound(0, settings.value("brightness/day", 100).toInt(), 100);
+        const int night = qBound(0, settings.value("brightness/night", 20).toInt(), 100);
+        const int target = illumOn ? night : day;
+        if (slider->value() != target) {
+            QSignalBlocker blocker(slider);
+            slider->setValue(target);
+            tips->setText(QString::number(target));
+        }
+    });
 
     brightnessLayout->addWidget(lowIcon);
     brightnessLayout->addWidget(slider, 1);
