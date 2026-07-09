@@ -478,9 +478,16 @@ static bool isUsbRootPath(const QString &root)
     return root.startsWith(kUsbMountPrefix);
 }
 
+static bool isUsbMountSubdirValid(const QString &sub)
+{
+    // 有效 USB 子目录必须对应真实块设备，避免拔盘后残留空目录被当成已插入
+    const QString devNode = QStringLiteral("/dev/%1").arg(sub);
+    const QString sysBlock = QStringLiteral("/sys/block/%1").arg(sub);
+    return QFile::exists(devNode) && QDir(sysBlock).exists();
+}
+
 static QString findFirstUsbImageDirectory()
 {
-    // 主路：QStorageInfo
     for (const QStorageInfo &storage : QStorageInfo::mountedVolumes()) {
         if (!storage.isValid() || !storage.isReady())
             continue;
@@ -488,11 +495,13 @@ static QString findFirstUsbImageDirectory()
         if (isUsbRootPath(root))
             return root;
     }
-    // 备用：直接扫文件系统
     QDir d(kUsbMountDir);
     if (d.exists()) {
         const QStringList subs = d.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-        if (!subs.isEmpty()) return kUsbMountPrefix + subs.first();
+        for (const QString &sub : subs) {
+            if (isUsbMountSubdirValid(sub))
+                return kUsbMountPrefix + sub;
+        }
     }
     return {};
 }

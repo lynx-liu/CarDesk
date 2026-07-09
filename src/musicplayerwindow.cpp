@@ -1227,6 +1227,7 @@ void MusicPlayerWindow::loadDirectory(const QString &path)
             if (m_listPathLabel) {
                 m_listPathLabel->setText(QStringLiteral("请插入U盘"));
             }
+            updateListTabsVisibility();
             return;
         }
         normalizedPath = usbPath;
@@ -1241,6 +1242,7 @@ void MusicPlayerWindow::loadDirectory(const QString &path)
             m_musicListWidget->clear();
             if (m_listPathLabel)
                 m_listPathLabel->setText(QStringLiteral("请插入U盘"));
+            updateListTabsVisibility();
             return;
         }
         // USB 路径目录不存在：继续走正常流程，扫描结果为空，标签在末尾正确显示
@@ -1284,6 +1286,8 @@ void MusicPlayerWindow::loadDirectory(const QString &path)
     if (m_musicListWidget->count() == 0 && m_listPathLabel)
         m_listPathLabel->setText(QStringLiteral("无内容"));
 
+    updateListTabsVisibility();
+
     qDebug() << "MusicList: loaded" << m_musicListWidget->count() << "items from" << path;
 }
 
@@ -1314,11 +1318,27 @@ void MusicPlayerWindow::updateCollectButtonState()
         "QPushButton:checked:pressed { background-image: url(:/images/butt_music_collection_down.png); }");
 }
 
+void MusicPlayerWindow::updateListTabsVisibility()
+{
+    // 未检测到 U 盘，或当前列表为空（无内容）时隐藏「我的收藏」「歌曲列表」
+    const bool usbPresent = !findFirstUsbDevicePath().isEmpty();
+    const bool hasListItems = m_musicListWidget && m_musicListWidget->count() > 0;
+    const bool showTabs = usbPresent && (m_listFavMode || hasListItems);
+
+    if (m_listFavTab) {
+        m_listFavTab->setVisible(showTabs);
+    }
+    if (m_listSongsTab) {
+        m_listSongsTab->setVisible(showTabs);
+    }
+}
+
 void MusicPlayerWindow::applyUsbMissingState()
 {
     m_currentBrowsePath.clear();
     m_musicFiles.clear();
     m_currentIndex = -1;
+    m_listFavMode = false;
     refreshPlaylistWidget();
 
     if (m_musicListWidget) m_musicListWidget->clear();
@@ -1331,6 +1351,7 @@ void MusicPlayerWindow::applyUsbMissingState()
     if (m_albumLabel) m_albumLabel->setText(QStringLiteral("--"));
     updateProgressBar(0, 0);
     setPlayButtonState(false);
+    updateListTabsVisibility();
 
     // 无 U 盘时不停留在播放页，直接进文件列表
     if (m_isUsbMode && m_stackedWidget) {
@@ -1351,6 +1372,8 @@ void MusicPlayerWindow::refreshUsbContent()
 
     if (m_stackedWidget && m_stackedWidget->currentIndex() == kPageList && !m_listFavMode) {
         loadDirectory(usbPath);
+    } else {
+        updateListTabsVisibility();
     }
 
     if (m_nowPlayingLabel) {
@@ -1370,6 +1393,7 @@ void MusicPlayerWindow::refreshFavoriteList()
         m_musicListWidget->addItem(item);
     }
     m_listPathLabel->setText("我的收藏");
+    updateListTabsVisibility();
 }
 
 void MusicPlayerWindow::onToggleCollect()
@@ -2285,6 +2309,7 @@ void MusicPlayerWindow::onOpenListPage()
                 if (m_listPathLabel) {
                     m_listPathLabel->setText(QStringLiteral("请插入U盘"));
                 }
+                updateListTabsVisibility();
                 m_stackedWidget->setCurrentIndex(kPageList);
                 return;
             }
@@ -2367,6 +2392,7 @@ void MusicPlayerWindow::onListSongsTabClicked()
         if (m_listPathLabel) {
             m_listPathLabel->setText(QStringLiteral("请插入U盘"));
         }
+        updateListTabsVisibility();
     }
 }
 

@@ -174,6 +174,7 @@ private:
     void setPlayButtonState(bool playing);
     void applyUsbMissingState();
     void refreshUsbContent();
+    void updateListTabsVisibility();
     void refreshPlaylistWidget();
     void updateCollectButtonState();
     void tryConnectLastA2dpDevice();

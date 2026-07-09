@@ -23,6 +23,7 @@ static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
 #include <QDateTime>
 #include <QCloseEvent>
 #include <QSize>
+#include <QStorageInfo>
 #include "appsignals.h"
 
 static QString findFirstUsbVideoDirectory();
@@ -530,12 +531,30 @@ void VideoListWindow::playVideoFiles(const QStringList &videoList, int currentId
     m_playWindow->activateWindow();
 }
 
-static QString findFirstUsbVideoDirectory() {
+static bool isUsbMountSubdirValid(const QString &sub)
+{
+    // 有效 USB 子目录必须对应真实块设备，避免拔盘后残留空目录被当成已插入
+    const QString devNode = QStringLiteral("/dev/%1").arg(sub);
+    const QString sysBlock = QStringLiteral("/sys/block/%1").arg(sub);
+    return QFile::exists(devNode) && QDir(sysBlock).exists();
+}
+
+static QString findFirstUsbVideoDirectory()
+{
+    for (const QStorageInfo &storage : QStorageInfo::mountedVolumes()) {
+        if (!storage.isValid() || !storage.isReady())
+            continue;
+        const QString root = storage.rootPath();
+        if (root.startsWith(kUsbMountPrefix))
+            return root;
+    }
     QDir d(kUsbMountDir);
     if (d.exists()) {
         const QStringList subs = d.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-        if (!subs.isEmpty())
-            return kUsbMountPrefix + subs.first();
+        for (const QString &sub : subs) {
+            if (isUsbMountSubdirValid(sub))
+                return kUsbMountPrefix + sub;
+        }
     }
     return {};
 }
