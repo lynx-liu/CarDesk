@@ -186,7 +186,6 @@
         <file alias="pict_brightness_low.png">ui/images/pict_brightness_low.png</file>
         <file alias="pict_brightness_high.png">ui/images/pict_brightness_high.png</file>
         <file alias="pict_brightness_mark.png">ui/images/pict_brightness_mark.png</file>
-        <file alias="pict_brightness_tips.png">ui/images/pict_brightness_tips.png</file>
         <file alias="pict_volume_low.png">ui/images/pict_volume_low.png</file>
         <file alias="pict_volume_loud.png">ui/images/pict_volume_loud.png</file>
         <file alias="butt_video_back_up.png">ui/images/butt_video_back_up.png</file>

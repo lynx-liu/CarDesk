@@ -956,7 +956,7 @@ QWidget *SystemSettingWindow::createDisplayPage()
     auto *tips = new QLabel(QString::number(initSliderVal), brightnessRow);
     tips->setFixedSize(48, 38);
     tips->setAlignment(Qt::AlignCenter);
-    tips->setStyleSheet("QLabel{background:url(:/images/pict_brightness_tips.png);font-size:24px;color:#fff;}");
+    tips->setStyleSheet("QLabel{background:transparent;border:none;font-size:24px;color:#fff;}");
     auto saveModeValue = [dayBtn, nightBtn, autoBtn](int v) {
         QSettings settings;
         if (dayBtn->isChecked()) {
@@ -1175,7 +1175,7 @@ QWidget *SystemSettingWindow::createSoundPage()
     auto *tips = new QLabel(QString::number(lv), vRight);
     tips->setFixedSize(48, 38);
     tips->setAlignment(Qt::AlignCenter);
-    tips->setStyleSheet("QLabel{background:url(:/images/pict_brightness_tips.png);font-size:24px;color:#fff;}");
+    tips->setStyleSheet("QLabel{background:transparent;border:none;font-size:24px;color:#fff;}");
     connect(slider, &QSlider::valueChanged, tips, [tips](int v) {
         tips->setText(QString::number(v));
     });
