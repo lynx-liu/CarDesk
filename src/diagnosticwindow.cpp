@@ -627,6 +627,8 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
     auto state = QSharedPointer<PdfSearchState>::create();
     auto compositionLength = QSharedPointer<int>::create(0);
     auto shiftMode = QSharedPointer<bool>::create(false);
+    // false=中文拼音输入，true=英文直接输入
+    auto englishMode = QSharedPointer<bool>::create(false);
     auto punctuationButtons = QSharedPointer<QVector<QPushButton *>>::create();
     const QStringList punctuationCn = {
         QStringLiteral("，"), QStringLiteral("。"), QStringLiteral("？"), QStringLiteral("！"),
@@ -807,7 +809,8 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
     });
 
     auto *keyPadWrap = new QWidget(page);
-    keyPadWrap->setGeometry(172, 304, 1004, 320);
+    // 多一行放中英文切换键（右下角）
+    keyPadWrap->setGeometry(172, 290, 1004, 380);
     auto *grid = new QGridLayout(keyPadWrap);
     grid->setContentsMargins(0, 0, 0, 0);
     grid->setHorizontalSpacing(6);
@@ -853,7 +856,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
         btn->setFocusPolicy(Qt::NoFocus);
         btn->setStyleSheet(normalKeyStyle);
 
-        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, shiftMode, currentComposition, punctuationButtons, punctuationCn, punctuationEn, insertTextAtCursor, normalKeyStyle, shiftOnStyle, bottomKeys, updateCompositionSelection](void) {
+        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, shiftMode, englishMode, currentComposition, punctuationButtons, punctuationCn, punctuationEn, insertTextAtCursor, normalKeyStyle, shiftOnStyle, bottomKeys, updateCompositionSelection](void) {
             const QString key = btn->text();
             if (key == QStringLiteral("Shift")) {
                 *shiftMode = !*shiftMode;
@@ -866,7 +869,9 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
                 for (QPushButton *pun : *punctuationButtons) {
                     const int index = punctuationButtons->indexOf(pun);
                     if (index >= 0 && index < punctuationCn.size()) {
-                        pun->setText(*shiftMode ? punctuationEn.at(index) : punctuationCn.at(index));
+                        // 英文输入模式固定英文标点；中文模式由 Shift 切换
+                        const bool useEn = *englishMode || *shiftMode;
+                        pun->setText(useEn ? punctuationEn.at(index) : punctuationCn.at(index));
                     }
                 }
                 return;
@@ -915,12 +920,13 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
             }
 
             if (key.size() == 1 && key.at(0).isLetter()) {
-                if (*shiftMode) {
+                if (*englishMode || *shiftMode) {
                     if (*compositionLength > 0) {
                         *compositionLength = 0;
                         refreshCandidateDisplay(QString());
+                        updateCompositionSelection();
                     }
-                    insertTextAtCursor(key.toUpper());
+                    insertTextAtCursor(*shiftMode ? key.toUpper() : key.toLower());
                     return;
                 }
                 if (*compositionLength == 0) {
@@ -959,7 +965,7 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
         btn->setDefault(false);
         btn->setFocusPolicy(Qt::NoFocus);
         btn->setStyleSheet(normalKeyStyle);
-        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, shiftMode, currentComposition, punctuationButtons, punctuationCn, punctuationEn, insertTextAtCursor, normalKeyStyle, shiftOnStyle, bottomKeys, updateCompositionSelection](void) {
+        connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, shiftMode, englishMode, currentComposition, punctuationButtons, punctuationCn, punctuationEn, insertTextAtCursor, normalKeyStyle, shiftOnStyle, bottomKeys, updateCompositionSelection](void) {
             const QString key = btn->text();
             if (key == QStringLiteral("Shift")) {
                 *shiftMode = !*shiftMode;
@@ -972,7 +978,8 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
                 for (QPushButton *pun : *punctuationButtons) {
                     const int index = punctuationButtons->indexOf(pun);
                     if (index >= 0 && index < punctuationCn.size()) {
-                        pun->setText(*shiftMode ? punctuationEn.at(index) : punctuationCn.at(index));
+                        const bool useEn = *englishMode || *shiftMode;
+                        pun->setText(useEn ? punctuationEn.at(index) : punctuationCn.at(index));
                     }
                 }
                 return;
@@ -1014,13 +1021,13 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
             }
 
             if (key.size() == 1 && key.at(0).isLetter()) {
-                if (*shiftMode) {
+                if (*englishMode || *shiftMode) {
                     if (*compositionLength > 0) {
                         *compositionLength = 0;
                         refreshCandidateDisplay(QString());
                         updateCompositionSelection();
                     }
-                    insertTextAtCursor(key.toUpper());
+                    insertTextAtCursor(*shiftMode ? key.toUpper() : key.toLower());
                     btn->setStyleSheet(normalKeyStyle);
                     btn->clearFocus();
                     return;
@@ -1061,6 +1068,48 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
         });
         grid->addWidget(btn, 4, i);
     }
+
+    // 右下角：中英文切换（标点行最后一列下方）
+    auto *langToggle = new QPushButton(QStringLiteral("中/英"), keyPadWrap);
+    langToggle->setFixedSize(95, 54);
+    langToggle->setCursor(Qt::PointingHandCursor);
+    langToggle->setFlat(true);
+    langToggle->setAutoDefault(false);
+    langToggle->setDefault(false);
+    langToggle->setFocusPolicy(Qt::NoFocus);
+    langToggle->setStyleSheet(normalKeyStyle);
+    connect(langToggle, &QPushButton::clicked, this,
+            [langToggle, englishMode, compositionLength, refreshCandidateDisplay, updateCompositionSelection,
+             punctuationButtons, punctuationCn, punctuationEn, shiftMode, normalKeyStyle, shiftOnStyle]() {
+        *englishMode = !*englishMode;
+        if (*englishMode) {
+            // 切到英文：清空拼音候选，标点切英文
+            if (*compositionLength > 0) {
+                *compositionLength = 0;
+                refreshCandidateDisplay(QString());
+                updateCompositionSelection();
+            }
+            langToggle->setText(QStringLiteral("英/中"));
+            langToggle->setStyleSheet(shiftOnStyle);
+            for (QPushButton *pun : *punctuationButtons) {
+                const int index = punctuationButtons->indexOf(pun);
+                if (index >= 0 && index < punctuationEn.size()) {
+                    pun->setText(punctuationEn.at(index));
+                }
+            }
+        } else {
+            langToggle->setText(QStringLiteral("中/英"));
+            langToggle->setStyleSheet(normalKeyStyle);
+            for (QPushButton *pun : *punctuationButtons) {
+                const int index = punctuationButtons->indexOf(pun);
+                if (index >= 0 && index < punctuationCn.size()) {
+                    pun->setText(*shiftMode ? punctuationEn.at(index) : punctuationCn.at(index));
+                }
+            }
+        }
+        langToggle->clearFocus();
+    });
+    grid->addWidget(langToggle, 5, 9);
 
     refreshCandidateDisplay(QString());
 

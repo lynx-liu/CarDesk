@@ -762,6 +762,13 @@ void MusicPlayerWindow::closeEvent(QCloseEvent *event)
 void MusicPlayerWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
+
+    // 无 U 盘时跳过播放页，直接进文件列表
+    if (m_isUsbMode && findFirstUsbDevicePath().isEmpty()) {
+        applyUsbMissingState();
+        return;
+    }
+
     tryConnectLastA2dpDevice();
     QTimer::singleShot(0, this, [this]() {
         if (!isVisible()) {
@@ -1317,13 +1324,18 @@ void MusicPlayerWindow::applyUsbMissingState()
     if (m_musicListWidget) m_musicListWidget->clear();
     if (m_listPathLabel) m_listPathLabel->setText(QStringLiteral("请插入U盘"));
     if (m_nowPlayingLabel) {
-        m_nowPlayingLabel->setText(QStringLiteral("请插入U盘"));
-        m_nowPlayingLabel->setStyleSheet("color: #FF4D4F; font-size: 48px; background: transparent;");
+        m_nowPlayingLabel->setText(QStringLiteral("未播放"));
+        m_nowPlayingLabel->setStyleSheet("color: #fff; font-size: 48px; background: transparent;");
     }
     if (m_singerLabel) m_singerLabel->setText(QStringLiteral("--"));
     if (m_albumLabel) m_albumLabel->setText(QStringLiteral("--"));
     updateProgressBar(0, 0);
     setPlayButtonState(false);
+
+    // 无 U 盘时不停留在播放页，直接进文件列表
+    if (m_isUsbMode && m_stackedWidget) {
+        m_stackedWidget->setCurrentIndex(kPageList);
+    }
 }
 
 void MusicPlayerWindow::refreshUsbContent()
@@ -2285,7 +2297,26 @@ void MusicPlayerWindow::onOpenListPage()
 void MusicPlayerWindow::onBackFromListPage()
 {
     if (m_listFavMode) {
+        // 无 U 盘时不回播放页，直接回主界面
+        if (m_isUsbMode && findFirstUsbDevicePath().isEmpty()) {
+            m_hideFromHomeNavigation = false;
+            m_preservePlaybackOnHide = true;
+            pauseIfPlaying();
+            emit requestReturnToMain();
+            hide();
+            return;
+        }
         m_stackedWidget->setCurrentIndex(kPagePlayer);
+        return;
+    }
+
+    // 无 U 盘：列表页返回直接回主界面，跳过播放页
+    if (m_isUsbMode && findFirstUsbDevicePath().isEmpty()) {
+        m_hideFromHomeNavigation = false;
+        m_preservePlaybackOnHide = true;
+        pauseIfPlaying();
+        emit requestReturnToMain();
+        hide();
         return;
     }
 
@@ -2361,8 +2392,8 @@ void MusicPlayerWindow::updateNowPlaying()
     if (m_isUsbMode) {
         const QString usbPath = findFirstUsbDevicePath();
         if (usbPath.isEmpty()) {
-            m_nowPlayingLabel->setText(QStringLiteral("请插入U盘"));
-            m_nowPlayingLabel->setStyleSheet("color: #FF4D4F; font-size: 48px; background: transparent;");
+            m_nowPlayingLabel->setText(QStringLiteral("未播放"));
+            m_nowPlayingLabel->setStyleSheet("color: #fff; font-size: 48px; background: transparent;");
             if (m_singerLabel) m_singerLabel->setText(QStringLiteral("--"));
             if (m_albumLabel) m_albumLabel->setText(QStringLiteral("--"));
             return;
