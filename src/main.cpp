@@ -3,6 +3,7 @@
 #include <QDebug>
 #include <QDir>
 #include <QDirIterator>
+#include <QFile>
 #include <QFileInfo>
 #include <QFont>
 #include <QFontDatabase>
@@ -371,12 +372,36 @@ static void scheduleVolumeRead(VolumeOverlay *overlay) {
     overlay->showVolume(qBound(0, level, 10) * 10);
 }
 
-static QString clickSoundPath(int level) {
-    const QString baseDir = QStringLiteral("/usr/share/wav");
-    if (level == 1) {
-        return QDir(baseDir).absoluteFilePath(QStringLiteral("click_soft.wav"));
+// tinyplay 只能播真实文件路径；资源内 wav 首次解压到临时目录后复用。
+static QString clickSoundPath(int level)
+{
+    static QString softPath;
+    static QString loudPath;
+    QString &cached = (level == 1) ? softPath : loudPath;
+    if (!cached.isEmpty() && QFileInfo::exists(cached)) {
+        return cached;
     }
-    return QDir(baseDir).absoluteFilePath(QStringLiteral("click_loud.wav"));
+
+    const QString name = (level == 1)
+        ? QStringLiteral("click_soft.wav")
+        : QStringLiteral("click_loud.wav");
+    const QString resource = QStringLiteral(":/sound/") + name;
+    if (!QFile::exists(resource)) {
+        qWarning() << "[ClickSound] embedded wav missing:" << resource;
+        return QString();
+    }
+
+    const QString outPath = QDir::temp().absoluteFilePath(QStringLiteral("cardesk_") + name);
+    QFile::remove(outPath);
+    if (!QFile::copy(resource, outPath)) {
+        qWarning() << "[ClickSound] failed to extract" << resource << "to" << outPath;
+        return QString();
+    }
+    QFile::setPermissions(outPath,
+                           QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                           | QFileDevice::ReadUser | QFileDevice::WriteUser);
+    cached = outPath;
+    return cached;
 }
 
 static bool shouldSuppressTouchClickSound()
@@ -507,9 +532,9 @@ static bool playTouchClickSound() {
         return false;
     }
     const QString wav = clickSoundPath(level);
-    if (!QFileInfo::exists(wav) || !QFileInfo(wav).isFile()) {
+    if (wav.isEmpty() || !QFileInfo::exists(wav) || !QFileInfo(wav).isFile()) {
         if (lastMissingWav != wav) {
-            qWarning() << "[ClickSound] click sound file not found:" << wav;
+            qWarning() << "[ClickSound] click sound unavailable, level=" << level << "path=" << wav;
             lastMissingWav = wav;
         }
         return false;

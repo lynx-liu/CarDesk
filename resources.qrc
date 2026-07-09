@@ -195,4 +195,8 @@
     <qresource prefix="/pinyin">
         <file alias="pinyin_table.txt">src/pinyin_table.txt</file>
     </qresource>
+    <qresource prefix="/sound">
+        <file alias="click_soft.wav">ui/sound/click_soft.wav</file>
+        <file alias="click_loud.wav">ui/sound/click_loud.wav</file>
+    </qresource>
 </RCC>
