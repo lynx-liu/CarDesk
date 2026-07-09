@@ -160,10 +160,12 @@ HEADERS += \
     src/pinyin_dictionary.h \
     src/processguard.h \
     src/applog.h \
-    src/app_version.h
+    src/app_version.h \
+    src/touchclicksound.h
 
 SOURCES += \
     src/main.cpp \
+    src/touchclicksound.cpp \
     src/applog.cpp \
     src/processguard.cpp \
     src/automotivedriving.cpp \

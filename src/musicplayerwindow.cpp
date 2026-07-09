@@ -7,6 +7,7 @@
 #include "appsettings.h"
 #include "mediamanager.h"
 #include "t507sdkbridge.h"
+#include "touchclicksound.h"
 
 static const QString kUsbMountDir    = QStringLiteral("/mnt/usb");
 static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
@@ -778,25 +779,40 @@ void MusicPlayerWindow::showEvent(QShowEvent *event)
         if (!m_pausedForInterruption) {
             return;  // 用户主动停止 / 未播放过：保持停止状态
         }
-        // 被外部打断（HOME/MENU 切换、来电等）→ 自动恢复播放
-        if (!m_isUsbMode && m_bluetoothManager) {
-            resumeAfterInterruption();
-            return;
-        }
-        // USB 模式：等扫盘完成才能起播；空列表交给 scanWatcher.finished 再触发。
-        if (m_musicFiles.isEmpty()) {
-            return;
-        }
+
+        const auto doResumeInterrupted = [this]() {
+            if (!m_isUsbMode && m_bluetoothManager) {
+                resumeAfterInterruption();
+                return;
+            }
+            if (m_musicFiles.isEmpty()) {
+                return;
+            }
 #ifdef CAR_DESK_USE_T507_SDK
-        if (m_useSdkPlayer && restoreSdkPlaybackAfterInterruption()) {
+            if (m_useSdkPlayer && restoreSdkPlaybackAfterInterruption()) {
+                return;
+            }
+#endif
+            if (m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count()) {
+                playMusic(m_currentIndex);
+                m_pausedForInterruption = false;
+                m_resumeInterruptionPositionMs = 0;
+            }
+        };
+
+        if (TouchClickSound::isBusy()) {
+            QTimer::singleShot(150, this, [this, doResumeInterrupted]() {
+                if (!isVisible() || !m_pausedForInterruption) {
+                    return;
+                }
+                if (TouchClickSound::isBusy()) {
+                    return;
+                }
+                doResumeInterrupted();
+            });
             return;
         }
-#endif
-        if (m_currentIndex >= 0 && m_currentIndex < m_musicFiles.count()) {
-            playMusic(m_currentIndex);  // applyUsbResumeSeekAfterPlayStarted 会 seek 到 pending 位置
-            m_pausedForInterruption = false;
-            m_resumeInterruptionPositionMs = 0;
-        }
+        doResumeInterrupted();
     });
 }
 
@@ -804,11 +820,10 @@ void MusicPlayerWindow::hideEvent(QHideEvent *event)
 {
     if (m_preservePlaybackOnHide) {
         m_preservePlaybackOnHide = false;
-        // Home 回主界面且已非播放：释放 XPlayer/QMediaPlayer，避免仍占 ALSA 使点屏音 tinyplay 阻塞。
-        // Back 键会先 pause 再 hide，不置 m_hideFromHomeNavigation，以便保留暂停态可继续播。
-        // MENU 切换路径：handleMenuKeyPress 已先调过 pauseForInterruption()，进来时 isPlaying()=false，
-        //   同时 m_pausedForInterruption=true，会被 capture+release 后再次进入时自动恢复。
-        if (m_hideFromHomeNavigation && !isPlaying()) {
+        // 回主界面且已非播放（含用户暂停、Back 先 pause、MENU 打断）：释放 XPlayer/QMediaPlayer，
+        // 归还 ALSA 给点屏音。进度在 usb pending / m_resumeInterruptionPositionMs 中保留；
+        // 再进界面由 showEvent / 点播放恢复。正在播放时不释放，后台继续播。
+        if (!isPlaying()) {
             captureUsbProgressBeforePlayerRelease();
             releaseAudioPlayer();
         }
@@ -1727,6 +1742,18 @@ void MusicPlayerWindow::playMusic(int index)
 {
     if (index < 0 || index >= m_musicFiles.count()) return;
 
+    // 点屏音占用 PCM 时延后起播，避免与进程内 click PCM 抢 ALSA。
+    if (TouchClickSound::isBusy()) {
+        const int idx = index;
+        QTimer::singleShot(150, this, [this, idx]() {
+            if (TouchClickSound::isBusy()) {
+                return;
+            }
+            playMusic(idx);
+        });
+        return;
+    }
+
     if (!m_usbPendingResumeFilePath.isEmpty()) {
         if (index < 0 || index >= m_musicFiles.count()
                 || indexOfPathInStringList(m_musicFiles, m_usbPendingResumeFilePath) != index) {
@@ -2017,7 +2044,8 @@ void MusicPlayerWindow::releaseAudioPlayer()
             m_sdkSoundCtrl = nullptr;
         }
         setPlayButtonState(false);
-        updateProgressBar(0, 0);
+        // 进度由 usb pending / interruption 位置保留；hide 后 show 会 restoreUsbProgressBarFromPending。
+        // 此处不强制清零进度条，避免闪一下再恢复。
         return;
     }
 #endif
@@ -2025,7 +2053,6 @@ void MusicPlayerWindow::releaseAudioPlayer()
         m_mediaPlayer->stop();
         m_mediaPlayer->setMedia(QMediaContent());
     }
-    updateProgressBar(0, 0);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2053,12 +2080,20 @@ void MusicPlayerWindow::onPlayPause()
             if (m_sdkTimer) m_sdkTimer->stop();
             setPlayButtonState(false);
         } else if (m_sdkPlayer) {
+            if (TouchClickSound::isBusy()) {
+                QTimer::singleShot(150, this, [this]() { onPlayPause(); });
+                return;
+            }
             T507SdkBridge::setAudioSource(false);
             XPlayerStart(m_sdkPlayer);
             m_sdkPlaying = true;
             if (m_sdkTimer) m_sdkTimer->start();
             setPlayButtonState(true);
         } else if (m_pausedForInterruption) {
+            if (TouchClickSound::isBusy()) {
+                QTimer::singleShot(150, this, [this]() { onPlayPause(); });
+                return;
+            }
             if (restoreSdkPlaybackAfterInterruption()) {
                 return;
             }

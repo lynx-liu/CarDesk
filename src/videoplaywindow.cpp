@@ -5,6 +5,7 @@
 #include "t507sdkbridge.h"
 #include "xplayercedarx.h"
 #include "appsignals.h"
+#include "touchclicksound.h"
 
 #include <QVBoxLayout>
 #include <QKeyEvent>
@@ -269,6 +270,14 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
                 m_sdkPlaying = false;
                 setPlayButtonState(false);
             } else {
+                if (TouchClickSound::isBusy()) {
+                    QTimer::singleShot(150, this, [this]() {
+                        if (!m_speedHighLocked) {
+                            m_playButton->click();
+                        }
+                    });
+                    return;
+                }
                 XPlayerStart(m_sdkPlayer);
                 m_sdkPlaying = true;
                 setPlayButtonState(true);
@@ -671,6 +680,14 @@ void VideoPlayWindow::scanVideoDirectories() {
 
 void VideoPlayWindow::onPlayVideo() {
     if (m_speedHighLocked) {
+        return;
+    }
+    if (TouchClickSound::isBusy()) {
+        QTimer::singleShot(150, this, [this]() {
+            if (!TouchClickSound::isBusy()) {
+                onPlayVideo();
+            }
+        });
         return;
     }
     if (isDrivingRecordPlayback() && !ensureCurrentFilePlayable()) {

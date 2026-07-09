@@ -245,7 +245,7 @@ private:
     QStringList m_favoriteFiles;                // 由播放页添加到收藏的音频文件
     bool        m_isUsbMode          = true;
     bool        m_preservePlaybackOnHide = false;
-    // 通过 Home 回主界面且已停止/暂停时释放底层播放器，避免占 ALSA 导致点屏音 tinyplay 卡死；Back 返回不置位。
+    // 回主界面路径标记（Home 按钮等）；hide 时凡非播放态都会释放播放器归还 ALSA。
     bool        m_hideFromHomeNavigation = false;
     // Home / 切蓝牙前记下 USB 曲目的绝对路径、进度与总时长；重扫列表后按路径对齐索引。
     QString     m_usbPendingResumeFilePath;

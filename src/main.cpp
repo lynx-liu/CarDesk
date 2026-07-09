@@ -48,6 +48,7 @@
 #include "tfcarddetect.h"
 #include "processguard.h"
 #include "applog.h"
+#include "touchclicksound.h"
 
 // ── 背光控制（POWER 键关/亮屏，SLEEP 键关机，具体 dispdbg 操作在 backlight.cpp）─
 static MainWindow *findMainWindow();
@@ -372,38 +373,6 @@ static void scheduleVolumeRead(VolumeOverlay *overlay) {
     overlay->showVolume(qBound(0, level, 10) * 10);
 }
 
-// tinyplay 只能播真实文件路径；资源内 wav 首次解压到临时目录后复用。
-static QString clickSoundPath(int level)
-{
-    static QString softPath;
-    static QString loudPath;
-    QString &cached = (level == 1) ? softPath : loudPath;
-    if (!cached.isEmpty() && QFileInfo::exists(cached)) {
-        return cached;
-    }
-
-    const QString name = (level == 1)
-        ? QStringLiteral("click_soft.wav")
-        : QStringLiteral("click_loud.wav");
-    const QString resource = QStringLiteral(":/sound/") + name;
-    if (!QFile::exists(resource)) {
-        qWarning() << "[ClickSound] embedded wav missing:" << resource;
-        return QString();
-    }
-
-    const QString outPath = QDir::temp().absoluteFilePath(QStringLiteral("cardesk_") + name);
-    QFile::remove(outPath);
-    if (!QFile::copy(resource, outPath)) {
-        qWarning() << "[ClickSound] failed to extract" << resource << "to" << outPath;
-        return QString();
-    }
-    QFile::setPermissions(outPath,
-                           QFileDevice::ReadOwner | QFileDevice::WriteOwner
-                           | QFileDevice::ReadUser | QFileDevice::WriteUser);
-    cached = outPath;
-    return cached;
-}
-
 static bool shouldSuppressTouchClickSound()
 {
     auto isAudioWindow = [](QWidget *w) {
@@ -436,6 +405,7 @@ static bool shouldSuppressTouchClickSound()
         }
     }
 
+    // 媒体仍在播（含后台音乐）时不抢 ALSA；暂停态回主界面会 release，此处不再误判。
     for (QWidget *widget : QApplication::topLevelWidgets()) {
         if (auto *music = qobject_cast<MusicPlayerWindow *>(widget)) {
             if (music->isPlaying()) {
@@ -444,6 +414,11 @@ static bool shouldSuppressTouchClickSound()
         }
         if (auto *radio = qobject_cast<RadioWindow *>(widget)) {
             if (radio->isAudioActive()) {
+                return true;
+            }
+        }
+        if (auto *video = qobject_cast<VideoPlayWindow *>(widget)) {
+            if (video->isPlaying()) {
                 return true;
             }
         }
@@ -514,35 +489,17 @@ static bool playTouchClickSound() {
     if (level <= 0) {
         return false;
     }
+    if (TouchClickSound::isBusy()) {
+        return false;
+    }
     if (shouldSuppressTouchClickSound()) {
         return false;
     }
-    static QProcess *proc = nullptr;
-    static QString lastMissingWav;
-
-    if (!proc) {
-        proc = new QProcess(qApp);
-        proc->setProcessChannelMode(QProcess::MergedChannels);
-        QObject::connect(proc, QOverload<int,QProcess::ExitStatus>::of(&QProcess::finished), qApp,
-            [](int code, QProcess::ExitStatus) {
-                qDebug() << "[ClickSound] tinyplay exit code=" << code;
-            });
+    const bool ok = TouchClickSound::play(level);
+    if (!ok) {
+        qWarning() << "[ClickSound] play failed level=" << level;
     }
-    if (proc->state() != QProcess::NotRunning) {
-        return false;
-    }
-    const QString wav = clickSoundPath(level);
-    if (wav.isEmpty() || !QFileInfo::exists(wav) || !QFileInfo(wav).isFile()) {
-        if (lastMissingWav != wav) {
-            qWarning() << "[ClickSound] click sound unavailable, level=" << level << "path=" << wav;
-            lastMissingWav = wav;
-        }
-        return false;
-    }
-    lastMissingWav.clear();
-    qDebug() << "[ClickSound] playing level=" << level << "wav=" << wav;
-    proc->start(QStringLiteral("tinyplay"), {wav});
-    return true;
+    return ok;
 }
 
 static bool s_debugMode = false;
