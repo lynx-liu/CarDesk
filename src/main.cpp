@@ -502,6 +502,22 @@ static bool playTouchClickSound() {
     return ok;
 }
 
+/** 左侧触屏键：开关屏 / 返回 / HOME / 音量加减 */
+static bool isSidePanelClickKey(int qtKey)
+{
+    switch (qtKey) {
+    case Qt::Key_HomePage:
+    case Qt::Key_Back:
+    case Qt::Key_VolumeUp:
+    case Qt::Key_VolumeDown:
+    case Qt::Key_Sleep:
+    case Qt::Key_PowerOff:
+        return true;
+    default:
+        return false;
+    }
+}
+
 static bool s_debugMode = false;
 
 // 挂在 QApplication 上，能拦截所有窗口的 KeyPress，不依赖窗口焦点
@@ -570,6 +586,11 @@ protected:
                      << "watched=" << watched->metaObject()->className();
 
             const int key = ke->key();
+
+            // 左侧触屏键点屏音（音乐/视频在播或媒体窗前台时由 shouldSuppress 屏蔽）
+            if (!ke->isAutoRepeat() && isSidePanelClickKey(key)) {
+                playTouchClickSound();
+            }
 
             // ── QDialog 内按键拦截 ───────────────────────────────────────────
             // 搜索/收藏等子对话框本身不处理 Back/HomePage，在此统一处理：
@@ -1218,6 +1239,8 @@ int main(int argc, char *argv[]) {
                         continue;
                     case KEY_SLEEP:
                         qDebug() << "KEY_SLEEP => blank screen";
+                        // 不投递 KeyPress，在此补点屏音
+                        playTouchClickSound();
                         if (DrivingImageWindow *drive = findDrivingImageWindow()) {
                             if (!drive->isVisible()) {
                                 ScreenBlanker::instance()->blank();
@@ -1225,6 +1248,8 @@ int main(int argc, char *argv[]) {
                         }
                         break;
                     case KEY_POWER:
+                        // 不投递 KeyPress，在此补点屏音
+                        playTouchClickSound();
                         if (ScreenBlanker::instance()->isBlanked()) {
                             qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => unblank screen";
                             ScreenBlanker::instance()->unblank();
