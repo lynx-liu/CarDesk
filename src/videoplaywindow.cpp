@@ -1783,6 +1783,36 @@ bool VideoPlayWindow::isPlaying() const
     return m_mediaPlayer && m_mediaPlayer->state() == QMediaPlayer::PlayingState;
 }
 
+void VideoPlayWindow::stopUsbPlayback()
+{
+    if (m_playbackOrigin != VideoPlaybackOrigin::UsbVideoList) {
+        return;
+    }
+
+#ifdef CAR_DESK_USE_T507_SDK
+    if (m_useSdkPlayer) {
+        forceReleaseSdkPlayer();
+    } else
+#endif
+    if (m_mediaPlayer) {
+        m_mediaPlayer->stop();
+        m_mediaPlayer->setMedia(QMediaContent());
+    }
+
+    m_pausedForHome = false;
+    m_pausedForOcclusion = false;
+    m_pausedForInterruption = false;
+    m_resumeInterruptPositionMs = 0;
+    m_videoFiles.clear();
+    m_currentIndex = -1;
+    setPlayButtonState(false);
+    updateTimeAndSlider(0, 0);
+    if (isVisible()) {
+        hide();
+        emit requestReturnToList();
+    }
+}
+
 QString VideoPlayWindow::currentVideoPath() const
 {
     if (m_currentIndex >= 0 && m_currentIndex < m_videoFiles.count()) {

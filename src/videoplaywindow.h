@@ -41,6 +41,8 @@ public:
     void pauseIfPlaying();
     void pauseForInterruption();
     void resumeAfterInterruption();
+    /** 拔出 U 盘时停止 USB 视频播放并释放播放器（不影响行车录像回放） */
+    void stopUsbPlayback();
 
 signals:
     void requestReturnToList();

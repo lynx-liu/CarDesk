@@ -59,6 +59,10 @@ VideoListWindow::VideoListWindow(QWidget *parent)
             m_currentPath.clear();
             if (m_videoListWidget) m_videoListWidget->clear();
             if (m_pathLabel) m_pathLabel->setText(QStringLiteral("请插入U盘"));
+            // 拔盘停止 USB 视频（行车录像来自 TF，不受影响）
+            if (m_playWindow) {
+                m_playWindow->stopUsbPlayback();
+            }
         } else if (isVisible()) {
             const QString usbPath = findFirstUsbVideoDirectory();
             if (!usbPath.isEmpty()) loadVideoFiles(usbPath);

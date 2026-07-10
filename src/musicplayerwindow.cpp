@@ -1350,6 +1350,14 @@ void MusicPlayerWindow::updateListTabsVisibility()
 
 void MusicPlayerWindow::applyUsbMissingState()
 {
+    // 拔盘：立即停播并释放 ALSA，避免继续读已消失的文件路径。
+    if (m_isUsbMode) {
+        m_pausedForInterruption = false;
+        m_resumeInterruptionPositionMs = 0;
+        clearUsbPendingResumeState();
+        releaseAudioPlayer();
+    }
+
     m_currentBrowsePath.clear();
     m_musicFiles.clear();
     m_currentIndex = -1;
