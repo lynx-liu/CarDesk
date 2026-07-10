@@ -533,3 +533,9 @@ bool automotiveIlluminationOn()
 {
     return s_illuminationOn;
 }
+
+bool automotiveIsTurnOrReverseActive()
+{
+    // 与行车影像 CAN 布局一致：近期有 OEL/LC 且倒车/转向为 ON
+    return hasLiveTurnOrReverse() || s_activeSignalMode != 0;
+}

@@ -620,6 +620,11 @@ protected:
                     return true;
                 case Qt::Key_Menu:
                     qDebug() << "[GlobalKey] => Menu";
+                    // 倒车/转向中禁止 MODE；正常切换由 InputNotifier::handleMenuKeyPress 处理
+                    if (automotiveIsTurnOrReverseActive()) {
+                        qDebug() << "[GlobalKey] Menu ignored: turn/reverse active";
+                        return true;
+                    }
                     {
                         QWidget *w = QApplication::activeWindow();
                         if (!w) {
@@ -858,6 +863,12 @@ static VideoPlayWindow *findVideoPlayWindow()
 
 static bool handleMenuKeyPress()
 {
+    // 倒车/转向中禁止 MODE 切换音乐/视频/收音机（吞掉按键，不转发）
+    if (automotiveIsTurnOrReverseActive()) {
+        qDebug() << "[InputNotifier] KEY_MENU ignored: turn/reverse active";
+        return true;
+    }
+
     if (PhoneWindow *phone = findPhoneWindow()) {
         if (phone->isVisible()) {
             return false;

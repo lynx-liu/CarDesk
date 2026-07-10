@@ -20,6 +20,9 @@ void automotiveSetRightTurnSignal(bool on);
 void automotiveSetIllumination(bool on);
 bool automotiveIlluminationOn();
 
+/** 当前是否处于倒车或转向（MODE 键禁止切音乐/视频/收音机） */
+bool automotiveIsTurnOrReverseActive();
+
 bool automotiveCanUserCloseDrivingImage();
 
 int automotiveLayoutForUserOpen();
