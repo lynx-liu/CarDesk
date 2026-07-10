@@ -6,9 +6,12 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QApplication>
+#include <QThreadPool>
+#include <QRunnable>
 #include <QtGlobal>
 #include <atomic>
 #include <cstring>
+#include <utility>
 
 #include "t507sdkbridge.h"
 
@@ -84,7 +87,7 @@ bool parseWavPcm(const QByteArray &fileData, WavPcm *out)
     return true;
 }
 
-/** 去掉首尾近静音，并截到约 120ms，缩短占用 ALSA 时间。 */
+/** 去掉首尾近静音，并截到约 80ms，缩短占用 ALSA 时间。 */
 void trimClickPcm(WavPcm *wav)
 {
     if (!wav || wav->bits != 16 || wav->channels == 0 || wav->pcm.isEmpty()) {
@@ -117,7 +120,7 @@ void trimClickPcm(WavPcm *wav)
     if (first < 0) {
         return;
     }
-    const int maxFrames = int(wav->rate * 120 / 1000); // ≤120ms
+    const int maxFrames = int(wav->rate * 80 / 1000); // <=80ms
     int end = last + 1;
     if (end - first > maxFrames) {
         end = first + maxFrames;
@@ -169,7 +172,7 @@ const WavPcm *cachedWav(int level)
     qDebug() << "[ClickSound] cached level=" << level
              << "ch=" << slot->channels << "rate=" << slot->rate
              << "bytes=" << slot->pcm.size()
-             << "ms≈" << (slot->rate ? (slot->pcm.size() * 1000)
+             << "ms~" << (slot->rate ? (slot->pcm.size() * 1000)
                                         / (int(slot->channels) * 2 * int(slot->rate))
                                       : 0);
     return slot;
@@ -183,11 +186,7 @@ bool playPcmWithAlsa(const WavPcm &wav)
         return false;
     }
 
-    // 确保功放切到 SoC 媒体声道（与音乐/视频一致），否则可能听不到。
-    T507SdkBridge::setAudioSource(false);
-
     snd_pcm_t *handle = nullptr;
-    // 优先 default（走 asound.conf 路由）；失败再试 hw:0,0（与 tinyplay 默认一致）。
     const char *devices[] = {"default", "hw:0,0", "plughw:0,0"};
     int openRc = -1;
     const char *opened = nullptr;
@@ -210,8 +209,8 @@ bool playPcmWithAlsa(const WavPcm &wav)
         SND_PCM_ACCESS_RW_INTERLEAVED,
         wav.channels,
         wav.rate,
-        1,          // soft resample
-        100000);    // 100ms latency
+        1,
+        50000); // 50ms latency
     if (setRc < 0) {
         qWarning() << "[ClickSound] snd_pcm_set_params failed on" << opened
                    << ":" << snd_strerror(setRc)
@@ -244,9 +243,27 @@ bool playPcmWithAlsa(const WavPcm &wav)
         snd_pcm_drain(handle);
     }
     snd_pcm_close(handle);
-    qDebug() << "[ClickSound] played via ALSA device=" << opened << "ok=" << ok;
+    Q_UNUSED(opened);
     return ok;
 }
+
+class ClickSoundTask : public QRunnable {
+public:
+    explicit ClickSoundTask(WavPcm wav)
+        : m_wav(std::move(wav))
+    {
+        setAutoDelete(true);
+    }
+
+    void run() override
+    {
+        playPcmWithAlsa(m_wav);
+        g_busy.store(false, std::memory_order_release);
+    }
+
+private:
+    WavPcm m_wav;
+};
 #endif
 
 } // namespace
@@ -266,14 +283,18 @@ bool play(int level)
         return false;
     }
 
-    bool ok = false;
 #ifdef CAR_DESK_USE_T507_SDK
     const WavPcm *wav = cachedWav(level);
-    if (wav) {
-        ok = playPcmWithAlsa(*wav);
-    } else {
+    if (!wav) {
         qWarning() << "[ClickSound] no wav for level=" << level;
+        g_busy.store(false, std::memory_order_release);
+        return false;
     }
+
+    // 功放切媒体声道放在主线程；PCM 写入放到线程池，避免阻塞 GUI 连点/连删。
+    T507SdkBridge::setAudioSource(false);
+    QThreadPool::globalInstance()->start(new ClickSoundTask(*wav));
+    return true;
 #else
     static QSoundEffect *fxSoft = nullptr;
     static QSoundEffect *fxLoud = nullptr;
@@ -285,6 +306,7 @@ bool play(int level)
                                : QStringLiteral("qrc:/sound/click_loud.wav")));
         fx->setVolume(1.0);
     }
+    bool ok = false;
     if (fx->status() != QSoundEffect::Error) {
         fx->play();
         ok = true;
@@ -292,9 +314,6 @@ bool play(int level)
     g_busy.store(false, std::memory_order_release);
     return ok;
 #endif
-
-    g_busy.store(false, std::memory_order_release);
-    return ok;
 }
 
 } // namespace TouchClickSound

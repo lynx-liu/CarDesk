@@ -965,6 +965,12 @@ QWidget *DiagnosticWindow::createPdfSearchPage()
         btn->setDefault(false);
         btn->setFocusPolicy(Qt::NoFocus);
         btn->setStyleSheet(normalKeyStyle);
+        if (bottomKeys.at(i) == QStringLiteral("←")) {
+            // 长按连续删除；点屏音已异步，不会再堵事件队列
+            btn->setAutoRepeat(true);
+            btn->setAutoRepeatDelay(400);
+            btn->setAutoRepeatInterval(60);
+        }
         connect(btn, &QPushButton::clicked, this, [this, btn, refreshCandidateDisplay, compositionLength, shiftMode, englishMode, currentComposition, punctuationButtons, punctuationCn, punctuationEn, insertTextAtCursor, normalKeyStyle, shiftOnStyle, bottomKeys, updateCompositionSelection](void) {
             const QString key = btn->text();
             if (key == QStringLiteral("Shift")) {
