@@ -536,6 +536,18 @@ bool automotiveIlluminationOn()
 
 bool automotiveIsTurnOrReverseActive()
 {
-    // 与行车影像 CAN 布局一致：近期有 OEL/LC 且倒车/转向为 ON
-    return hasLiveTurnOrReverse() || s_activeSignalMode != 0;
+    // 与行车影像 CAN 布局一致：已切入的转向/倒车布局，或近期 OEL/LC 仍为 ON
+    if (s_activeSignalMode != 0 || hasLiveTurnOrReverse()) {
+        return true;
+    }
+    // 兜底：行车窗已在前台且当前为倒车/转向布局（防止状态与窗口短暂不同步）
+    if (DrivingImageWindow *drive = findDrivingImageWindow()) {
+        if (drive->isVisible()) {
+            const int mode = drive->drivingMode();
+            if (mode == 270 || mode == 271 || mode == 272) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
