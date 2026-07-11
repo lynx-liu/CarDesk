@@ -91,15 +91,11 @@ ImageViewingWindow::ImageViewingWindow(QWidget *parent)
 
     loadDirectory(m_initialPath);
 
-    // USB 插拔时更新显示
+    // USB 插拔：拔盘停看大图并清空；插回在列表页自动刷新（对齐音乐/视频）
     connect(AppSignals::instance(), &AppSignals::usbStateChanged, this, [this](bool connected) {
         if (!connected) {
-            m_currentPath.clear();
-            m_imageFiles.clear();
-            if (m_thumbnailList) m_thumbnailList->clear();
-            if (m_detailLabel) m_detailLabel->setText(QStringLiteral("请插入U盘"));
+            applyUsbMissingState();
         } else if (m_modeStack && m_modeStack->currentIndex() == 0) {
-            // 在列表页时插入 U 盘，自动刷新
             const QString usbPath = findFirstUsbImageDirectory();
             if (!usbPath.isEmpty()) {
                 m_initialPath = usbPath;
@@ -120,13 +116,50 @@ void ImageViewingWindow::closeEvent(QCloseEvent *event)
 void ImageViewingWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
+    const QString usbRoot = findFirstUsbImageDirectory();
+    if (usbRoot.isEmpty()) {
+        applyUsbMissingState();
+        return;
+    }
     if (m_currentPath.isEmpty() || m_currentPath == QStringLiteral("/mnt")
             || m_currentPath == kUsbMountDir) {
-        const QString usbRoot = findFirstUsbImageDirectory();
-        if (!usbRoot.isEmpty()) {
-            m_initialPath = usbRoot;
-            loadDirectory(usbRoot);
-        }
+        m_initialPath = usbRoot;
+        loadDirectory(usbRoot);
+    }
+}
+
+void ImageViewingWindow::applyUsbMissingState()
+{
+    if (m_thumbLoader) {
+        m_thumbLoader->cancel();
+    }
+
+    m_currentPath.clear();
+    m_initialPath = QStringLiteral("/mnt");
+    m_imageFiles.clear();
+    m_currentIndex = 0;
+    m_rotationAngle = 0;
+    m_zoomFactor = 1.0;
+    m_cachedSourcePixmap = QPixmap();
+    m_cachedImagePath.clear();
+    m_cachedRotation = -1;
+
+    if (m_thumbnailList) {
+        m_thumbnailList->clear();
+    }
+    if (m_detailLabel) {
+        m_detailLabel->setText(QStringLiteral("请插入U盘"));
+    }
+    if (m_previewLabel) {
+        m_previewLabel->clear();
+    }
+    if (m_viewTitleLabel) {
+        m_viewTitleLabel->setText(QStringLiteral("图片浏览"));
+    }
+
+    // 大图页退回列表，避免继续显示已失效的缓存图
+    if (m_modeStack) {
+        m_modeStack->setCurrentIndex(0);
     }
 }
 
@@ -554,14 +587,7 @@ void ImageViewingWindow::loadDirectory(const QString &path)
         if (!usbPath.isEmpty()) {
             normalizedPath = usbPath;
         } else {
-            m_currentPath.clear();
-            m_imageFiles.clear();
-            if (m_thumbnailList) {
-                m_thumbnailList->clear();
-            }
-            if (m_detailLabel) {
-                m_detailLabel->setText(QStringLiteral("请插入U盘"));
-            }
+            applyUsbMissingState();
             return;
         }
     }

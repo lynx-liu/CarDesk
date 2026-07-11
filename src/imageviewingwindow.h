@@ -128,6 +128,8 @@ private:
     void setupUI();
     void loadDirectory(const QString &path);
     void updateImageView();
+    /** 拔盘：退出大图、清缓存/列表，回到空列表（与音乐/视频一致） */
+    void applyUsbMissingState();
 
     QStackedWidget *m_modeStack;
     QWidget       *m_viewPage;
