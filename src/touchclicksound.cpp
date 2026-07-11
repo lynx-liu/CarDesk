@@ -6,12 +6,12 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QApplication>
-#include <QThreadPool>
-#include <QRunnable>
 #include <QtGlobal>
 #include <atomic>
+#include <condition_variable>
 #include <cstring>
-#include <utility>
+#include <mutex>
+#include <thread>
 
 #include "t507sdkbridge.h"
 
@@ -47,7 +47,7 @@ bool parseWavPcm(const QByteArray &fileData, WavPcm *out)
     auto u16 = [&](int off) -> quint16 {
         return quint16(p[off]) | (quint16(p[off + 1]) << 8);
     };
-    if (u32(0) != 0x46464952u || u32(8) != 0x45564157u) { // RIFF / WAVE
+    if (u32(0) != 0x46464952u || u32(8) != 0x45564157u) {
         return false;
     }
 
@@ -64,7 +64,7 @@ bool parseWavPcm(const QByteArray &fileData, WavPcm *out)
         if (dataOff + int(sz) > fileData.size()) {
             break;
         }
-        if (id == 0x20746d66u) { // fmt
+        if (id == 0x20746d66u) {
             if (sz < 16) {
                 return false;
             }
@@ -72,7 +72,7 @@ bool parseWavPcm(const QByteArray &fileData, WavPcm *out)
             channels = u16(dataOff + 2);
             rate = u32(dataOff + 4);
             bits = u16(dataOff + 14);
-        } else if (id == 0x61746164u) { // data
+        } else if (id == 0x61746164u) {
             pcm = fileData.mid(dataOff, int(sz));
         }
         off = dataOff + int((sz + 1u) & ~1u);
@@ -87,7 +87,6 @@ bool parseWavPcm(const QByteArray &fileData, WavPcm *out)
     return true;
 }
 
-/** 去掉首尾近静音，并截到约 80ms，缩短占用 ALSA 时间。 */
 void trimClickPcm(WavPcm *wav)
 {
     if (!wav || wav->bits != 16 || wav->channels == 0 || wav->pcm.isEmpty()) {
@@ -120,7 +119,8 @@ void trimClickPcm(WavPcm *wav)
     if (first < 0) {
         return;
     }
-    const int maxFrames = int(wav->rate * 80 / 1000); // <=80ms
+    // 保留有效点击，最长约 120ms（与改坏前一致，柔和/响亮波形不同）
+    const int maxFrames = int(wav->rate * 120 / 1000);
     int end = last + 1;
     if (end - first > maxFrames) {
         end = first + maxFrames;
@@ -171,10 +171,7 @@ const WavPcm *cachedWav(int level)
     *ok = true;
     qDebug() << "[ClickSound] cached level=" << level
              << "ch=" << slot->channels << "rate=" << slot->rate
-             << "bytes=" << slot->pcm.size()
-             << "ms~" << (slot->rate ? (slot->pcm.size() * 1000)
-                                        / (int(slot->channels) * 2 * int(slot->rate))
-                                      : 0);
+             << "bytes=" << slot->pcm.size();
     return slot;
 }
 
@@ -182,9 +179,10 @@ const WavPcm *cachedWav(int level)
 bool playPcmWithAlsa(const WavPcm &wav)
 {
     if (wav.bits != 16) {
-        qWarning() << "[ClickSound] only 16-bit PCM supported, bits=" << wav.bits;
         return false;
     }
+
+    T507SdkBridge::setAudioSource(false);
 
     snd_pcm_t *handle = nullptr;
     const char *devices[] = {"default", "hw:0,0", "plughw:0,0"};
@@ -210,11 +208,10 @@ bool playPcmWithAlsa(const WavPcm &wav)
         wav.channels,
         wav.rate,
         1,
-        50000); // 50ms latency
+        100000);
     if (setRc < 0) {
         qWarning() << "[ClickSound] snd_pcm_set_params failed on" << opened
-                   << ":" << snd_strerror(setRc)
-                   << "ch=" << wav.channels << "rate=" << wav.rate;
+                   << ":" << snd_strerror(setRc);
         snd_pcm_close(handle);
         return false;
     }
@@ -243,27 +240,62 @@ bool playPcmWithAlsa(const WavPcm &wav)
         snd_pcm_drain(handle);
     }
     snd_pcm_close(handle);
-    Q_UNUSED(opened);
     return ok;
 }
 
-class ClickSoundTask : public QRunnable {
-public:
-    explicit ClickSoundTask(WavPcm wav)
-        : m_wav(std::move(wav))
-    {
-        setAutoDelete(true);
-    }
+/*
+ * 固定一条音频线程 + 请求队列：
+ * - UI 只投递 level，立刻返回
+ * - 所有 ALSA 操作永远在同一线程，避免临时线程/跨线程 open 导致音小、杂音、档位失效
+ */
+std::mutex g_reqMutex;
+std::condition_variable g_reqCv;
+int g_pendingLevel = 0;      // 0=无请求；1/2=待播
+bool g_workerStop = false;
+std::thread g_worker;
+bool g_workerStarted = false;
 
-    void run() override
-    {
-        playPcmWithAlsa(m_wav);
+void workerLoop()
+{
+    qDebug() << "[ClickSound] audio worker running";
+    for (;;) {
+        int level = 0;
+        {
+            std::unique_lock<std::mutex> lock(g_reqMutex);
+            g_reqCv.wait(lock, [] {
+                return g_workerStop || g_pendingLevel != 0;
+            });
+            if (g_workerStop && g_pendingLevel == 0) {
+                break;
+            }
+            level = g_pendingLevel;
+            g_pendingLevel = 0;
+        }
+
+        const WavPcm *wav = cachedWav(level);
+        if (wav) {
+            playPcmWithAlsa(*wav);
+        } else {
+            qWarning() << "[ClickSound] worker missing wav level=" << level;
+        }
         g_busy.store(false, std::memory_order_release);
     }
+    qDebug() << "[ClickSound] audio worker exit";
+}
 
-private:
-    WavPcm m_wav;
-};
+void ensureWorker()
+{
+    static std::once_flag once;
+    std::call_once(once, [] {
+        // 主线程预读 qrc，worker 只碰 PCM
+        cachedWav(1);
+        cachedWav(2);
+        g_workerStop = false;
+        g_worker = std::thread(workerLoop);
+        g_workerStarted = true;
+        qDebug() << "[ClickSound] audio worker started";
+    });
+}
 #endif
 
 } // namespace
@@ -280,20 +312,16 @@ bool play(int level)
     }
     bool expected = false;
     if (!g_busy.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
-        return false;
+        return false; // 正在播：丢弃，常见做法
     }
 
 #ifdef CAR_DESK_USE_T507_SDK
-    const WavPcm *wav = cachedWav(level);
-    if (!wav) {
-        qWarning() << "[ClickSound] no wav for level=" << level;
-        g_busy.store(false, std::memory_order_release);
-        return false;
+    ensureWorker();
+    {
+        std::lock_guard<std::mutex> lock(g_reqMutex);
+        g_pendingLevel = level;
     }
-
-    // 功放切媒体声道放在主线程；PCM 写入放到线程池，避免阻塞 GUI 连点/连删。
-    T507SdkBridge::setAudioSource(false);
-    QThreadPool::globalInstance()->start(new ClickSoundTask(*wav));
+    g_reqCv.notify_one();
     return true;
 #else
     static QSoundEffect *fxSoft = nullptr;
@@ -313,6 +341,26 @@ bool play(int level)
     }
     g_busy.store(false, std::memory_order_release);
     return ok;
+#endif
+}
+
+void shutdown()
+{
+#ifdef CAR_DESK_USE_T507_SDK
+    if (!g_workerStarted) {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(g_reqMutex);
+        g_workerStop = true;
+        g_pendingLevel = 0;
+    }
+    g_reqCv.notify_one();
+    if (g_worker.joinable()) {
+        g_worker.join();
+    }
+    g_workerStarted = false;
+    g_busy.store(false, std::memory_order_release);
 #endif
 }
 

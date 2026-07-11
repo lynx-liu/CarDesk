@@ -502,6 +502,12 @@ static bool playTouchClickSound() {
     return ok;
 }
 
+/** 点屏音已在专用音频线程播放，这里直接请求即可，不阻塞当前按键/触摸处理。 */
+static void scheduleTouchClickSound()
+{
+    playTouchClickSound();
+}
+
 /** 左侧触屏键：开关屏 / 返回 / HOME / 音量加减 */
 static bool isSidePanelClickKey(int qtKey)
 {
@@ -568,12 +574,13 @@ protected:
                     const bool duplicateTouchBegin = (tid >= 0
                         && s_touchClickSoundActiveIds.contains(tid));
                     if (!duplicateTouchBegin) {
-                        if (playTouchClickSound() && tid >= 0) {
+                        if (tid >= 0) {
                             s_touchClickSoundActiveIds.insert(tid);
                         }
+                        scheduleTouchClickSound();
                     }
                 } else {
-                    playTouchClickSound();
+                    scheduleTouchClickSound();
                 }
             }
         }
@@ -589,7 +596,7 @@ protected:
 
             // 左侧触屏键点屏音（音乐/视频在播或媒体窗前台时由 shouldSuppress 屏蔽）
             if (!ke->isAutoRepeat() && isSidePanelClickKey(key)) {
-                playTouchClickSound();
+                scheduleTouchClickSound();
             }
 
             // ── QDialog 内按键拦截 ───────────────────────────────────────────
@@ -1070,6 +1077,7 @@ int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
     logBuildInfo();
     QObject::connect(&app, &QCoreApplication::aboutToQuit, []() { ProcessGuard::releaseInstanceLock(); });
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, []() { TouchClickSound::shutdown(); });
     if (s_debugMode) {
         AppSettings::setDebugMode(true);
     }
@@ -1240,7 +1248,7 @@ int main(int argc, char *argv[]) {
                     case KEY_SLEEP:
                         qDebug() << "KEY_SLEEP => blank screen";
                         // 不投递 KeyPress，在此补点屏音
-                        playTouchClickSound();
+                        scheduleTouchClickSound();
                         if (DrivingImageWindow *drive = findDrivingImageWindow()) {
                             if (!drive->isVisible()) {
                                 ScreenBlanker::instance()->blank();
@@ -1249,7 +1257,7 @@ int main(int argc, char *argv[]) {
                         break;
                     case KEY_POWER:
                         // 不投递 KeyPress，在此补点屏音
-                        playTouchClickSound();
+                        scheduleTouchClickSound();
                         if (ScreenBlanker::instance()->isBlanked()) {
                             qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => unblank screen";
                             ScreenBlanker::instance()->unblank();
