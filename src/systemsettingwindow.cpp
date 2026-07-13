@@ -2645,6 +2645,28 @@ static QByteArray mcuMakeBlock(int blockNum, const QByteArray &payload, bool use
     return frame;
 }
 
+void SystemSettingWindow::mcuUpgradeCleanup(const QString &statusText)
+{
+    m_mcuState = 0;
+    m_mcuNakRetries = 0;
+    if (m_mcuTimeoutTimer) {
+        m_mcuTimeoutTimer->stop();
+    }
+    McuSerialReader *shared = McuSerialReader::ensureShared();
+    disconnect(shared, &McuSerialReader::rawDataReceived, this, nullptr);
+    shared->setUpgradeMode(false);
+    if (m_mcuStateLabel) {
+        m_mcuStateLabel->setText(statusText);
+        m_mcuStateLabel->show();
+    }
+    if (m_mcuCancelBtn) {
+        m_mcuCancelBtn->hide();
+    }
+    if (m_mcuStartBtn) {
+        m_mcuStartBtn->show();
+    }
+}
+
 void SystemSettingWindow::onMcuUpdateStart()
 {
     const QString path = mcuFindFirmware();
@@ -2661,21 +2683,50 @@ void SystemSettingWindow::onMcuUpdateStart()
     }
     m_mcuFirmwareData = f.readAll();
     f.close();
+    if (m_mcuFirmwareData.isEmpty()) {
+        m_mcuStateLabel->setText(QStringLiteral("固件文件读取失败"));
+        m_mcuStateLabel->show();
+        return;
+    }
+
+    m_mcuFirmwarePath = path;
     m_mcuFileSize = m_mcuFirmwareData.size();
     m_mcuBytesSent = 0;
     m_mcuBlockNum  = 1;
+    m_mcuNakRetries = 0;
     m_mcuRxBuf.clear();
     m_mcuState = 1; // waitOTA_OK
 
     McuSerialReader *shared = McuSerialReader::ensureShared();
+    // 避免重复 connect：上次失败/取消后残留会重复处理 ACK，导致卡在 2%
+    disconnect(shared, &McuSerialReader::rawDataReceived, this, nullptr);
     shared->setUpgradeMode(true);
     connect(shared, &McuSerialReader::rawDataReceived, this, [this](const QByteArray &data) {
         m_mcuRxBuf.append(data);
         onMcuSerialReadyRead();
     });
 
+    if (!m_mcuTimeoutTimer) {
+        m_mcuTimeoutTimer = new QTimer(this);
+        m_mcuTimeoutTimer->setSingleShot(true);
+        connect(m_mcuTimeoutTimer, &QTimer::timeout, this, [this]() {
+            if (m_mcuState == 0) {
+                return;
+            }
+            qWarning() << "[MCU OTA] timeout in state" << m_mcuState
+                       << "bytesSent=" << m_mcuBytesSent;
+            if (m_mcuProgressRowWidget) {
+                m_mcuProgressRowWidget->hide();
+            }
+            mcuUpgradeCleanup(QStringLiteral("升级失败"));
+        });
+    }
+    m_mcuTimeoutTimer->start(15000);
+
     m_mcuStateLabel->setText(QStringLiteral("已发送升级命令，等待单片机响应..."));
     m_mcuStateLabel->show();
+    m_mcuProgressBar->setValue(0);
+    m_mcuProgressText->setText(QStringLiteral("0%"));
     m_mcuProgressRowWidget->hide();
     m_mcuStartBtn->hide();
     m_mcuCancelBtn->show();
@@ -2685,19 +2736,41 @@ void SystemSettingWindow::onMcuUpdateStart()
 
 void SystemSettingWindow::onMcuUpdateCancel()
 {
-    m_mcuState = 0;
-    McuSerialReader *shared = McuSerialReader::ensureShared();
-    disconnect(shared, &McuSerialReader::rawDataReceived, this, nullptr);
-    shared->setUpgradeMode(false);
-    m_mcuStateLabel->setText(QStringLiteral("已取消"));
-    m_mcuStateLabel->show();
-    m_mcuProgressRowWidget->hide();
-    m_mcuStartBtn->show();
-    m_mcuCancelBtn->hide();
+    McuSerialReader::ensureShared()->write(QByteArray(1, char(0x18))); // CAN
+    if (m_mcuProgressRowWidget) {
+        m_mcuProgressRowWidget->hide();
+    }
+    mcuUpgradeCleanup(QStringLiteral("已取消"));
 }
 
 void SystemSettingWindow::onMcuSerialReadyRead()
 {
+    auto armTimeout = [this]() {
+        if (m_mcuTimeoutTimer) {
+            m_mcuTimeoutTimer->start(15000);
+        }
+    };
+
+    auto sendDataBlock = [this, &armTimeout](int blockNum) -> bool {
+        const int offset = (blockNum - 1) * 1024;
+        if (offset >= m_mcuFileSize) {
+            McuSerialReader::ensureShared()->write(QByteArrayLiteral("\x04"));
+            m_mcuState = 4;
+            armTimeout();
+            return false;
+        }
+        const QByteArray chunk = m_mcuFirmwareData.mid(offset, 1024);
+        McuSerialReader::ensureShared()->write(mcuMakeBlock(blockNum, chunk, true));
+        m_mcuBytesSent = qMin(offset + 1024, m_mcuFileSize);
+        const int pct = m_mcuFileSize > 0 ? (m_mcuBytesSent * 100 / m_mcuFileSize) : 0;
+        m_mcuProgressBar->setValue(pct);
+        m_mcuProgressText->setText(QString::number(pct) + "%");
+        m_mcuStateLabel->setText(
+            QStringLiteral("传输中... %1 / %2 字节").arg(m_mcuBytesSent).arg(m_mcuFileSize));
+        armTimeout();
+        return true;
+    };
+
     // 注：m_mcuRxBuf 已由 rawDataReceived 连接的 lambda 写入
     if (m_mcuState == 1) {
         // 等待 OTA_OK 或 "[OTA] Entering upgrade mode..."
@@ -2705,18 +2778,19 @@ void SystemSettingWindow::onMcuSerialReadyRead()
             m_mcuRxBuf.clear();
             m_mcuState = 2; // 等待 Bootloader 发送 'C'
             m_mcuStateLabel->setText(QStringLiteral("单片机已就绪，准备传输..."));
+            armTimeout();
         }
         return;
     }
 
     if (m_mcuState == 2) {
-        // 待 'C' 发送block0
+        // 待 'C' 发送 block0（文件名）
         if (!m_mcuRxBuf.contains('\x43')) return;
         m_mcuRxBuf.clear();
 
         QByteArray namePayload;
-        QByteArray name = QFileInfo(mcuFindFirmware()).fileName().toLocal8Bit();
-        QByteArray sz   = QString::number(m_mcuFileSize).toLatin1();
+        const QByteArray name = QFileInfo(m_mcuFirmwarePath).fileName().toLocal8Bit();
+        const QByteArray sz = QString::number(m_mcuFileSize).toLatin1();
         namePayload.append(name);
         namePayload.append('\0');
         namePayload.append(sz);
@@ -2727,74 +2801,68 @@ void SystemSettingWindow::onMcuSerialReadyRead()
         m_mcuState = 3; // 等待 ACK+C 开始发送数据
         m_mcuStateLabel->setText(QStringLiteral("开始传输固件..."));
         m_mcuProgressRowWidget->show();
+        armTimeout();
         return;
     }
 
     if (m_mcuState == 3) {
         // 等待 bootloader 就绪信号：标准 YMODEM 应答为 ACK(0x06)+C(0x43)，
         // 但部分简单 bootloader 对文件名包直接回 C(0x43)（无 ACK），兼容两种情况
-        if (!m_mcuRxBuf.contains('\x43')) return; // 至少要有 'C'
+        if (!m_mcuRxBuf.contains('\x43')) return;
         m_mcuRxBuf.clear();
+        m_mcuNakRetries = 0;
 
-        const int offset = (m_mcuBlockNum - 1) * 1024;
-        if (offset >= m_mcuFileSize) {
-            // 无数据，直接EOT
-            McuSerialReader::ensureShared()->write(QByteArrayLiteral("\x04"));
-            m_mcuState = 4;
-            return;
+        if (sendDataBlock(m_mcuBlockNum)) {
+            m_mcuBlockNum++;
+            m_mcuState = 31; // 等待单个 ACK
         }
-        QByteArray chunk = m_mcuFirmwareData.mid(offset, 1024);
-        McuSerialReader::ensureShared()->write(mcuMakeBlock(m_mcuBlockNum, chunk, true));
-        m_mcuBytesSent = qMin(offset + 1024, m_mcuFileSize);
-
-        int pct = m_mcuFileSize > 0 ? (m_mcuBytesSent * 100 / m_mcuFileSize) : 0;
-        m_mcuProgressBar->setValue(pct);
-        m_mcuProgressText->setText(QString::number(pct) + "%");
-        m_mcuStateLabel->setText(QString("传输中... %1 / %2 字节").arg(m_mcuBytesSent).arg(m_mcuFileSize));
-
-        m_mcuBlockNum++;
-        m_mcuState = 31; // 等待单个ACK
         return;
     }
 
     if (m_mcuState == 31) {
-        // 等待ACK
-        if (!m_mcuRxBuf.contains('\x06')) return;
-        m_mcuRxBuf.clear();
-
-        const int offset = (m_mcuBlockNum - 1) * 1024;
-        if (offset >= m_mcuFileSize) {
-            McuSerialReader::ensureShared()->write(QByteArrayLiteral("\x04"));
-            m_mcuState = 4;
+        // NAK：重发上一包（卡在 2% 常见于首包 CRC/写不完整后一直等 ACK）
+        if (m_mcuRxBuf.contains('\x15')) {
+            m_mcuRxBuf.clear();
+            if (++m_mcuNakRetries > 10) {
+                if (m_mcuProgressRowWidget) {
+                    m_mcuProgressRowWidget->hide();
+                }
+                mcuUpgradeCleanup(QStringLiteral("升级失败"));
+                return;
+            }
+            qWarning() << "[MCU OTA] NAK, retry block" << (m_mcuBlockNum - 1)
+                       << "attempt" << m_mcuNakRetries;
+            sendDataBlock(m_mcuBlockNum - 1);
             return;
         }
-        QByteArray chunk = m_mcuFirmwareData.mid(offset, 1024);
-        McuSerialReader::ensureShared()->write(mcuMakeBlock(m_mcuBlockNum, chunk, true));
-        m_mcuBytesSent = qMin(offset + 1024, m_mcuFileSize);
+        if (!m_mcuRxBuf.contains('\x06')) return;
+        m_mcuRxBuf.clear();
+        m_mcuNakRetries = 0;
 
-        int pct = m_mcuFileSize > 0 ? (m_mcuBytesSent * 100 / m_mcuFileSize) : 0;
-        m_mcuProgressBar->setValue(pct);
-        m_mcuProgressText->setText(QString::number(pct) + "%");
-        m_mcuStateLabel->setText(QString("传输中... %1 / %2 字节").arg(m_mcuBytesSent).arg(m_mcuFileSize));
-
-        m_mcuBlockNum++;
+        if (sendDataBlock(m_mcuBlockNum)) {
+            m_mcuBlockNum++;
+        }
         return;
     }
 
     if (m_mcuState == 4) {
-        // EOT已发，等 ACK+C
+        // EOT 已发，等 ACK+C
         if (!m_mcuRxBuf.contains('\x06') || !m_mcuRxBuf.contains('\x43')) return;
         m_mcuRxBuf.clear();
 
-        // 发送空结束块
         QByteArray emptyPayload(128, '\0');
         McuSerialReader::ensureShared()->write(mcuMakeBlock(0, emptyPayload, false));
         m_mcuState = 5;
+        armTimeout();
         return;
     }
 
     if (m_mcuState == 5) {
+        if (m_mcuTimeoutTimer) {
+            m_mcuTimeoutTimer->stop();
+        }
         m_mcuState = 0;
+        m_mcuNakRetries = 0;
         McuSerialReader *shared = McuSerialReader::ensureShared();
         disconnect(shared, &McuSerialReader::rawDataReceived, this, nullptr);
         shared->setUpgradeMode(false);

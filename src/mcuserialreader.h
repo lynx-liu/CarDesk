@@ -43,11 +43,14 @@ public:
     void close();
     bool isOpen() const;
 
-    // 向串口写数据，同时打印 [MCU TX] 字符串日志
+    // 向串口写数据（二进制安全：写全并等待刷出；日志不打印整包二进制）
     void write(const QByteArray &data);
 
     // 切换升级模式：true=升级中（onReadyRead 将原始数据通过 rawDataReceived 信号转发，不做文本解析）
     void setUpgradeMode(bool mode);
+
+    // 丢弃串口接收缓冲（进入 YMODEM 前清掉 CAN/文本残留）
+    void discardInput();
 
 signals:
     // 每次解析完整 DM1 块后发射（faults 为空表示该控制器无故障）

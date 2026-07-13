@@ -101,10 +101,14 @@ private:
     QPushButton *m_mcuCancelBtn;
     QByteArray m_mcuFirmwareData;
     QByteArray m_mcuRxBuf;
+    QString m_mcuFirmwarePath;
+    QTimer *m_mcuTimeoutTimer = nullptr;
     int m_mcuFileSize;
     int m_mcuBytesSent;
     int m_mcuBlockNum;
-    int m_mcuState; // 0=idle,1=waitC,2=sentBlk0,3=sendData,4=sentEOT,5=done
+    int m_mcuNakRetries = 0;
+    int m_mcuState; // 0=idle,1=waitOTA_OK,2=waitC,3=waitC_after_name,31=waitACK,4=sentEOT,5=done
+    void mcuUpgradeCleanup(const QString &statusText);
     QString m_checkedUpdateFile;
     QString m_checkedNewVersion;
     

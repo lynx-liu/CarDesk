@@ -84,23 +84,66 @@ bool McuSerialReader::isOpen() const
 
 void McuSerialReader::write(const QByteArray &data)
 {
-    qDebug() << "[MCU TX]" << QString::fromLatin1(data);
-    if (m_port && m_port->isOpen())
-        m_port->write(data);
-    else
+    if (!m_port || !m_port->isOpen()) {
         qWarning() << "[MCU] Cannot write to serial port, not open!";
+        return;
+    }
+
+    // 文本命令可打印；YMODEM 二进制帧只打长度，避免 fromLatin1 遇 \\0 截断/拖垮日志
+    const bool looksBinary = data.contains('\0')
+            || data.contains(char(0x01)) || data.contains(char(0x02))
+            || data.contains(char(0x04));
+    if (looksBinary) {
+        qDebug() << "[MCU TX] binary bytes=" << data.size()
+                 << "head=" << data.left(4).toHex();
+    } else {
+        qDebug() << "[MCU TX]" << QString::fromLatin1(data).trimmed();
+    }
+
+    qint64 offset = 0;
+    while (offset < data.size()) {
+        const qint64 n = m_port->write(data.constData() + offset, data.size() - offset);
+        if (n < 0) {
+            qWarning() << "[MCU] serial write error:" << m_port->errorString();
+            return;
+        }
+        if (n == 0) {
+            if (!m_port->waitForBytesWritten(1000)) {
+                qWarning() << "[MCU] waitForBytesWritten timeout, wrote"
+                           << offset << "/" << data.size();
+                return;
+            }
+            continue;
+        }
+        offset += n;
+    }
+    if (!m_port->waitForBytesWritten(2000)) {
+        qWarning() << "[MCU] flush timeout after writing" << data.size() << "bytes";
+    }
 }
 
 void McuSerialReader::setUpgradeMode(bool mode)
 {
     m_upgradeMode = mode;
-    if (!mode) {
-        // 恢复正常解析模式，清除残留缓冲
-        m_buf.clear();
-        m_inBlock = false;
-        m_curFaults.clear();
+    // 进出升级模式都清空解析缓冲，避免 CAN 文本残留混进 YMODEM
+    m_buf.clear();
+    m_inBlock = false;
+    m_curFaults.clear();
+    if (mode) {
+        discardInput();
     }
     qDebug() << "[MCU] upgradeMode" << (mode ? "ON" : "OFF");
+}
+
+void McuSerialReader::discardInput()
+{
+    if (!m_port || !m_port->isOpen()) {
+        return;
+    }
+    const QByteArray junk = m_port->readAll();
+    if (!junk.isEmpty()) {
+        qDebug() << "[MCU] discardInput dropped" << junk.size() << "bytes";
+    }
 }
 
 void McuSerialReader::onReadyRead()
