@@ -472,17 +472,19 @@ void DrivingImagePlaybackPage::playFile(const QString &path)
         return;
     }
 
-    m_allFiles = AhdRecordStore::filterExistingFiles(AhdRecordStore::listVideoFilesForDate(m_currentDate));
-    if (m_allFiles.isEmpty()) {
-        populateFileGrid();
-        return;
-    }
-
+    // 列表页已有当日文件；打开时只过滤失效项，避免再整树扫盘卡住 UI
+    m_allFiles = AhdRecordStore::filterExistingFiles(m_allFiles);
     int index = m_allFiles.indexOf(path);
     if (index < 0 || !QFileInfo::exists(path)) {
-        clearTilePressedStates(m_fileGrid);
-        populateFileGrid();
-        return;
+        // 锚点失效时才补一次当日扫描
+        m_allFiles = AhdRecordStore::filterExistingFiles(
+            AhdRecordStore::listVideoFilesForDate(m_currentDate));
+        index = m_allFiles.indexOf(path);
+        if (m_allFiles.isEmpty() || index < 0 || !QFileInfo::exists(path)) {
+            clearTilePressedStates(m_fileGrid);
+            populateFileGrid();
+            return;
+        }
     }
 
     clearTilePressedStates(m_fileGrid);

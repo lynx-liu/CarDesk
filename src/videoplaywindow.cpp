@@ -904,11 +904,9 @@ bool VideoPlayWindow::ensureCurrentFilePlayable()
         return m_currentIndex >= 0 && m_currentIndex < m_videoFiles.count();
     }
 
-    refreshRecordPlaylistIfNeeded();
-    if (m_videoFiles.isEmpty() || m_currentIndex < 0 || m_currentIndex >= m_videoFiles.count()) {
-        return false;
-    }
-    if (QFileInfo::exists(m_videoFiles.at(m_currentIndex))) {
+    // 当前文件仍在：不扫盘（打开播放时卡顿的常见叠加项）
+    if (m_currentIndex >= 0 && m_currentIndex < m_videoFiles.count()
+            && QFileInfo::exists(m_videoFiles.at(m_currentIndex))) {
         return true;
     }
 
@@ -936,11 +934,14 @@ void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex,
         if (origin == VideoPlaybackOrigin::DrivingRecord
             || cedarxIsAhdRecordVideoPath(files.at(anchorIdx))) {
             m_recordDateKey = AhdRecordStore::dateKeyForFile(files.at(anchorIdx));
-            refreshRecordPlaylistIfNeeded();
+            // 回放页已传入当日列表，只过滤失效项，禁止再整树 listVideoFilesForDate
+            const QString anchorPath = files.at(anchorIdx);
+            m_videoFiles = AhdRecordStore::filterExistingFiles(m_videoFiles);
             if (m_videoFiles.isEmpty()) {
                 m_currentIndex = -1;
-            } else if (m_currentIndex < 0 || m_currentIndex >= m_videoFiles.count()) {
-                m_currentIndex = 0;
+            } else {
+                const int idx = m_videoFiles.indexOf(anchorPath);
+                m_currentIndex = idx >= 0 ? idx : 0;
             }
         }
     }
