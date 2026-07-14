@@ -526,6 +526,8 @@ static bool isSidePanelClickKey(int qtKey)
 
 static bool s_debugMode = false;
 
+static bool handleEndKeyPress();
+
 // 挂在 QApplication 上，能拦截所有窗口的 KeyPress，不依赖窗口焦点
 class GlobalKeyFilter : public QObject {
 public:
@@ -651,6 +653,11 @@ protected:
                     // 避免再投递 HomePage 干扰。倒车/转向拦截也在 handleMenuKeyPress 内。
                     qDebug() << "[GlobalKey] => Menu (consumed, InputNotifier owns MODE)"
                              << "turnOrReverse=" << automotiveIsTurnOrReverseActive();
+                    return true;
+                case Qt::Key_End:
+                    // 与 InputNotifier 一致：只尝试挂断，吞掉默认 End 行为
+                    qDebug() << "[GlobalKey] => End (hangup-only)";
+                    handleEndKeyPress();
                     return true;
                 case Qt::Key_HomePage:
                     qDebug() << "[GlobalKey] => HomePage";
@@ -1193,12 +1200,10 @@ int main(int argc, char *argv[]) {
                         qtKey = Qt::Key_Phone;
                         break;
                     case KEY_END:
-                        qDebug() << "KEY_END => hangup";
-                        if (handleEndKeyPress()) {
-                            continue;
-                        }
-                        qtKey = Qt::Key_End;
-                        break;
+                        // 仅通话中挂断；其它界面绝不转发 Qt::Key_End（否则会跳到列表/进度末尾）
+                        qDebug() << "KEY_END => hangup-only";
+                        handleEndKeyPress();
+                        continue;
                     case KEY_A:
                         qDebug() << "KEY_A => enter reverse (backup ON)";
                         automotiveSetBackupSignal(true);
