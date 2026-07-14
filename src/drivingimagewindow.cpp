@@ -17,7 +17,6 @@
 #include <QDebug>
 #include <QProcessEnvironment>
 #include <QCloseEvent>
-#include <QDateTime>
 #include <QFrame>
 #include <QFontMetrics>
 #include <QHideEvent>
@@ -59,7 +58,6 @@ DrivingImageWindow::DrivingImageWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_previewWrap(nullptr)
     , m_exitHintLabel(nullptr)
-    , m_singleClickTimer(new QTimer(this))
     , m_returning(false)
     , m_exitInProgress(false)
     , m_startScheduled(false)
@@ -67,8 +65,6 @@ DrivingImageWindow::DrivingImageWindow(QWidget *parent)
     , m_fullscreenCameraId(-1)
     , m_cameraMode(360)
     , m_pendingClickGlobalPos()
-    , m_lastClickMs(0)
-    , m_lastClickPos()
 {
     setWindowTitle(QStringLiteral("驾驶影像 / Driving"));
     setObjectName("drivingImageWindow");
@@ -93,11 +89,6 @@ DrivingImageWindow::DrivingImageWindow(QWidget *parent)
     }
 
     setupUI();
-
-    m_singleClickTimer->setSingleShot(true);
-    connect(m_singleClickTimer, &QTimer::timeout, this, [this]() {
-        handleConfirmedSingleClick(m_pendingClickGlobalPos);
-    });
 
     m_longPressTimer = new QTimer(this);
     m_longPressTimer->setSingleShot(true);
@@ -184,7 +175,6 @@ void DrivingImageWindow::closeEvent(QCloseEvent *event)
 void DrivingImageWindow::hideEvent(QHideEvent *event)
 {
     m_startScheduled = false;
-    m_singleClickTimer->stop();
     if (m_longPressTimer) {
         m_longPressTimer->stop();
     }
@@ -193,7 +183,6 @@ void DrivingImageWindow::hideEvent(QHideEvent *event)
     m_longPressTriggered = false;
     m_isFullscreen = false;
     m_fullscreenCameraId = -1;
-    m_lastClickMs = 0;
     if (m_exitInProgress) {
         QMainWindow::hideEvent(event);
         return;
@@ -285,34 +274,9 @@ void DrivingImageWindow::mousePressEvent(QMouseEvent *event)
         schedulePreviewChromeAutoHide();
     }
 
-    // 手动双击检测：触摸屏上 mouseDoubleClickEvent 不可靠
-    // 两次点击间隔 < doubleClickInterval 且位移 < 60px → 视为双击
-    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
-    const QPoint gpos = event->globalPos();
-    const int dx = gpos.x() - m_lastClickPos.x();
-    const int dy = gpos.y() - m_lastClickPos.y();
-    const bool closeEnough = (dx * dx + dy * dy) < (60 * 60);
-    const int dblInterval = qMax(QApplication::doubleClickInterval(), 400);
-    if ((nowMs - m_lastClickMs) < dblInterval && closeEnough) {
-        // 双击：取消已排队的单击动作，直接退出
-        m_singleClickTimer->stop();
-        if (m_longPressTimer) {
-            m_longPressTimer->stop();
-        }
-        m_longPressTriggered = false;
-        m_lastClickMs = 0; // 重置，避免三击误触发
-        if (!m_exitInProgress) {
-            returnToMainSafely();
-        }
-        return;
-    }
-
-    m_lastClickMs = nowMs;
-    m_lastClickPos = gpos;
-    m_pendingClickGlobalPos = gpos;
-
+    m_pendingClickGlobalPos = event->globalPos();
     m_longPressTriggered = false;
-    if (canStartPreviewLongPress(gpos) && m_longPressTimer) {
+    if (canStartPreviewLongPress(m_pendingClickGlobalPos) && m_longPressTimer) {
         m_longPressTimer->start();
     }
 }
@@ -324,7 +288,7 @@ void DrivingImageWindow::mouseReleaseEvent(QMouseEvent *event)
             m_longPressTimer->stop();
         }
         if (!m_longPressTriggered && m_stack && m_stack->currentIndex() == 0 && !m_exitInProgress) {
-            m_singleClickTimer->start(qMax(QApplication::doubleClickInterval(), 400));
+            handleConfirmedSingleClick(m_pendingClickGlobalPos);
         }
         m_longPressTriggered = false;
     }
@@ -370,8 +334,6 @@ void DrivingImageWindow::onLongPressTimeout()
         return;
     }
     m_longPressTriggered = true;
-    m_singleClickTimer->stop();
-    m_lastClickMs = 0;
     m_previewChromeVisible = true;
     updatePreviewChrome();
     schedulePreviewChromeAutoHide();
@@ -1119,10 +1081,6 @@ void DrivingImageWindow::keyPressEvent(QKeyEvent *event)
     case Qt::Key_HomePage:
     case Qt::Key_Back:
     case Qt::Key_Escape:
-        if (m_singleClickTimer->isActive()) {
-            m_singleClickTimer->stop();
-            m_lastClickMs = 0;
-        }
         if (m_longPressTimer && m_longPressTimer->isActive()) {
             m_longPressTimer->stop();
         }

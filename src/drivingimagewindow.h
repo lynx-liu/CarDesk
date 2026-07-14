@@ -87,7 +87,6 @@ private:
     QLabel *m_tfCardHintLabel = nullptr;
     AhdManager *m_ahdManager = nullptr;
     AhdManager *ahdManager();
-    QTimer *m_singleClickTimer;
     QTimer *m_longPressTimer = nullptr;
     QTimer *m_previewChromeHideTimer = nullptr;
     bool m_previewChromeVisible = false;
@@ -101,8 +100,6 @@ private:
     int m_fullscreenCameraId;
     int m_cameraMode;
     QPoint m_pendingClickGlobalPos;
-    qint64 m_lastClickMs;
-    QPoint m_lastClickPos;
 };
 
 #endif // DRIVINGIMAGEWINDOW_H
