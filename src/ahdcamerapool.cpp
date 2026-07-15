@@ -410,8 +410,10 @@ void applyRecordDirToSdk(int cameraId, const QString &rootPath)
     }
 }
 
-static constexpr unsigned int kCarDeskRecordBitrateMbps = 3;
+// 目标上限 1Mbps；VBR 静画面会更低，省 TF IO。
+static constexpr unsigned int kCarDeskRecordMaxBitrateBps = 1024u * 1024u; // 1 Mbps
 static constexpr int kCarDeskRecordFrameRate = 30;
+static constexpr int kCarDeskRecordVbrQuality = 5; // 1最省~10最好，默认 5
 
 bool initDvrRecordPipeline(dvr_factory *dvr, int cameraId)
 {
@@ -430,13 +432,39 @@ bool initDvrRecordPipeline(dvr_factory *dvr, int cameraId)
         return true;
     }
 
+    // videoEncParmInit 的 bitrate 为整数 Mbps
     if (dvr->mRecordCamera->videoEncParmInit(
-            w, h, w, h, kCarDeskRecordBitrateMbps, kCarDeskRecordFrameRate, VENC_CODEC_H264) != 0) {
-        qWarning() << "[Ahd] H264 3Mbps videoEncParmInit failed camera" << cameraId;
+            w, h, w, h, 1, kCarDeskRecordFrameRate, VENC_CODEC_H264) != 0) {
+        qWarning() << "[Ahd] H264 1Mbps+VBR videoEncParmInit failed camera" << cameraId;
         return true;
     }
 
-    qDebug() << "[Ahd] record encode H264" << kCarDeskRecordBitrateMbps << "Mbps"
+    VideoEncoder *enc = dvr->mRecordCamera->pRecVideoEnc;
+    if (enc) {
+        const int bitRate = static_cast<int>(kCarDeskRecordMaxBitrateBps);
+        VencH264Param h264Param;
+        memset(&h264Param, 0, sizeof(h264Param));
+        if (VideoEncGetParameter(enc, VENC_IndexParamH264Param, &h264Param) != 0) {
+            h264Param.bEntropyCodingCABAC = 1;
+            h264Param.nCodingMode = VENC_FRAME_CODING;
+            h264Param.nMaxKeyInterval = kCarDeskRecordFrameRate;
+            h264Param.sProfileLevel.nProfile = VENC_H264ProfileHigh;
+            h264Param.sProfileLevel.nLevel = VENC_H264Level51;
+            h264Param.sQPRange.nMinqp = 10;
+            h264Param.sQPRange.nMaxqp = 40;
+        }
+        h264Param.nBitrate = bitRate;
+        h264Param.nFramerate = kCarDeskRecordFrameRate;
+        h264Param.sRcParam.eRcMode = AW_VBR;
+        h264Param.sRcParam.sVbrParam.uMaxBitRate = kCarDeskRecordMaxBitrateBps;
+        h264Param.sRcParam.sVbrParam.nQuality = kCarDeskRecordVbrQuality;
+        h264Param.sRcParam.sVbrParam.uRatioChangeQp = 85;
+        if (VideoEncSetParameter(enc, VENC_IndexParamH264Param, &h264Param) != 0) {
+            qWarning() << "[Ahd] enable H264 1Mbps+VBR failed camera" << cameraId;
+        }
+    }
+
+    qDebug() << "[Ahd] record encode H264 1Mbps+VBR quality" << kCarDeskRecordVbrQuality
              << w << "x" << h << "@" << kCarDeskRecordFrameRate << "camera" << cameraId;
     return true;
 }
