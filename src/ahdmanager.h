@@ -33,6 +33,9 @@ public:
     bool startCamera();
     bool warmupHardware();
     void stopCamera();
+    /** 后台 startAll 尚未结束（开机预热与用户首开竞态） */
+    bool isHardwareStartInProgress() const;
+    bool isPoolRunning() const;
 
     bool startPreview(QWidget *parentWidget, int x, int y, int w, int h);
     void stopPreview();

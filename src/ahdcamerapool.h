@@ -41,6 +41,8 @@ public:
     void stopAll();
 
     bool isRunning() const;
+    /** startAll 进行中（含 sleepYieldingUi），供上层避免重入导致黑屏 */
+    bool isStartInProgress() const { return m_startInProgress; }
     bool hasPersistedFactories() const;
     bool isShuttingDown() const { return m_shuttingDown; }
 #ifdef CAR_DESK_USE_T507_SDK
@@ -103,6 +105,7 @@ private:
     static bool ensureDvrManagerInit();
     bool canResumeFactories(const QVector<int> &cameraIds) const;
     bool resumePreview(const QVector<int> &cameraIds, bool hideHwOverlayImmediately);
+    bool startAllImpl(bool hideHwOverlayImmediately);
     void scheduleHideHwOverlay(int cameraId);
     void applyHideHwOverlayOnly(int cameraId);
     void applyHideAllHwOverlays();
@@ -124,6 +127,7 @@ private:
     FrameSlot m_frames[kChannelCount];
     AhdLayoutSpec m_layoutSpec;
     bool m_running = false;
+    bool m_startInProgress = false;
     bool m_shuttingDown = false;
     bool m_pendingRecordingStart = false;
     QTimer *m_recordingDeferTimer = nullptr;

@@ -681,6 +681,19 @@ bool AhdCameraPool::startAll(bool hideHwOverlayImmediately)
         return true;
     }
 
+    if (m_startInProgress) {
+        // 嵌套调用（旧版 sleepYieldingUi 泵入用户输入时）会撕裂半初始化的 factory → 黑屏无报错
+        qWarning() << "[Ahd] startAll reentered while in progress, ignore nested call";
+        return false;
+    }
+    m_startInProgress = true;
+    const bool ok = startAllImpl(hideHwOverlayImmediately);
+    m_startInProgress = false;
+    return ok;
+}
+
+bool AhdCameraPool::startAllImpl(bool hideHwOverlayImmediately)
+{
     QString otherInstanceDetail;
     if (ProcessGuard::hasOtherCarDeskInstances(&otherInstanceDetail)) {
         qCritical().noquote() << otherInstanceDetail;

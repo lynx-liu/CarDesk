@@ -969,9 +969,28 @@ void DrivingImageWindow::startPreviewIfNeeded()
     }
 
     AhdManager *mgr = ahdManager();
-    if (!mgr->isCameraReady()) {
+    if (mgr->isHardwareStartInProgress()) {
+        // 开机后台预热尚未结束：延后首开，避免嵌套 startAll / 空帧黑屏
+        qDebug() << "[Driving] startPreviewIfNeeded: hardware starting, defer 200ms";
+        QTimer::singleShot(200, this, [this]() {
+            if (!m_exitInProgress && isVisible() && (!m_stack || m_stack->currentIndex() == 0)) {
+                startPreviewIfNeeded();
+            }
+        });
+        return;
+    }
+
+    if (!mgr->isCameraReady() || !mgr->isPoolRunning()) {
         qDebug() << "[Driving] startPreviewIfNeeded: camera not ready, warmup first";
         if (!mgr->warmupHardware()) {
+            if (mgr->isHardwareStartInProgress()) {
+                QTimer::singleShot(200, this, [this]() {
+                    if (!m_exitInProgress && isVisible() && (!m_stack || m_stack->currentIndex() == 0)) {
+                        startPreviewIfNeeded();
+                    }
+                });
+                return;
+            }
             if (m_exitHintLabel) {
                 m_exitHintLabel->setText(QStringLiteral("影像功能出现故障"));
                 layoutCenterHint();
@@ -998,6 +1017,14 @@ void DrivingImageWindow::startPreviewIfNeeded()
     ahdManager()->enableSafetyWatermark(QStringLiteral("请注意周边安全"));
 
     if (!ahdManager()->startPreview(m_previewWrap, rect.x(), rect.y(), rect.width(), rect.height())) {
+        if (ahdManager()->isHardwareStartInProgress()) {
+            QTimer::singleShot(200, this, [this]() {
+                if (!m_exitInProgress && isVisible() && (!m_stack || m_stack->currentIndex() == 0)) {
+                    startPreviewIfNeeded();
+                }
+            });
+            return;
+        }
         m_exitHintLabel->setText(QStringLiteral("影像功能出现故障"));
         layoutCenterHint();
         m_exitHintLabel->show();

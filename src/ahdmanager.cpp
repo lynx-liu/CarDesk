@@ -111,6 +111,10 @@ bool AhdManager::warmupHardware()
     if (m_camReady && m_pool->isRunning()) {
         return true;
     }
+    if (m_pool->isStartInProgress()) {
+        qWarning() << "[Ahd] warmupHardware: startAll already in progress";
+        return false;
+    }
 
     if (!m_pool->startAll(true)) {
         return false;
@@ -130,6 +134,16 @@ void AhdManager::stopCamera()
     m_prevActive = false;
 }
 
+bool AhdManager::isHardwareStartInProgress() const
+{
+    return m_pool && m_pool->isStartInProgress();
+}
+
+bool AhdManager::isPoolRunning() const
+{
+    return m_pool && m_pool->isRunning();
+}
+
 bool AhdManager::startPreview(QWidget *parentWidget, int x, int y, int w, int h)
 {
     if (w <= 0 || h <= 0) {
@@ -142,6 +156,11 @@ bool AhdManager::startPreview(QWidget *parentWidget, int x, int y, int w, int h)
         return false;
     }
 
+    if (m_pool && m_pool->isStartInProgress()) {
+        qWarning() << "[Ahd] startPreview deferred: hardware start in progress";
+        return false;
+    }
+
     const QRect rect(x < 0 ? 0 : x, y < 0 ? 0 : y, w, h);
     const bool rectChanged = (m_lastRect != rect);
     m_lastRect = rect;
@@ -150,7 +169,8 @@ bool AhdManager::startPreview(QWidget *parentWidget, int x, int y, int w, int h)
     attachPreviewWidget(parentWidget, rect.width(), rect.height());
     m_pool->setQtPreviewDeliveryEnabled(true);
 
-    if (!m_camReady && !startCamera()) {
+    // m_camReady 可能在半截 startAll 后为 true 但 pool 未 running → 只开 Qt 投递会黑屏无报错
+    if ((!m_camReady || !m_pool->isRunning()) && !startCamera()) {
         m_pool->setQtPreviewDeliveryEnabled(false);
         return false;
     }
