@@ -100,11 +100,14 @@ private:
     bool startSdkPlayer(const QString &videoPath);
     void releaseSdkPlayer();
     void forceReleaseSdkPlayer();
+    /** seek 未结束时不能 Reset；短暂泵事件等到 SEEK_COMPLETE 或超时 */
+    bool waitForPendingSdkRelease(int timeoutMs = 400);
     void resetSdkPlayerForCall();
     bool restoreSdkPlaybackAfterInterruption();
     void requestSdkVideoSwitch();
     void beginSdkVideoSwitch();
 #endif
+    void invalidateDeferredPlayRequests();
 
     QLabel *m_titleLabel;
     QLabel *m_timeLabel;
@@ -140,6 +143,8 @@ private:
     VideoPlaybackOrigin m_playbackOrigin = VideoPlaybackOrigin::None;
     QString m_recordDateKey;
     int m_switchDirection = 1;
+    /** 隐藏/换片时递增，作废排队的延后 onPlayVideo */
+    int m_playGeneration = 0;
 
 #ifdef CAR_DESK_USE_T507_SDK
     XPlayer *m_sdkPlayer;

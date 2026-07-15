@@ -23,6 +23,9 @@
 #include <QMouseEvent>
 #include <QEvent>
 #include <QTimer>
+#include <QElapsedTimer>
+#include <QCoreApplication>
+#include <QEventLoop>
 
 #ifdef CAR_DESK_USE_T507_SDK
 LayerCtrl* LayerCreate_DE();
@@ -251,6 +254,7 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
 #ifdef CAR_DESK_USE_T507_SDK
         if (m_useSdkPlayer) {
             forceReleaseSdkPlayer();
+            waitForPendingSdkRelease();
         }
 #endif
         emit requestReturnToList();
@@ -271,9 +275,25 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
                 setPlayButtonState(false);
             } else {
                 if (TouchClickSound::isBusy()) {
-                    QTimer::singleShot(150, this, [this]() {
-                        if (!m_speedHighLocked) {
-                            m_playButton->click();
+                    const int gen = m_playGeneration;
+                    QTimer::singleShot(150, this, [this, gen]() {
+                        if (gen != m_playGeneration || !isVisible() || m_speedHighLocked) {
+                            return;
+                        }
+                        if (TouchClickSound::isBusy()) {
+                            return;
+                        }
+                        if (!m_sdkPlayer) {
+                            onPlayVideo();
+                            return;
+                        }
+                        if (!m_sdkPlaying) {
+                            XPlayerStart(m_sdkPlayer);
+                            m_sdkPlaying = true;
+                            setPlayButtonState(true);
+                            if (m_sdkTimer && !m_sdkTimer->isActive()) {
+                                m_sdkTimer->start();
+                            }
                         }
                     });
                     return;
@@ -356,6 +376,7 @@ VideoPlayWindow::VideoPlayWindow(QWidget *parent)
         if (m_useSdkPlayer) {
             if (m_sdkPlayer && m_sdkDurationMs > 0) {
                 const qint64 positionMs = (m_progressSlider->value() * m_sdkDurationMs) / 1000;
+                m_sdkSeeking = true;
                 XPlayerSeekTo(m_sdkPlayer, static_cast<int>(positionMs), AW_SEEK_CLOSEST_SYNC);
                 if (m_wasPlayingBeforeSeek) {
                     XPlayerStart(m_sdkPlayer);
@@ -682,11 +703,16 @@ void VideoPlayWindow::onPlayVideo() {
     if (m_speedHighLocked) {
         return;
     }
+    if (!isVisible()) {
+        return;
+    }
     if (TouchClickSound::isBusy()) {
-        QTimer::singleShot(150, this, [this]() {
-            if (!TouchClickSound::isBusy()) {
-                onPlayVideo();
+        const int gen = m_playGeneration;
+        QTimer::singleShot(150, this, [this, gen]() {
+            if (gen != m_playGeneration || !isVisible() || m_speedHighLocked) {
+                return;
             }
+            onPlayVideo();
         });
         return;
     }
@@ -915,6 +941,7 @@ bool VideoPlayWindow::ensureCurrentFilePlayable()
 
 void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex,
                                     VideoPlaybackOrigin origin) {
+    invalidateDeferredPlayRequests();
     m_pausedForHome = false;
     m_pausedForInterruption = false;
     m_resumeInterruptPositionMs = 0;
@@ -925,6 +952,7 @@ void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex,
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer) {
         forceReleaseSdkPlayer();
+        waitForPendingSdkRelease();
     }
 #endif
     m_videoFiles = files;
@@ -1324,6 +1352,7 @@ void VideoPlayWindow::finalizeSliderSeek(int value)
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer && m_sdkPlayer && m_sdkDurationMs > 0) {
         const qint64 positionMs = (static_cast<qint64>(value) * m_sdkDurationMs) / 1000;
+        m_sdkSeeking = true;
         XPlayerSeekTo(m_sdkPlayer, static_cast<int>(positionMs), AW_SEEK_CLOSEST_SYNC);
         if (m_wasPlayingBeforeSeek) {
             XPlayerStart(m_sdkPlayer);
@@ -1374,7 +1403,8 @@ void VideoPlayWindow::onSdkTick()
 void VideoPlayWindow::onSdkPlaybackComplete()
 {
 #ifdef CAR_DESK_USE_T507_SDK
-    if (!m_useSdkPlayer || m_videoFiles.isEmpty()) {
+    // 退出/换片后仍可能有排队的 COMPLETE；player 已释放或窗口已隐藏时绝不能再切歌/Reset
+    if (!m_useSdkPlayer || !isVisible() || !m_sdkPlayer || m_pendingRelease || m_videoFiles.isEmpty()) {
         return;
     }
 
@@ -1404,11 +1434,15 @@ void VideoPlayWindow::onSdkSeekComplete()
 #ifdef CAR_DESK_USE_T507_SDK
     m_sdkSeeking = false;
     if (m_pendingRelease) {
-        // releaseSdkPlayer 在 seek 期间被推迟了。
-        // seek 已安全结束，现在执行真正的 Pause + Reset。
+        // release/forceRelease 在 seek 期间被推迟；seek 结束后再 Pause+Reset
+        const bool resumeSwitch = m_sdkSwitching && isVisible();
         releaseSdkPlayer();
+        if (resumeSwitch) {
+            QMetaObject::invokeMethod(this, "continueSdkVideoSwitch", Qt::QueuedConnection);
+        }
+        return;
     }
-    if (m_sdkSwitching && isVisible()) {
+    if (m_sdkSwitching && isVisible() && m_sdkPlayer) {
         QMetaObject::invokeMethod(this, "continueSdkVideoSwitch", Qt::QueuedConnection);
     }
 #endif
@@ -1475,8 +1509,9 @@ bool VideoPlayWindow::initSdkPlayer(const QString &videoPath)
     }
 
     releaseSdkPlayer();
-    if (m_pendingRelease) {
-        forceReleaseSdkPlayer();
+    if (!waitForPendingSdkRelease()) {
+        qWarning() << "initSdkPlayer: pending release not finished, abort" << videoPath;
+        return false;
     }
 
     return startSdkPlayer(videoPath);
@@ -1570,28 +1605,87 @@ void VideoPlayWindow::releaseSdkPlayer()
     m_sdkDi = nullptr;
 }
 
+void VideoPlayWindow::invalidateDeferredPlayRequests()
+{
+    ++m_playGeneration;
+}
+
+bool VideoPlayWindow::waitForPendingSdkRelease(int timeoutMs)
+{
+#ifdef CAR_DESK_USE_T507_SDK
+    if (!m_pendingRelease) {
+        return true;
+    }
+    QElapsedTimer timer;
+    timer.start();
+    while (m_pendingRelease && timer.elapsed() < timeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 40);
+    }
+    if (m_pendingRelease) {
+        qWarning() << "VideoPlayWindow: seek release timeout, force Reset (may be unsafe)";
+        m_sdkSeeking = false;
+        if (m_sdkPlayer) {
+            XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
+            XPlayerPause(m_sdkPlayer);
+            XPlayerReset(m_sdkPlayer);
+            m_sdkPlayer = nullptr;
+        }
+        m_pendingRelease = false;
+        m_sdkSoundCtrl = nullptr;
+        m_sdkLayerCtrl = nullptr;
+        m_sdkSubCtrl = nullptr;
+        m_sdkDi = nullptr;
+    }
+    return !m_pendingRelease;
+#else
+    Q_UNUSED(timeoutMs);
+    return true;
+#endif
+}
+
 void VideoPlayWindow::forceReleaseSdkPlayer()
 {
+#ifdef CAR_DESK_USE_T507_SDK
+    invalidateDeferredPlayRequests();
     if (m_sdkTimer) {
         m_sdkTimer->stop();
     }
     m_sdkPlaying = false;
     m_sdkDurationMs = 0;
-    m_sdkSeeking = false;
-    m_pendingRelease = false;
     m_sdkSwitching = false;
     m_switchPending = false;
 
-    if (m_sdkPlayer) {
-        XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
-        XPlayerPause(m_sdkPlayer);
-        XPlayerReset(m_sdkPlayer);
-        m_sdkPlayer = nullptr;
+    if (!m_sdkPlayer) {
+        m_sdkSeeking = false;
+        m_pendingRelease = false;
+        m_sdkSoundCtrl = nullptr;
+        m_sdkLayerCtrl = nullptr;
+        m_sdkSubCtrl = nullptr;
+        m_sdkDi = nullptr;
+        return;
     }
+
+    // seek 中 Pause/Reset 会崩 SDK：与 releaseSdkPlayer 一样推迟到 SEEK_COMPLETE
+    if (m_sdkSeeking) {
+        m_pendingRelease = true;
+        m_sdkSoundCtrl = nullptr;
+        m_sdkLayerCtrl = nullptr;
+        m_sdkSubCtrl = nullptr;
+        m_sdkDi = nullptr;
+        return;
+    }
+
+    XPlayerSetNotifyCallback(m_sdkPlayer, nullptr, nullptr);
+    XPlayerPause(m_sdkPlayer);
+    XPlayerReset(m_sdkPlayer);
+    m_sdkPlayer = nullptr;
+    m_sdkSeeking = false;
+    m_pendingRelease = false;
     m_sdkSoundCtrl = nullptr;
     m_sdkLayerCtrl = nullptr;
     m_sdkSubCtrl = nullptr;
     m_sdkDi = nullptr;
+#endif
 }
 
 void VideoPlayWindow::resetSdkPlayerForCall()
@@ -1918,9 +2012,12 @@ void VideoPlayWindow::resumeAfterInterruption()
 void VideoPlayWindow::hideEvent(QHideEvent *event)
 {
     QMainWindow::hideEvent(event);
+    invalidateDeferredPlayRequests();
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer && !m_pausedForOcclusion && !m_pausedForHome && !m_pausedForInterruption) {
         forceReleaseSdkPlayer();
+        // 若退出时正好在 seek，等 SEEK_COMPLETE 再 Reset，避免快速再进时撞半释放状态
+        waitForPendingSdkRelease();
     }
 #endif
 }
