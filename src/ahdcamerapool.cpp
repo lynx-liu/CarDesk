@@ -426,22 +426,25 @@ bool initDvrRecordPipeline(dvr_factory *dvr, int cameraId)
         return true;
     }
 
-    const int w = config_get_weith(cameraId);
-    const int h = config_get_heigth(cameraId);
-    if (w <= 0 || h <= 0) {
-        qWarning() << "[Ahd] recordInit ok but skip encode override, bad resolution camera"
-                   << cameraId;
-        return true;
-    }
-
-    // videoEncParmInit 的 bitrate 为整数 Mbps
-    if (dvr->mRecordCamera->videoEncParmInit(
-            w, h, w, h, 1, kCarDeskRecordFrameRate, VENC_CODEC_H264) != 0) {
-        qWarning() << "[Ahd] H264 1Mbps+VBR videoEncParmInit failed camera" << cameraId;
-        return true;
-    }
-
+    // SDK recordInit 内部已 videoEncParmInit（默认约 7Mbps）。
+    // 这里只覆盖码率/VBR，避免再跑一遍完整编码器初始化（开机四路可省可观时间）。
     VideoEncoder *enc = dvr->mRecordCamera->pRecVideoEnc;
+    if (!enc) {
+        const int w = config_get_weith(cameraId);
+        const int h = config_get_heigth(cameraId);
+        if (w <= 0 || h <= 0) {
+            qWarning() << "[Ahd] recordInit ok but no encoder and bad resolution camera"
+                       << cameraId;
+            return true;
+        }
+        if (dvr->mRecordCamera->videoEncParmInit(
+                w, h, w, h, 1, kCarDeskRecordFrameRate, VENC_CODEC_H264) != 0) {
+            qWarning() << "[Ahd] H264 1Mbps+VBR videoEncParmInit failed camera" << cameraId;
+            return true;
+        }
+        enc = dvr->mRecordCamera->pRecVideoEnc;
+    }
+
     if (enc) {
         const int bitRate = static_cast<int>(kCarDeskRecordMaxBitrateBps);
         VencH264Param h264Param;
@@ -454,6 +457,7 @@ bool initDvrRecordPipeline(dvr_factory *dvr, int cameraId)
             h264Param.sProfileLevel.nLevel = VENC_H264Level51;
             h264Param.sQPRange.nMinqp = 10;
             h264Param.sQPRange.nMaxqp = 40;
+            h264Param.nFramerate = kCarDeskRecordFrameRate;
         }
         h264Param.nBitrate = bitRate;
         h264Param.nFramerate = kCarDeskRecordFrameRate;
@@ -467,7 +471,7 @@ bool initDvrRecordPipeline(dvr_factory *dvr, int cameraId)
     }
 
     qDebug() << "[Ahd] record encode H264 1Mbps+VBR quality" << kCarDeskRecordVbrQuality
-             << w << "x" << h << "@" << kCarDeskRecordFrameRate << "camera" << cameraId;
+             << "camera" << cameraId;
     return true;
 }
 
@@ -1336,7 +1340,7 @@ void AhdCameraPool::scheduleRecordingSync()
     if (!m_recordSyncScheduleTimer) {
         m_recordSyncScheduleTimer = new QTimer(this);
         m_recordSyncScheduleTimer->setSingleShot(true);
-        m_recordSyncScheduleTimer->setInterval(1500);
+        m_recordSyncScheduleTimer->setInterval(300);
         connect(m_recordSyncScheduleTimer, &QTimer::timeout, this, &AhdCameraPool::syncRecordingState);
     }
     m_recordSyncScheduleTimer->start();
