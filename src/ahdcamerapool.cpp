@@ -9,6 +9,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDebug>
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
@@ -43,7 +44,8 @@ AhdCameraPool *AhdCameraPool::s_activePool = nullptr;
 
 namespace {
 
-static constexpr int kChannelStartDelayMs = 300;
+// 路间固定 sleep 无契约依据，只会拉长开机阻塞；失败靠 factory ready/retry。
+static constexpr int kChannelStartDelayMs = 0;
 static constexpr int kHwOverlayHideDelayMs = 2500;
 static constexpr int kColdStartWarmupMs = 1500;
 static constexpr int kFactoryCreateRetries = 3;
@@ -731,8 +733,11 @@ bool AhdCameraPool::startAllImpl(bool hideHwOverlayImmediately)
 
     qDebug() << "[Ahd] startAll: layout mode" << m_layoutSpec.mode
              << "hideHwOverlayImmediately=" << hideHwOverlayImmediately;
+    QElapsedTimer bootTimer;
+    bootTimer.start();
     prepareSdkRuntimeOnce();
     performHardwareRecovery("before open");
+    qDebug() << "[Ahd] startAll timing: after recovery" << bootTimer.elapsed() << "ms";
 
     if (!ensureDvrManagerInit()) {
         emit poolError(QStringLiteral("DVR 管理器初始化失败"));
@@ -757,7 +762,8 @@ bool AhdCameraPool::startAllImpl(bool hideHwOverlayImmediately)
             armDeferredRecording();
             markAhdSessionActive();
             noteHardwareRecoveryDone();
-            qDebug() << "[Ahd] startAll resumed (no delete, avoid SDK ~dvr_factory crash)";
+            qDebug() << "[Ahd] startAll resumed (no delete, avoid SDK ~dvr_factory crash)"
+                     << "elapsed" << bootTimer.elapsed() << "ms";
             return true;
         }
         if (s_activePool == this) {
@@ -797,7 +803,8 @@ bool AhdCameraPool::startAllImpl(bool hideHwOverlayImmediately)
                      << "attempt" << (attempt + 1);
             dvr = new (std::nothrow) dvr_factory(cameraId);
             if (dvr && isFactoryReady(dvr, cameraId)) {
-                qDebug() << "[Ahd] phase1 dvr_factory(" << cameraId << ") ok" << dvr;
+                qDebug() << "[Ahd] phase1 dvr_factory(" << cameraId << ") ok" << dvr
+                         << "at" << bootTimer.elapsed() << "ms";
                 break;
             }
             qWarning() << "[Ahd] dvr_factory(" << cameraId << ") init incomplete, retry (leak partial)";
@@ -827,31 +834,32 @@ bool AhdCameraPool::startAllImpl(bool hideHwOverlayImmediately)
             m_activeChannelCount = slot + 1;
         }
 
-        if (n + 1 < cameraIds.size()) {
+        if (kChannelStartDelayMs > 0 && n + 1 < cameraIds.size()) {
             sleepYieldingUi(kChannelStartDelayMs);
         }
     }
+    qDebug() << "[Ahd] startAll timing: after create" << bootTimer.elapsed() << "ms";
 
-    const QStringList recordRoots = AhdRecordStore::recordRootPaths();
-
-    for (int n = 0; n < opened.size(); ++n) {
-        const OpenEntry &e = opened.at(n);
-        ChannelState &ch = m_channels[e.slot];
-        if (!ch.recordInited) {
-            if (!recordRoots.isEmpty()) {
-                applyRecordDirToSdk(e.cameraId, recordRoots.first());
+    // 开机要求录像一并初始化：同步 recordInit（无路间 sleep）
+    {
+        const QStringList recordRoots = AhdRecordStore::recordRootPaths();
+        for (int n = 0; n < opened.size(); ++n) {
+            const OpenEntry &e = opened.at(n);
+            ChannelState &ch = m_channels[e.slot];
+            if (!ch.recordInited) {
+                if (!recordRoots.isEmpty()) {
+                    applyRecordDirToSdk(e.cameraId, recordRoots.first());
+                }
+                qDebug() << "[Ahd] phase2 recordInit camera" << e.cameraId;
+                if (!initDvrRecordPipeline(e.dvr, e.cameraId)) {
+                    qWarning() << "[Ahd] recordInit failed camera" << e.cameraId;
+                } else {
+                    ch.recordInited = true;
+                }
             }
-            qDebug() << "[Ahd] phase2 recordInit camera" << e.cameraId;
-            if (!initDvrRecordPipeline(e.dvr, e.cameraId)) {
-                qWarning() << "[Ahd] recordInit failed camera" << e.cameraId;
-            } else {
-                ch.recordInited = true;
-            }
-        }
-        if (n + 1 < opened.size()) {
-            sleepYieldingUi(kChannelStartDelayMs);
         }
     }
+    qDebug() << "[Ahd] startAll timing: after recordInit" << bootTimer.elapsed() << "ms";
 
     for (const OpenEntry &e : opened) {
         qDebug() << "[Ahd] phase3 start() camera" << e.cameraId;
@@ -861,6 +869,7 @@ bool AhdCameraPool::startAllImpl(bool hideHwOverlayImmediately)
             return false;
         }
     }
+    qDebug() << "[Ahd] startAll timing: after start()" << bootTimer.elapsed() << "ms";
 
     if (!g_displayInited) {
         qDebug() << "[Ahd] DisplayInit camera" << opened.first().cameraId;
@@ -893,6 +902,7 @@ bool AhdCameraPool::startAllImpl(bool hideHwOverlayImmediately)
             applyHideHwOverlayOnly(e.cameraId);
         }
     }
+    qDebug() << "[Ahd] startAll timing: after preview" << bootTimer.elapsed() << "ms";
 
     if (!opened.isEmpty()) {
         if (hideHwOverlayImmediately) {
@@ -913,7 +923,8 @@ bool AhdCameraPool::startAllImpl(bool hideHwOverlayImmediately)
 
     markAhdSessionActive();
     noteHardwareRecoveryDone();
-    qDebug() << "[Ahd] startAll done, cameras:" << cameraIds << "compose360=" << m_uses360Compose;
+    qDebug() << "[Ahd] startAll done, cameras:" << cameraIds << "compose360=" << m_uses360Compose
+             << "elapsed" << bootTimer.elapsed() << "ms";
     return true;
 }
 
