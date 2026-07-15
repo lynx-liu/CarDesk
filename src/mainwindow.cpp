@@ -55,9 +55,10 @@ MainWindow::MainWindow(QWidget *parent)
     setupConnections();
     setupSystemInfo();
 
-    // 仅后台预热摄像头：延后到主界面可交互之后，避免 show 后立刻占满主线程导致点不了。
+    // 仅后台预热摄像头：主界面 show 后立刻排队启动（不再额外等 2s）。
+    // startAll 内 sleepYieldingUi 会泵事件，主界面仍可点；提前预热减少开机立刻进「行车影像」黑屏。
     // 诊断/设置等子窗口改为按需创建，不再启动时批量预建。
-    QTimer::singleShot(2000, this, [this]() {
+    QTimer::singleShot(0, this, [this]() {
         ensureDrivingImageWindow();
         if (m_drivingImageWindow) {
             m_drivingImageWindow->warmupCamera();
