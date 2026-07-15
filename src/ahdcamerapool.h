@@ -130,6 +130,8 @@ private:
     bool m_startInProgress = false;
     bool m_shuttingDown = false;
     bool m_pendingRecordingStart = false;
+    /** 开机首次启动写盘：跳过 300ms debounce */
+    bool m_fastFirstRecordSync = false;
     QTimer *m_recordingDeferTimer = nullptr;
     QTimer *m_recordSyncScheduleTimer = nullptr;
     bool m_recordSyncBusy = false;

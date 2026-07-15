@@ -516,7 +516,6 @@ void applyRecordingTimestampWatermark(dvr_factory *dvr)
         qWarning() << "[Ahd] enable recording watermark failed camera" << dvr->mCameraId;
         return;
     }
-    usleep(50000);
     // 仅一行：SDK 在录像帧上自动刷新时间；VIDEO_ONLY 不画到预览帧。
     hw->setWaterMarkMultiple(const_cast<char *>("64,64,0"), WATER_MARK_DISP_MODE_VIDEO_ONLY);
 }
@@ -1293,8 +1292,9 @@ void AhdCameraPool::armDeferredRecording()
             QMetaObject::invokeMethod(this, "scheduleRecordingSync", Qt::QueuedConnection);
         });
     }
-    // 插 TF 时勿在 startAll 同步 recordInit；若迟迟无预览帧则超时兜底启动录像。
+    // 插 TF 时勿在 startAll 同步 startRecord；若迟迟无预览帧则超时兜底启动录像。
     m_recordingDeferTimer->start(8000);
+    m_fastFirstRecordSync = true;
     qDebug() << "[Ahd] recording deferred until preview frames ready";
 }
 
@@ -1340,9 +1340,12 @@ void AhdCameraPool::scheduleRecordingSync()
     if (!m_recordSyncScheduleTimer) {
         m_recordSyncScheduleTimer = new QTimer(this);
         m_recordSyncScheduleTimer->setSingleShot(true);
-        m_recordSyncScheduleTimer->setInterval(300);
         connect(m_recordSyncScheduleTimer, &QTimer::timeout, this, &AhdCameraPool::syncRecordingState);
     }
+    // 开机首次写盘跳过 300ms debounce；之后保持 300ms 防抖。
+    const int intervalMs = m_fastFirstRecordSync ? 0 : 300;
+    m_fastFirstRecordSync = false;
+    m_recordSyncScheduleTimer->setInterval(intervalMs);
     m_recordSyncScheduleTimer->start();
 }
 
@@ -1455,9 +1458,7 @@ bool AhdCameraPool::isRecordingActive() const
 void AhdCameraPool::applySafetyWatermarks(const QString &text)
 {
     // 水印状态完全由录像开始/停止（syncRecordingState）驱动，且 SDK 后台常驻、
-    // 水印会一直保持。进入/恢复预览时不要在此（主线程）重设或阻塞水印——
-    // applyRecordingTimestampWatermark 内含 usleep，曾导致再次进入时主线程被阻塞、
-    // 预览窗口来不及绘制而黑屏闪烁。这里保持空操作。
+    // 水印会一直保持。进入/恢复预览时不要在此重设水印。
     Q_UNUSED(text);
 }
 

@@ -971,8 +971,8 @@ void DrivingImageWindow::startPreviewIfNeeded()
     AhdManager *mgr = ahdManager();
     if (mgr->isHardwareStartInProgress()) {
         // 开机后台预热尚未结束：延后首开，避免嵌套 startAll / 空帧黑屏
-        qDebug() << "[Driving] startPreviewIfNeeded: hardware starting, defer 200ms";
-        QTimer::singleShot(200, this, [this]() {
+        qDebug() << "[Driving] startPreviewIfNeeded: hardware starting, defer 50ms";
+        QTimer::singleShot(50, this, [this]() {
             if (!m_exitInProgress && isVisible() && (!m_stack || m_stack->currentIndex() == 0)) {
                 startPreviewIfNeeded();
             }
@@ -984,7 +984,7 @@ void DrivingImageWindow::startPreviewIfNeeded()
         qDebug() << "[Driving] startPreviewIfNeeded: camera not ready, warmup first";
         if (!mgr->warmupHardware()) {
             if (mgr->isHardwareStartInProgress()) {
-                QTimer::singleShot(200, this, [this]() {
+                QTimer::singleShot(50, this, [this]() {
                     if (!m_exitInProgress && isVisible() && (!m_stack || m_stack->currentIndex() == 0)) {
                         startPreviewIfNeeded();
                     }
@@ -1018,7 +1018,7 @@ void DrivingImageWindow::startPreviewIfNeeded()
 
     if (!ahdManager()->startPreview(m_previewWrap, rect.x(), rect.y(), rect.width(), rect.height())) {
         if (ahdManager()->isHardwareStartInProgress()) {
-            QTimer::singleShot(200, this, [this]() {
+            QTimer::singleShot(50, this, [this]() {
                 if (!m_exitInProgress && isVisible() && (!m_stack || m_stack->currentIndex() == 0)) {
                     startPreviewIfNeeded();
                 }
@@ -1150,7 +1150,8 @@ void DrivingImageWindow::showEvent(QShowEvent *event)
     m_fullscreenCameraId = -1;
     if ((!m_stack || m_stack->currentIndex() == 0) && !m_startScheduled) {
         m_startScheduled = true;
-        QTimer::singleShot(100, this, [this]() {
+        const int deferMs = (m_ahdManager && m_ahdManager->isPoolRunning()) ? 0 : 50;
+        QTimer::singleShot(deferMs, this, [this]() {
             m_startScheduled = false;
             qDebug() << "[Driving] showEvent timer: startPreviewIfNeeded";
             if (!m_stack || m_stack->currentIndex() == 0) {

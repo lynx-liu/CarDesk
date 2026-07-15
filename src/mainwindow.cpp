@@ -670,7 +670,7 @@ void MainWindow::showDrivingImageForAutomotive(int mode)
 
     QPointer<DrivingImageWindow> win = m_drivingImageWindow;
     QPointer<MainWindow> self = this;
-    QTimer::singleShot(150, this, [self, win, showGen]() {
+    QTimer::singleShot(0, this, [self, win, showGen]() {
         if (!self || showGen != self->m_drivingImageShowGen || !win) {
             return;
         }
@@ -727,7 +727,7 @@ void MainWindow::onDrivingImageClicked() {
     qDebug() << "[Driving] step5: schedule show (defer SDK until media paused)";
 
     QPointer<DrivingImageWindow> win = m_drivingImageWindow;
-    QTimer::singleShot(150, this, [this, win]() {
+    QTimer::singleShot(0, this, [this, win]() {
         if (!win) {
             return;
         }
