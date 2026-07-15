@@ -1122,15 +1122,8 @@ int main(int argc, char *argv[]) {
     configureApplicationFont(app);
 
     // 全局硬件键监听（音量键 + 诊断日志）
+    // 离屏 show 预热延后到主界面 present 之后，避免开机相机 init 阶段抢占 eglfs 清空系统画面
     auto *volumeOverlay = new VolumeOverlay();
-    QTimer::singleShot(500, &app, [volumeOverlay]() {
-        volumeOverlay->move(-2000, -2000);
-        volumeOverlay->show();
-        volumeOverlay->raise();
-        QTimer::singleShot(300, volumeOverlay, [volumeOverlay]() {
-            volumeOverlay->hide();
-        });
-    });
     app.installEventFilter(new GlobalKeyFilter(volumeOverlay, &app));
 
     // Qt 5.12 evdevkeyboard 默认 keymap 里没有 KEY_HOMEPAGE(172) 和 KEY_BACK(158)，
@@ -1316,8 +1309,24 @@ int main(int argc, char *argv[]) {
 
     TfCardMonitor::instance()->start();
 
+    // 方案 A：主界面完全不 show，后台同步初始化摄像头；就绪后再显示。
+    // 期间不绘制启动图/黑窗，保持系统原有画面。
     MainWindow window;
-    window.show();
+#ifdef CAR_DESK_USE_T507_SDK
+    qDebug() << "[Boot] prepare AHD before main UI (no splash)";
+    window.prepareAhdBeforeShow();
+#endif
+    window.presentHome();
+
+    // 主界面已上屏后再做 volume overlay 离屏预热
+    QTimer::singleShot(500, &app, [volumeOverlay]() {
+        volumeOverlay->move(-2000, -2000);
+        volumeOverlay->show();
+        volumeOverlay->raise();
+        QTimer::singleShot(300, volumeOverlay, [volumeOverlay]() {
+            volumeOverlay->hide();
+        });
+    });
 
     // ── TXRX CAN 数据读取（左转/右转/倒车行车摄像 + MCU 时间同步）────────────────
     if (device.getDeviceType() == DeviceDetect::DEVICE_TYPE_CARUNIT) {

@@ -33,6 +33,11 @@ public:
     ~MainWindow();
     MediaManager *mediaManager() const;
 
+    /** 主界面 show 前同步完成摄像头初始化（不开预览窗、不先画黑主界面） */
+    void prepareAhdBeforeShow();
+    /** 恢复全屏几何并显示主界面（从子页返回时避免上下露白边） */
+    void presentHome();
+
     void showDrivingImageForAutomotive(int mode);
 
 private slots:
@@ -53,9 +58,11 @@ private slots:
 protected:
     void closeEvent(QCloseEvent *event) override;
     void hideEvent(QHideEvent *event) override;
+    void showEvent(QShowEvent *event) override;
     void contextMenuEvent(QContextMenuEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
 
 private:
     void setupUI();
@@ -66,6 +73,7 @@ private:
     void setupWindowSize();
     void setupSystemInfo();
     void applyIndexStyle();
+    void applyFullscreenGeometry();
     void ensureTransitionOverlay();
     void showTransitionOverlay();
     void hideTransitionOverlay();

@@ -31,6 +31,12 @@
 #include <QProcess>
 #include <QVector>
 #include <QHideEvent>
+#include <QShowEvent>
+#include <QPaintEvent>
+#include <QPainter>
+#include <QPixmap>
+#include <QPalette>
+#include <QProcessEnvironment>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -54,16 +60,38 @@ MainWindow::MainWindow(QWidget *parent)
     adjustForDevice();
     setupConnections();
     setupSystemInfo();
+}
 
-    // 仅后台预热摄像头：主界面 show 后立刻排队启动（不再额外等 2s）。
-    // startAll 内 sleepYieldingUi 会泵事件，主界面仍可点；提前预热减少开机立刻进「行车影像」黑屏。
-    // 诊断/设置等子窗口改为按需创建，不再启动时批量预建。
-    QTimer::singleShot(0, this, [this]() {
-        ensureDrivingImageWindow();
-        if (m_drivingImageWindow) {
-            m_drivingImageWindow->warmupCamera();
-        }
-    });
+void MainWindow::prepareAhdBeforeShow()
+{
+    if (qEnvironmentVariableIsSet("CARDESK_SKIP_AHD")) {
+        qWarning() << "[Boot] CARDESK_SKIP_AHD=1, skip camera prepare";
+        return;
+    }
+    ensureDrivingImageWindow();
+    if (m_drivingImageWindow) {
+        m_drivingImageWindow->warmupCamera();
+    }
+}
+
+void MainWindow::applyFullscreenGeometry()
+{
+    const DeviceDetect &device = DeviceDetect::instance();
+    if (device.getDeviceType() != DeviceDetect::DEVICE_TYPE_CARUNIT) {
+        return;
+    }
+    if (QScreen *sc = QApplication::primaryScreen()) {
+        setGeometry(sc->geometry());
+    }
+    setWindowState(Qt::WindowFullScreen | Qt::WindowActive);
+}
+
+void MainWindow::presentHome()
+{
+    applyFullscreenGeometry();
+    show();
+    raise();
+    activateWindow();
 }
 
 MainWindow::~MainWindow() {
@@ -77,8 +105,14 @@ void MainWindow::setupWindowSize() {
     const DeviceDetect &device = DeviceDetect::instance();
     
     if (device.getDeviceType() == DeviceDetect::DEVICE_TYPE_CARUNIT) {
-        // 车机：全屏显示
-        setWindowState(Qt::WindowFullScreen);
+        // 车机：全屏显示；底色先置黑，避免几何未对齐时露白边
+        QPalette pal = palette();
+        pal.setColor(QPalette::Window, Qt::black);
+        pal.setColor(QPalette::Base, Qt::black);
+        setPalette(pal);
+        setAutoFillBackground(true);
+        setStyleSheet(QStringLiteral("QMainWindow { background-color: #000000; }"));
+        applyFullscreenGeometry();
     } else {
         // PC：固定窗口大小 1280x720（与 index.html 一致）
         setFixedSize(1280, 720);
@@ -113,9 +147,10 @@ void MainWindow::setupUI() {
 }
 
 void MainWindow::applyIndexStyle() {
-    // 使用 index.html 的贴图与布局尺寸
+    // 底色纯黑 + 背景图居中；几何异常时上下应是黑边而不是白边
     const QString style = R"(
         QWidget#centralWidget {
+            background-color: #000000;
             background-image: url(:/images/background.png);
             background-position: center;
             background-repeat: no-repeat;
@@ -143,6 +178,7 @@ void MainWindow::applyIndexStyle() {
         }
     )";
 
+    m_centralWidget->setAttribute(Qt::WA_StyledBackground, true);
     m_centralWidget->setStyleSheet(style);
 }
 
@@ -170,6 +206,7 @@ void MainWindow::createTopBar() {
 void MainWindow::createNavigationBar() {
     m_navBar = new QWidget(this);
     m_navBar->setObjectName("navBar");
+    m_navBar->setStyleSheet(QStringLiteral("QWidget#navBar { background-color: transparent; }"));
     
     QGridLayout *navLayout = new QGridLayout(m_navBar);
     navLayout->setContentsMargins(118, 34, 118, 34);
@@ -338,14 +375,10 @@ void MainWindow::connectVideoListReturnToMain(VideoListWindow *listWindow)
         if (m_drivingImageWindow) {
             m_drivingImageWindow->resumeAfterRecordPlayback();
         }
-        this->show();
-        this->raise();
-        this->activateWindow();
+        presentHome();
     }, Qt::UniqueConnection);
     connect(listWindow, &QObject::destroyed, this, [this]() {
-        this->show();
-        this->raise();
-        this->activateWindow();
+        presentHome();
     }, Qt::UniqueConnection);
 }
 
@@ -412,14 +445,10 @@ void MainWindow::onMusicUSBClicked() {
     // 连接音频窗口的返回信号
     if (m_mediaManager->musicWindow()) {
         connect(m_mediaManager->musicWindow(), &MusicPlayerWindow::requestReturnToMain, this, [this]() {
-            this->show();
-            this->raise();
-            this->activateWindow();
+            presentHome();
         }, Qt::UniqueConnection);
         connect(m_mediaManager->musicWindow(), &QObject::destroyed, this, [this]() {
-            this->show();
-            this->raise();
-            this->activateWindow();
+            presentHome();
         }, Qt::UniqueConnection);
         this->hide();
     }
@@ -529,18 +558,14 @@ void MainWindow::ensureRadioWindow() {
         m_radioWindow = new RadioWindow();
         // 保持窗口常驻，hide/show 复用，避免每次重建子控件
         connect(m_radioWindow, &RadioWindow::requestReturnToMain, this, [this]() {
-            this->show();
-            this->raise();
-            this->activateWindow();
+            presentHome();
         }, Qt::UniqueConnection);
         connect(m_radioWindow, &QObject::destroyed, this, [this]() {
             if (m_mediaManager) {
                 m_mediaManager->setRadioWindow(nullptr);
             }
             m_radioWindow = nullptr;
-            this->show();
-            this->raise();
-            this->activateWindow();
+            presentHome();
         }, Qt::UniqueConnection);
     }
     if (m_mediaManager) {
@@ -567,15 +592,11 @@ void MainWindow::ensureDiagnosticWindow() {
         m_diagnosticWindow = new DiagnosticWindow();
         // 保持窗口常驻，hide/show 复用，避免每次重建子控件
         connect(m_diagnosticWindow, &DiagnosticWindow::requestReturnToMain, this, [this]() {
-            this->show();
-            this->raise();
-            this->activateWindow();
+            presentHome();
         }, Qt::UniqueConnection);
         connect(m_diagnosticWindow, &QObject::destroyed, this, [this]() {
             m_diagnosticWindow = nullptr;
-            this->show();
-            this->raise();
-            this->activateWindow();
+            presentHome();
         }, Qt::UniqueConnection);
     }
 }
@@ -610,15 +631,11 @@ void MainWindow::ensureSystemSettingWindow() {
         m_systemSettingWindow = new SystemSettingWindow(m_bluetoothManager);
         // 保持窗口常驻，hide/show 复用，避免每次重建子控件
         connect(m_systemSettingWindow, &SystemSettingWindow::requestReturnToMain, this, [this]() {
-            this->show();
-            this->raise();
-            this->activateWindow();
+            presentHome();
         }, Qt::UniqueConnection);
         connect(m_systemSettingWindow, &QObject::destroyed, this, [this]() {
             m_systemSettingWindow = nullptr;
-            this->show();
-            this->raise();
-            this->activateWindow();
+            presentHome();
         }, Qt::UniqueConnection);
     }
 }
@@ -680,6 +697,7 @@ void MainWindow::ensureDrivingImageWindow()
             if (m_mediaManager) {
                 m_mediaManager->resumePlaybackAfterInterruption();
             }
+            presentHome();
         }, Qt::UniqueConnection);
         connect(m_drivingImageWindow, &DrivingImageWindow::requestPlayRecordVideo, this,
                 &MainWindow::onDrivingRecordPlayRequested, Qt::UniqueConnection);
@@ -772,9 +790,7 @@ void MainWindow::restorePreviousWindow() {
         }
     }
     qDebug() << "restorePreviousWindow: fallback to MainWindow";
-    this->show();
-    this->raise();
-    this->activateWindow();
+    presentHome();
 }
 
 void MainWindow::ensureTransitionOverlay()
@@ -824,15 +840,11 @@ void MainWindow::ensureImageViewingWindow() {
         m_imageViewingWindow = new ImageViewingWindow();
         // 保持窗口常驻，hide/show 复用，避免每次重建子控件
         connect(m_imageViewingWindow, &ImageViewingWindow::requestReturnToMain, this, [this]() {
-            this->show();
-            this->raise();
-            this->activateWindow();
+            presentHome();
         }, Qt::UniqueConnection);
         connect(m_imageViewingWindow, &QObject::destroyed, this, [this]() {
             m_imageViewingWindow = nullptr;
-            this->show();
-            this->raise();
-            this->activateWindow();
+            presentHome();
         }, Qt::UniqueConnection);
     }
 }
@@ -853,6 +865,20 @@ void MainWindow::hideEvent(QHideEvent *event) {
         focused->clearFocus();
     }
     QMainWindow::hideEvent(event);
+}
+
+void MainWindow::showEvent(QShowEvent *event)
+{
+    QMainWindow::showEvent(event);
+    applyFullscreenGeometry();
+}
+
+void MainWindow::paintEvent(QPaintEvent *event)
+{
+    // 兜底：QMainWindow 边框区域一律填黑，避免子页返回后露默认白底
+    QPainter p(this);
+    p.fillRect(rect(), Qt::black);
+    QMainWindow::paintEvent(event);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
