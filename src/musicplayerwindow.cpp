@@ -1595,10 +1595,7 @@ void MusicPlayerWindow::captureUsbProgressBeforePlayerRelease()
         if (!m_sdkPlayer) {
             return;
         }
-        int posMs = 0;
-        if (XPlayerGetCurrentPosition(m_sdkPlayer, &posMs) != 0) {
-            return;
-        }
+        const qint64 posMs = sdkProgressPositionMs();
         qint64 durMs = qMax(qint64(0), static_cast<qint64>(m_sdkDurationMs));
         if (durMs <= 0) {
             int durInt = 0;
@@ -1608,7 +1605,7 @@ void MusicPlayerWindow::captureUsbProgressBeforePlayerRelease()
         }
         m_usbPendingResumeIndex = m_currentIndex;
         m_usbPendingResumeFilePath = m_musicFiles[m_currentIndex];
-        m_usbPendingResumePositionMs = qMax(0, posMs);
+        m_usbPendingResumePositionMs = qMax(qint64(0), posMs);
         m_usbPendingResumeDurationMs = durMs;
         qDebug() << "MusicPlayer: captureUsbProgress(SDK) path=" << m_usbPendingResumeFilePath
                  << "index=" << m_usbPendingResumeIndex
@@ -1658,6 +1655,7 @@ void MusicPlayerWindow::applyUsbResumeSeekAfterPlayStarted()
         }
         if (seekMs > 0) {
             XPlayerSeekTo(m_sdkPlayer, static_cast<int>(seekMs), AW_SEEK_CLOSEST_SYNC);
+            startSdkProgressClock(seekMs);
             updateProgressBar(seekMs, m_sdkDurationMs);
         }
         clearUsbPendingResumeState();
@@ -1815,6 +1813,7 @@ void MusicPlayerWindow::playMusic(int index)
         }
         m_sdkPlaying = true;
         setPlayButtonState(true);
+        startSdkProgressClock(0);
         if (m_sdkTimer && !m_sdkTimer->isActive()) m_sdkTimer->start();
         updateMetadata();
         applyUsbResumeSeekAfterPlayStarted();
@@ -1868,12 +1867,15 @@ void MusicPlayerWindow::resetSdkPlayerForCall()
         return;
     }
 
-    int currentPosMs = 0;
-    if (XPlayerGetCurrentPosition(m_sdkPlayer, &currentPosMs) == 0) {
-        m_resumeInterruptionPositionMs = currentPosMs;
-    } else {
-        m_resumeInterruptionPositionMs = 0;
+    qint64 resumePos = sdkProgressPositionMs();
+    if (resumePos <= 0) {
+        int currentPosMs = 0;
+        if (XPlayerGetCurrentPosition(m_sdkPlayer, &currentPosMs) == 0) {
+            resumePos = currentPosMs;
+        }
     }
+    m_resumeInterruptionPositionMs = resumePos;
+    pauseSdkProgressClock();
     if (m_sdkTimer) {
         m_sdkTimer->stop();
     }
@@ -1944,7 +1946,10 @@ bool MusicPlayerWindow::restoreSdkPlaybackAfterInterruption()
 
     if (m_resumeInterruptionPositionMs > 0 && m_sdkDurationMs > 0) {
         XPlayerSeekTo(m_sdkPlayer, static_cast<int>(m_resumeInterruptionPositionMs), AW_SEEK_CLOSEST_SYNC);
+        startSdkProgressClock(m_resumeInterruptionPositionMs);
         updateProgressBar(m_resumeInterruptionPositionMs, m_sdkDurationMs);
+    } else {
+        startSdkProgressClock(0);
     }
 
     if (m_sdkTimer && !m_sdkTimer->isActive()) {
@@ -2008,6 +2013,7 @@ void MusicPlayerWindow::resumeAfterInterruption()
         if (m_sdkPlayer && !m_sdkPlaying) {
             if (XPlayerStart(m_sdkPlayer) == 0) {
                 m_sdkPlaying = true;
+                startSdkProgressClock(m_sdkProgressBaseMs);
                 if (m_sdkTimer && !m_sdkTimer->isActive()) {
                     m_sdkTimer->start();
                 }
@@ -2043,6 +2049,7 @@ void MusicPlayerWindow::releaseAudioPlayer()
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer) {
         if (m_sdkTimer) m_sdkTimer->stop();
+        pauseSdkProgressClock();
         m_sdkPlaying = false;
         m_sdkDurationMs = 0;
         if (m_sdkPlayer) {
@@ -2085,6 +2092,7 @@ void MusicPlayerWindow::onPlayPause()
         if (m_sdkPlayer && m_sdkPlaying) {
             XPlayerPause(m_sdkPlayer);
             m_sdkPlaying = false;
+            pauseSdkProgressClock();
             if (m_sdkTimer) m_sdkTimer->stop();
             setPlayButtonState(false);
         } else if (m_sdkPlayer) {
@@ -2095,6 +2103,7 @@ void MusicPlayerWindow::onPlayPause()
             T507SdkBridge::setAudioSource(false);
             XPlayerStart(m_sdkPlayer);
             m_sdkPlaying = true;
+            startSdkProgressClock(m_sdkProgressBaseMs);
             if (m_sdkTimer) m_sdkTimer->start();
             setPlayButtonState(true);
         } else if (m_pausedForInterruption) {
@@ -2647,13 +2656,25 @@ void MusicPlayerWindow::updateLoopButtonIcon()
 
 void MusicPlayerWindow::updateProgressBar(qint64 posMs, qint64 durMs)
 {
+    if (posMs < 0) {
+        posMs = 0;
+    }
+    if (durMs < 0) {
+        durMs = 0;
+    }
+    if (durMs > 0 && posMs > durMs) {
+        posMs = durMs;
+    }
+
     if (m_posLabel) m_posLabel->setText(formatTime(posMs));
     if (m_durLabel) m_durLabel->setText(formatTime(durMs));
     if (m_progressSlider && !m_sliderDragging) {
-        if (durMs > 0)
-            m_progressSlider->setValue(static_cast<int>((posMs * 1000) / durMs));
-        else
+        if (durMs > 0) {
+            const int sliderValue = static_cast<int>((posMs * 1000) / durMs);
+            m_progressSlider->setValue(qBound(0, sliderValue, 1000));
+        } else {
             m_progressSlider->setValue(0);
+        }
     }
 }
 
@@ -2679,6 +2700,7 @@ void MusicPlayerWindow::beginSliderSeek(int value)
         if (m_sdkPlaying) {
             XPlayerPause(m_sdkPlayer);
             m_sdkPlaying = false;
+            pauseSdkProgressClock();
             setPlayButtonState(false);
         }
         previewSliderSeek(value);
@@ -2722,12 +2744,15 @@ void MusicPlayerWindow::finalizeSliderSeek(int value)
     if (m_useSdkPlayer && m_sdkPlayer && m_sdkDurationMs > 0) {
         const qint64 positionMs = (static_cast<qint64>(value) * m_sdkDurationMs) / 1000;
         XPlayerSeekTo(m_sdkPlayer, static_cast<int>(positionMs), AW_SEEK_CLOSEST_SYNC);
+        startSdkProgressClock(positionMs);
         if (m_wasPlayingBeforeSeek) {
             T507SdkBridge::setAudioSource(false);
             XPlayerStart(m_sdkPlayer);
             m_sdkPlaying = true;
             setPlayButtonState(true);
             if (m_sdkTimer && !m_sdkTimer->isActive()) m_sdkTimer->start();
+        } else {
+            pauseSdkProgressClock();
         }
         m_wasPlayingBeforeSeek = false;
         return;
@@ -2837,13 +2862,52 @@ void MusicPlayerWindow::onMediaStateChanged(QMediaPlayer::State state)
 
 #ifdef CAR_DESK_USE_T507_SDK
 
+void MusicPlayerWindow::startSdkProgressClock(qint64 baseMs)
+{
+    m_sdkProgressBaseMs = qMax(qint64(0), baseMs);
+    if (m_sdkDurationMs > 0) {
+        m_sdkProgressBaseMs = qMin(m_sdkProgressBaseMs, static_cast<qint64>(m_sdkDurationMs));
+    }
+    m_sdkProgressClock.restart();
+    m_sdkProgressClockRunning = true;
+}
+
+void MusicPlayerWindow::pauseSdkProgressClock()
+{
+    if (!m_sdkProgressClockRunning) {
+        return;
+    }
+    m_sdkProgressBaseMs += m_sdkProgressClock.elapsed();
+    if (m_sdkDurationMs > 0) {
+        m_sdkProgressBaseMs = qMin(m_sdkProgressBaseMs, static_cast<qint64>(m_sdkDurationMs));
+    }
+    m_sdkProgressClockRunning = false;
+}
+
+qint64 MusicPlayerWindow::sdkProgressPositionMs() const
+{
+    qint64 pos = m_sdkProgressBaseMs;
+    if (m_sdkProgressClockRunning) {
+        pos += m_sdkProgressClock.elapsed();
+    }
+    if (pos < 0) {
+        pos = 0;
+    }
+    if (m_sdkDurationMs > 0) {
+        pos = qMin(pos, static_cast<qint64>(m_sdkDurationMs));
+    }
+    return pos;
+}
+
 void MusicPlayerWindow::onSdkTick()
 {
     if (!m_sdkPlayer || !m_sdkPlaying) return;
-    int posMs = 0;
-    if (XPlayerGetCurrentPosition(m_sdkPlayer, &posMs) == 0) {
-        updateUsbPendingProgressSnapshot(posMs, m_sdkDurationMs);
-        updateProgressBar(posMs, m_sdkDurationMs);
+    const qint64 posMs = sdkProgressPositionMs();
+    updateUsbPendingProgressSnapshot(posMs, m_sdkDurationMs);
+    updateProgressBar(posMs, m_sdkDurationMs);
+    // 总时长准确时，墙钟到点即切下一首，不必干等 COMPLETE（否则会停在 100%）
+    if (m_sdkDurationMs > 0 && posMs >= m_sdkDurationMs) {
+        onSdkPlaybackComplete();
     }
 }
 
@@ -2851,6 +2915,7 @@ void MusicPlayerWindow::onSdkPlaybackComplete()
 {
     if (m_sdkSwitching) return;
     clearUsbPendingResumeState();
+    pauseSdkProgressClock();
     m_sdkPlaying = false;
     if (m_sdkTimer) m_sdkTimer->stop();
     setPlayButtonState(false);

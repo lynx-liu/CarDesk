@@ -8,6 +8,7 @@
 #include <QPushButton>
 #include <QSlider>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QMediaPlayer>
 #include <QCloseEvent>
 #include <QFutureWatcher>
@@ -171,6 +172,11 @@ private:
     void updatePlayModeUI();
     void updateLoopButtonIcon();
     void updateProgressBar(qint64 posMs, qint64 durMs);
+#ifdef CAR_DESK_USE_T507_SDK
+    void startSdkProgressClock(qint64 baseMs);
+    void pauseSdkProgressClock();
+    qint64 sdkProgressPositionMs() const;
+#endif
     void setPlayButtonState(bool playing);
     void applyUsbMissingState();
     void refreshUsbContent();
@@ -266,6 +272,10 @@ private:
     bool       m_sdkSwitching  = false;
     int        m_sdkDurationMs = 0;
     bool        m_useSdkPlayer  = false;
+    // GetCurrentPosition 曲末常超前；UI 进度用墙钟，总时长仍用 GetDuration；到点即切下一首。
+    QElapsedTimer m_sdkProgressClock;
+    qint64     m_sdkProgressBaseMs = 0;
+    bool       m_sdkProgressClockRunning = false;
 #endif
 };
 
