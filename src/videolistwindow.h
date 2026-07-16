@@ -100,8 +100,7 @@ protected:
     QPushButton *m_backDirButton;
     QListWidget *m_videoListWidget;
     QLabel *m_pathLabel;
-    QLabel *m_timeLabel;
-    
+
     QString m_currentPath;
     QString m_initialPath;
     QStringList m_videoExtensions;

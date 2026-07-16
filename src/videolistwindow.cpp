@@ -11,7 +11,6 @@
 
 static const QString kUsbMountDir    = QStringLiteral("/mnt/usb");
 static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
-#include <QGridLayout>
 #include <QDir>
 #include <QStandardPaths>
 #include <QDebug>
@@ -34,7 +33,6 @@ VideoListWindow::VideoListWindow(QWidget *parent)
     , m_backDirButton(new QPushButton(this))
     , m_videoListWidget(new QListWidget(this))
     , m_pathLabel(new QLabel("USB > 电影 > 欧美", this))
-    , m_timeLabel(new QLabel(this))
     , m_currentPath("/mnt")
     , m_initialPath("/mnt")
 {
@@ -126,54 +124,31 @@ void VideoListWindow::setupUI() {
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
     
-    // ===== 顶部栏 - 使用与主窗口相同的设计 =====
-    QWidget *topBar = new QWidget(this);
-    topBar->setFixedHeight(82);
+    // ===== 顶部栏 - 与音乐/图片列表相同：绝对定位叠在 topBar 上 =====
+    QWidget *topBar = new QWidget(centralWidget);
+    topBar->setFixedSize(1280, 82);
     topBar->setStyleSheet("background: url(:/images/topbar.png) no-repeat;");
-    
-    QGridLayout *topLayout = new QGridLayout(topBar);
-    topLayout->setContentsMargins(16, 0, 16, 0);
-    topLayout->setSpacing(0);
-    topLayout->setColumnStretch(0, 1);
-    topLayout->setColumnStretch(1, 0);
-    topLayout->setColumnStretch(2, 1);
-    
-    // 左侧返回按钮
-    QWidget *leftWidget = new QWidget();
-    QHBoxLayout *leftLayout = new QHBoxLayout(leftWidget);
-    leftLayout->setContentsMargins(0, 0, 0, 0);
-    
-    m_homeButton->setFixedSize(48, 48);
-    m_homeButton->setStyleSheet(
-        "QPushButton { "
-        "  border: none; "
-        "  background-image: url(:/images/pict_home_up.png); "
-        "} "
-        "QPushButton:hover { "
-        "  background-image: url(:/images/pict_home_down.png); "
-        "}"
-    );
-    leftLayout->addWidget(m_homeButton);
+
+    m_homeButton->setParent(topBar);
+    m_homeButton->setGeometry(12, 12, 48, 48);
     m_homeButton->setFocusPolicy(Qt::NoFocus);
-    leftLayout->addStretch();
-    topLayout->addWidget(leftWidget, 0, 0);
-    
-    // 中间标题
-    QLabel *titleLabel = new QLabel("视频播放", this);
-    titleLabel->setStyleSheet("color: #fff; font-size: 36px; font-weight: bold; background: transparent;");
+    m_homeButton->setStyleSheet(
+        "QPushButton { border:none; background-image:url(:/images/pict_home_up.png); background-repeat:no-repeat; }"
+        "QPushButton:hover { background-image:url(:/images/pict_home_down.png); }"
+    );
+    m_homeButton->setCursor(Qt::PointingHandCursor);
+
+    auto *titleLabel = new QLabel(QStringLiteral("视频播放"), topBar);
+    titleLabel->setGeometry(0, 0, 1280, 72);
+    titleLabel->setStyleSheet("QLabel{color:#fff;font-size:36px;font-weight:700;background:transparent;}");
     titleLabel->setAlignment(Qt::AlignCenter);
-    topLayout->addWidget(titleLabel, 0, 1);
-    
-    // 右侧图标区域
-    QWidget *iconWidget = new QWidget(this);
-    QHBoxLayout *iconLayout = new QHBoxLayout(iconWidget);
-    iconLayout->setContentsMargins(0, 0, 0, 0);
-    iconLayout->setSpacing(16);
-    
-    // 右侧状态图标（TopBarRightWidget 自动同步音量和时钟）
+    titleLabel->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_homeButton->raise();
+
     auto *topBarRight = new TopBarRightWidget(topBar);
-    topLayout->addWidget(topBarRight, 0, 2, Qt::AlignRight | Qt::AlignVCenter);
-    
+    topBarRight->setGeometry(1280 - 16 - TopBarRightWidget::preferredWidth(), 17,
+                             TopBarRightWidget::preferredWidth(), 48);
+
     mainLayout->addWidget(topBar);
     
     // ===== 返回按钮 =====
