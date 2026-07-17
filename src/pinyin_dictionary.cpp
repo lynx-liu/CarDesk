@@ -2,12 +2,8 @@
 #include <QFile>
 #include <QTextStream>
 #include <QHash>
-#include <QChar>
-#include <limits>
-#include <algorithm>
 
 static QHash<QString, QStringList> g_pinyinMap;
-
 
 static void loadPinyinMap()
 {
@@ -15,6 +11,7 @@ static void loadPinyinMap()
         return;
     }
 
+    // 词库按字频降序（源自 Android PinyinIME / RIME pinyin_simp）
     QFile file(QStringLiteral(":/pinyin/pinyin_table.txt"));
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         return;
@@ -40,7 +37,7 @@ static void loadPinyinMap()
         QStringList list;
         list.reserve(chars.size());
         for (const QChar c : chars) {
-            if (!c.isNull()) {
+            if (!c.isNull() && !c.isSpace()) {
                 list.append(QString(c));
             }
         }
@@ -59,7 +56,6 @@ QStringList PinyinDictionary::candidates(const QString &pinyin)
         }
     }
 
-    QStringList result = g_pinyinMap.value(normalized);
-    // 直接返回拼音表顺序
-    return result;
+    // 表内已按常用度排序，例如 ta → 他她它塔…
+    return g_pinyinMap.value(normalized);
 }
