@@ -41,6 +41,19 @@ static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
 #include <QtConcurrent/QtConcurrent>
 #include "imageloader.h"
 #include <QTemporaryFile>
+#include <functional>
+
+// 点屏音占用 ALSA 时延后执行（最多约 1s），避免 XPlayer 起播抢 PCM 导致“进度在动却无声”。
+static void whenTouchClickIdle(QObject *ctx, const std::function<void()> &fn, int attempt = 0)
+{
+    if (TouchClickSound::isBusy() && attempt < 10) {
+        QTimer::singleShot(100, ctx, [ctx, fn, attempt]() {
+            whenTouchClickIdle(ctx, fn, attempt + 1);
+        });
+        return;
+    }
+    fn();
+}
 
 // 与 m_musicFiles 中路径匹配（含 QDir::cleanPath 归一化）
 static int indexOfPathInStringList(const QStringList &list, const QString &path)
@@ -776,11 +789,20 @@ void MusicPlayerWindow::showEvent(QShowEvent *event)
             return;
         }
         restoreUsbProgressBarFromPending();
+#ifdef CAR_DESK_USE_T507_SDK
+        // 遮挡恢复可能已在后台起播：再进界面时确保媒体声道（点屏音/收音机可能切走过）。
+        if (m_useSdkPlayer && m_sdkPlaying) {
+            T507SdkBridge::setAudioSource(false);
+        }
+#endif
         if (!m_pausedForInterruption) {
             return;  // 用户主动停止 / 未播放过：保持停止状态
         }
 
-        const auto doResumeInterrupted = [this]() {
+        whenTouchClickIdle(this, [this]() {
+            if (!isVisible() || !m_pausedForInterruption) {
+                return;
+            }
             if (!m_isUsbMode && m_bluetoothManager) {
                 resumeAfterInterruption();
                 return;
@@ -798,21 +820,7 @@ void MusicPlayerWindow::showEvent(QShowEvent *event)
                 m_pausedForInterruption = false;
                 m_resumeInterruptionPositionMs = 0;
             }
-        };
-
-        if (TouchClickSound::isBusy()) {
-            QTimer::singleShot(150, this, [this, doResumeInterrupted]() {
-                if (!isVisible() || !m_pausedForInterruption) {
-                    return;
-                }
-                if (TouchClickSound::isBusy()) {
-                    return;
-                }
-                doResumeInterrupted();
-            });
-            return;
-        }
-        doResumeInterrupted();
+        });
     });
 }
 
@@ -1749,82 +1757,75 @@ void MusicPlayerWindow::playMusic(int index)
     if (index < 0 || index >= m_musicFiles.count()) return;
 
     // 点屏音占用 PCM 时延后起播，避免与进程内 click PCM 抢 ALSA。
-    if (TouchClickSound::isBusy()) {
-        const int idx = index;
-        QTimer::singleShot(150, this, [this, idx]() {
-            if (TouchClickSound::isBusy()) {
-                return;
-            }
-            playMusic(idx);
-        });
-        return;
-    }
+    whenTouchClickIdle(this, [this, index]() {
+        if (index < 0 || index >= m_musicFiles.count()) return;
 
-    if (!m_usbPendingResumeFilePath.isEmpty()) {
-        if (index < 0 || index >= m_musicFiles.count()
-                || indexOfPathInStringList(m_musicFiles, m_usbPendingResumeFilePath) != index) {
+        if (!m_usbPendingResumeFilePath.isEmpty()) {
+            if (index < 0 || index >= m_musicFiles.count()
+                    || indexOfPathInStringList(m_musicFiles, m_usbPendingResumeFilePath) != index) {
+                clearUsbPendingResumeState();
+            }
+        } else if (m_usbPendingResumeIndex >= 0 && index != m_usbPendingResumeIndex) {
             clearUsbPendingResumeState();
         }
-    } else if (m_usbPendingResumeIndex >= 0 && index != m_usbPendingResumeIndex) {
-        clearUsbPendingResumeState();
-    }
 
-    m_currentIndex = index;
+        m_currentIndex = index;
 
-    if (m_bluetoothManager) {
-        m_bluetoothManager->stopMusic();
-    }
-    // 音乐播放前先切回媒体声道，防止收音机音频抢占播放输出
-    T507SdkBridge::setAudioSource(false);
+        if (m_bluetoothManager) {
+            m_bluetoothManager->stopMusic();
+        }
+        // 音乐播放前先切回媒体声道，防止收音机音频抢占播放输出
+        T507SdkBridge::setAudioSource(false);
 
-    releaseAudioPlayer();
-    updateNowPlaying();
-    if (m_playlistWidget)
-        m_playlistWidget->setCurrentRow(m_currentIndex);
-    updateCollectButtonState();
+        releaseAudioPlayer();
+        updateNowPlaying();
+        if (m_playlistWidget)
+            m_playlistWidget->setCurrentRow(m_currentIndex);
+        updateCollectButtonState();
 
-    const QString musicPath = m_musicFiles[m_currentIndex];
-    qDebug() << "MusicPlayer: playing" << musicPath;
+        const QString musicPath = m_musicFiles[m_currentIndex];
+        qDebug() << "MusicPlayer: playing" << musicPath;
 
 #ifdef CAR_DESK_USE_T507_SDK
-    if (m_useSdkPlayer) {
-        if (!ensureSdkMusicResourcesCreated()) return;
+        if (m_useSdkPlayer) {
+            if (!ensureSdkMusicResourcesCreated()) return;
 
-        m_sdkPlayer    = g_sdkMusicPlayer;
-        m_sdkSoundCtrl = g_sdkMusicSoundCtrl;
-        XPlayerSetNotifyCallback(m_sdkPlayer, sdkMusicNotify, this);
+            m_sdkPlayer    = g_sdkMusicPlayer;
+            m_sdkSoundCtrl = g_sdkMusicSoundCtrl;
+            XPlayerSetNotifyCallback(m_sdkPlayer, sdkMusicNotify, this);
 
-        const QByteArray pb = musicPath.toUtf8();
-        if (XPlayerSetDataSourceUrl(m_sdkPlayer, pb.constData(), nullptr, nullptr) != 0) {
-            qWarning() << "MusicSDK: SetDataSourceUrl failed"; return;
-        }
-        if (XPlayerPrepare(m_sdkPlayer) != 0) {
-            qWarning() << "MusicSDK: Prepare failed";
-            XPlayerReset(m_sdkPlayer); return;
-        }
-        int durMs = 0;
-        if (XPlayerGetDuration(m_sdkPlayer, &durMs) == 0) m_sdkDurationMs = durMs;
-        else m_sdkDurationMs = 0;
-        updateProgressBar(0, m_sdkDurationMs);
+            const QByteArray pb = musicPath.toUtf8();
+            if (XPlayerSetDataSourceUrl(m_sdkPlayer, pb.constData(), nullptr, nullptr) != 0) {
+                qWarning() << "MusicSDK: SetDataSourceUrl failed"; return;
+            }
+            if (XPlayerPrepare(m_sdkPlayer) != 0) {
+                qWarning() << "MusicSDK: Prepare failed";
+                XPlayerReset(m_sdkPlayer); return;
+            }
+            int durMs = 0;
+            if (XPlayerGetDuration(m_sdkPlayer, &durMs) == 0) m_sdkDurationMs = durMs;
+            else m_sdkDurationMs = 0;
+            updateProgressBar(0, m_sdkDurationMs);
 
-        if (XPlayerStart(m_sdkPlayer) != 0) {
-            qWarning() << "MusicSDK: Start failed";
-            XPlayerReset(m_sdkPlayer); return;
+            if (XPlayerStart(m_sdkPlayer) != 0) {
+                qWarning() << "MusicSDK: Start failed";
+                XPlayerReset(m_sdkPlayer); return;
+            }
+            m_sdkPlaying = true;
+            setPlayButtonState(true);
+            startSdkProgressClock(0);
+            if (m_sdkTimer && !m_sdkTimer->isActive()) m_sdkTimer->start();
+            updateMetadata();
+            applyUsbResumeSeekAfterPlayStarted();
+            return;
         }
-        m_sdkPlaying = true;
-        setPlayButtonState(true);
-        startSdkProgressClock(0);
-        if (m_sdkTimer && !m_sdkTimer->isActive()) m_sdkTimer->start();
-        updateMetadata();
-        applyUsbResumeSeekAfterPlayStarted();
-        return;
-    }
 #endif
 
-    m_mediaPlayer->setMedia(QMediaContent(QUrl::fromLocalFile(musicPath)));
-    m_mediaPlayer->play();
-    updateMetadata();
-    applyUsbResumeSeekAfterPlayStarted();
+        m_mediaPlayer->setMedia(QMediaContent(QUrl::fromLocalFile(musicPath)));
+        m_mediaPlayer->play();
+        updateMetadata();
+        applyUsbResumeSeekAfterPlayStarted();
+    });
 }
 
 void MusicPlayerWindow::pauseForInterruption()
@@ -1903,6 +1904,8 @@ bool MusicPlayerWindow::restoreSdkPlaybackAfterInterruption()
     if (!m_useSdkPlayer || m_sdkPlayer || !m_pausedForInterruption || m_currentIndex < 0 || m_currentIndex >= m_musicFiles.count()) {
         return false;
     }
+    // 调用方应已等点屏音空闲；此处再切媒体声道，避免无声但进度时钟仍走。
+    T507SdkBridge::setAudioSource(false);
     if (!ensureSdkMusicResourcesCreated()) {
         return false;
     }
@@ -1997,51 +2000,55 @@ bool MusicPlayerWindow::isPlaying() const
 
 void MusicPlayerWindow::resumeAfterInterruption()
 {
-    if (!m_isUsbMode && m_bluetoothManager) {
-        if (!m_btPlaying) {
-            qDebug() << "MusicPlayer: resumeAfterInterruption BT currentIndex=" << m_currentIndex;
-            if (m_bluetoothManager->playPauseMusic()) {
-                m_btPlaying = true;
-                setPlayButtonState(true);
-            }
-        }
-        return;
-    }
-
-#ifdef CAR_DESK_USE_T507_SDK
-    if (m_useSdkPlayer) {
-        if (m_sdkPlayer && !m_sdkPlaying) {
-            if (XPlayerStart(m_sdkPlayer) == 0) {
-                m_sdkPlaying = true;
-                startSdkProgressClock(m_sdkProgressBaseMs);
-                if (m_sdkTimer && !m_sdkTimer->isActive()) {
-                    m_sdkTimer->start();
+    // 行车影像 HOME 回来时点屏音常仍占 ALSA；进度条是墙钟，抢 PCM 会无声。
+    whenTouchClickIdle(this, [this]() {
+        if (!m_isUsbMode && m_bluetoothManager) {
+            if (!m_btPlaying) {
+                qDebug() << "MusicPlayer: resumeAfterInterruption BT currentIndex=" << m_currentIndex;
+                T507SdkBridge::setAudioSource(false);
+                if (m_bluetoothManager->playPauseMusic()) {
+                    m_btPlaying = true;
+                    setPlayButtonState(true);
                 }
-                setPlayButtonState(true);
             }
             return;
         }
 
-        if (m_pausedForInterruption) {
-            if (restoreSdkPlaybackAfterInterruption()) {
+#ifdef CAR_DESK_USE_T507_SDK
+        if (m_useSdkPlayer) {
+            T507SdkBridge::setAudioSource(false);
+            if (m_sdkPlayer && !m_sdkPlaying) {
+                if (XPlayerStart(m_sdkPlayer) == 0) {
+                    m_sdkPlaying = true;
+                    startSdkProgressClock(m_sdkProgressBaseMs);
+                    if (m_sdkTimer && !m_sdkTimer->isActive()) {
+                        m_sdkTimer->start();
+                    }
+                    setPlayButtonState(true);
+                }
                 return;
             }
+
+            if (m_pausedForInterruption) {
+                restoreSdkPlaybackAfterInterruption();
+            }
+            return;
         }
-        return;
-    }
 #endif
 
-    if (m_mediaPlayer) {
-        qDebug() << "MusicPlayer: resumeAfterInterruption USB index=" << m_currentIndex
-                 << "positionMs=" << m_resumeInterruptionPositionMs;
-        if (m_resumeInterruptionPositionMs > 0 && m_mediaPlayer->duration() > 0) {
-            m_mediaPlayer->setPosition(m_resumeInterruptionPositionMs);
+        if (m_mediaPlayer) {
+            qDebug() << "MusicPlayer: resumeAfterInterruption USB index=" << m_currentIndex
+                     << "positionMs=" << m_resumeInterruptionPositionMs;
+            T507SdkBridge::setAudioSource(false);
+            if (m_resumeInterruptionPositionMs > 0 && m_mediaPlayer->duration() > 0) {
+                m_mediaPlayer->setPosition(m_resumeInterruptionPositionMs);
+            }
+            m_mediaPlayer->play();
+            setPlayButtonState(true);
         }
-        m_mediaPlayer->play();
-        setPlayButtonState(true);
-    }
-    m_pausedForInterruption = false;
-    m_resumeInterruptionPositionMs = 0;
+        m_pausedForInterruption = false;
+        m_resumeInterruptionPositionMs = 0;
+    });
 }
 
 void MusicPlayerWindow::releaseAudioPlayer()
