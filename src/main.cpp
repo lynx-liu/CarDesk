@@ -654,6 +654,14 @@ protected:
                     qDebug() << "[GlobalKey] => Menu (consumed, InputNotifier owns MODE)"
                              << "turnOrReverse=" << automotiveIsTurnOrReverseActive();
                     return true;
+                case Qt::Key_MediaPrevious:
+                case Qt::Key_MediaNext:
+                    // 倒车/转向中禁止上/下一首（InputNotifier 已拦；此处防 Qt 侧重复投递）
+                    if (automotiveIsTurnOrReverseActive()) {
+                        qDebug() << "[GlobalKey] => MediaPrev/Next ignored: turn/reverse active";
+                        return true;
+                    }
+                    break;
                 case Qt::Key_End:
                     // 与 InputNotifier 一致：只尝试挂断，吞掉默认 End 行为
                     qDebug() << "[GlobalKey] => End (hangup-only)";
@@ -985,6 +993,12 @@ static bool routeMediaKeyToBackground(int qtKey)
         return false;
     }
 
+    // 倒车/转向中禁止上/下一首（与 MODE 一致，吞掉）
+    if (automotiveIsTurnOrReverseActive()) {
+        qDebug() << "[InputNotifier] media prev/next ignored: turn/reverse active";
+        return true;
+    }
+
     QWidget *activeWindow = QApplication::activeWindow();
     if (!activeWindow) {
         for (QWidget *tw : QApplication::topLevelWidgets()) {
@@ -1175,12 +1189,20 @@ int main(int argc, char *argv[]) {
                     case KEY_MUTE:          qtKey = Qt::Key_VolumeMute; break;
                     case KEY_PLAYPAUSE:     qtKey = Qt::Key_MediaTogglePlayPause; break;
                     case KEY_PREVIOUSSONG:
+                        if (automotiveIsTurnOrReverseActive()) {
+                            qDebug() << "[InputNotifier] KEY_PREVIOUSSONG ignored: turn/reverse active";
+                            continue;
+                        }
                         qtKey = Qt::Key_MediaPrevious;
                         if (routeMediaKeyToBackground(qtKey)) {
                             continue;
                         }
                         break;
                     case KEY_NEXTSONG:
+                        if (automotiveIsTurnOrReverseActive()) {
+                            qDebug() << "[InputNotifier] KEY_NEXTSONG ignored: turn/reverse active";
+                            continue;
+                        }
                         qtKey = Qt::Key_MediaNext;
                         if (routeMediaKeyToBackground(qtKey)) {
                             continue;
