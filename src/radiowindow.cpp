@@ -1208,8 +1208,8 @@ void RadioWindow::onScanTick() {
             if (m_stereoLabel) m_stereoLabel->setVisible(m_isFM && stereo);
 
             // tea685x signal: (raw_dBuV+20)*(0xffff/140)
-            // 25dBuV ≈ (25+20)*468 = 21060；使用 20000 作为门限
-            const quint32 threshold = m_isFM ? 20000u : 16000u;
+            // 25dBuV ≈ (25+20)*468 = 21060；使用 25000 作为门限
+            const quint32 threshold = m_isFM ? 25000u : 20000u;
             if (static_cast<quint32>(tuner.signal) > threshold) {
                 // 找到电台！
                 m_scanTimer->stop();
