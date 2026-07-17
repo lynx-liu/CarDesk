@@ -52,6 +52,8 @@ private:
     void loadRadioState();
     void syncCurrentBandFrequency();
     void persistRadioState();
+    // 先 VIDIOC_S_TUNER 切 AM/FM，再写频率（开机恢复 AM 时必须，否则驱动仍在 FM 会 EINVAL）
+    bool applyTunerBandAndFrequency();
 
     // ── V4L2 /dev/radio0 ─────────────────────────────────────────────────
     bool openDevice();

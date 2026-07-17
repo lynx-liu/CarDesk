@@ -403,17 +403,7 @@ RadioWindow::RadioWindow(QWidget *parent)
 
     // 尝试打开硬件设备
     if (openDevice()) {
-        setFrequencyHz(m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency));
-        quint32 v = getFrequencyHz();
-        if (v > 0) {
-            double freq = m_isFM ? v4l2ToMhz(v) : v4l2ToKhz(v);
-            const double minFreq = m_isFM ? 87.0 : 531.0;
-            const double maxFreq = m_isFM ? 108.0 : 1629.0;
-            if (freq >= minFreq && freq <= maxFreq) {
-                m_frequency = freq;
-                syncCurrentBandFrequency();
-            }
-        }
+        applyTunerBandAndFrequency();
         rebuildStationStrip();
     }
 
@@ -447,7 +437,7 @@ void RadioWindow::showEvent(QShowEvent *event)
 {
     QMainWindow::showEvent(event);
     if (m_fd < 0 && openDevice()) {
-        setFrequencyHz(m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency));
+        applyTunerBandAndFrequency();
         updateFrequencyView();
     }
     // 进入收音机界面时切回收音机声道
@@ -1574,43 +1564,55 @@ void RadioWindow::rebuildStationStrip() {
     }
 }
 
+bool RadioWindow::applyTunerBandAndFrequency()
+{
+    if (m_fd < 0)
+        return false;
+
+    // tea685x：VIDIOC_S_TUNER 用 rangelow/rangehigh 选 AM/FM；开机默认多为 FM，
+    // 若只写 AM 频率（如 12240≈765kHz）会 EINVAL。
+    m_tunerIndex = 0;
+    const quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
+    struct v4l2_tuner t;
+    memset(&t, 0, sizeof(t));
+    t.index     = 0;
+    t.type      = V4L2_TUNER_RADIO;
+    t.audmode   = V4L2_TUNER_MODE_STEREO;
+    t.rangelow  = m_isFM ? 1392000u : 8352u;
+    t.rangehigh = m_isFM ? 1728000u : 27360u;
+    if (::ioctl(m_fd, VIDIOC_S_TUNER, &t) != 0) {
+        qWarning() << "RadioWindow: VIDIOC_S_TUNER band switch failed:" << strerror(errno)
+                   << "(driver must support S_TUNER with rangelow/rangehigh)";
+        return false;
+    }
+    qDebug() << "RadioWindow: band switch via VIDIOC_S_TUNER rangelow/rangehigh OK"
+             << (m_isFM ? "FM" : "AM") << "freq=" << m_frequency;
+    if (!setFrequencyHz(fhz)) {
+        qWarning() << "RadioWindow: setFrequencyHz failed after S_TUNER:" << strerror(errno);
+        return false;
+    }
+
+    const quint32 v = getFrequencyHz();
+    if (v > 0) {
+        const double freq = m_isFM ? v4l2ToMhz(v) : v4l2ToKhz(v);
+        const double minFreq = m_isFM ? 87.0 : 531.0;
+        const double maxFreq = m_isFM ? 108.0 : 1629.0;
+        if (freq >= minFreq && freq <= maxFreq) {
+            m_frequency = freq;
+            syncCurrentBandFrequency();
+        }
+    }
+    return true;
+}
+
 void RadioWindow::switchBand(bool fm) {
     stopScan();
     syncCurrentBandFrequency();
     m_isFM = fm;
     m_frequency = m_isFM ? m_fmFrequency : m_amFrequency;
 
-    if (m_fd >= 0) {
-        // 按驱动实现：仅使用 VIDIOC_S_TUNER 携带 rangelow/rangehigh 切换频段
-        // tea685x 的 vidioc_s_tuner 实现通过比较 rangelow/rangehigh 与 bands[] 来选择
-        m_tunerIndex = 0;
-        quint32 fhz = m_isFM ? mhzToV4l2(m_frequency) : khzToV4l2(m_frequency);
-        struct v4l2_tuner t;
-        memset(&t, 0, sizeof(t));
-        t.index     = 0;
-        t.type      = V4L2_TUNER_RADIO;
-        t.audmode   = V4L2_TUNER_MODE_STEREO;
-        t.rangelow  = m_isFM ? 1392000u : 8352u;
-        t.rangehigh = m_isFM ? 1728000u : 27360u;
-        if (::ioctl(m_fd, VIDIOC_S_TUNER, &t) == 0) {
-            qDebug() << "RadioWindow: band switch via VIDIOC_S_TUNER rangelow/rangehigh OK";
-            if (!setFrequencyHz(fhz))
-                qWarning() << "RadioWindow: setFrequencyHz failed after S_TUNER:" << strerror(errno);
-        } else {
-            qWarning() << "RadioWindow: VIDIOC_S_TUNER band switch failed:" << strerror(errno)
-                       << "(driver must support S_TUNER with rangelow/rangehigh)";
-        }
-    }
-
-    // 读回实际频率（驱动可能钳位到合法范围）
-    quint32 v = getFrequencyHz();
-    if (v > 0) {
-        double freq = m_isFM ? v4l2ToMhz(v) : v4l2ToKhz(v);
-        const double minFreq = m_isFM ? 87.0 : 531.0;
-        const double maxFreq = m_isFM ? 108.0 : 1629.0;
-        if (freq >= minFreq && freq <= maxFreq)
-            m_frequency = freq;
-    }
+    if (m_fd >= 0)
+        applyTunerBandAndFrequency();
 
     syncCurrentBandFrequency();
     persistRadioState();
