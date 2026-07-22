@@ -12,6 +12,7 @@
 #include "devicedetect.h"
 #include "mainwindow.h"
 #include "mediamanager.h"
+#include "screenblanker.h"
 
 #include <QApplication>
 #include <QDebug>
@@ -232,7 +233,7 @@ void DrivingImageWindow::returnToMainSafely()
         emit requestReturnToMain();
         for (QWidget *widget : QApplication::topLevelWidgets()) {
             if (auto *main = qobject_cast<MainWindow *>(widget)) {
-                if (main->mediaManager()) {
+                if (main->mediaManager() && !screenBlankerHoldsMedia()) {
                     main->mediaManager()->resumePlaybackAfterInterruption();
                 }
                 break;

@@ -29,6 +29,7 @@
 #include <sys/ioctl.h>
 #include <cstring>
 #include "backlight.h"
+#include "screenblanker.h"
 #include "t507sdkbridge.h"
 #include <linux/input.h>
 #include "mainwindow.h"
@@ -77,6 +78,11 @@ public:
             }
         }
         pauseBackgroundPlayback();
+        showOverlayOnly();
+    }
+
+    /** 仅显示时钟遮罩，不暂停媒体（转向结束后回到时钟/关屏用） */
+    void showOverlayOnly() {
         updateMode();
         if (!isVisible()) {
             if (QScreen *sc = QGuiApplication::primaryScreen()) {
@@ -88,6 +94,9 @@ public:
             setFocus(Qt::ActiveWindowFocusReason);
             m_updateTimer.start();
             update();
+        } else {
+            raise();
+            activateWindow();
         }
     }
 
@@ -235,6 +244,10 @@ public:
     }
     bool isBlanked() const { return m_blanked; }
 
+    bool holdsMedia() const {
+        return m_blanked || isVisible() || m_suspendedForAutomotive;
+    }
+
     void blank() {
         if (m_blanked) return;
         qDebug() << "blank: hiding clock overlay and pausing playback";
@@ -256,18 +269,27 @@ public:
 
     }
     void unblank() {
-        if (!m_blanked) return;
+        if (!m_blanked && !m_suspendedForAutomotive)
+            return;
+
+        // 用户主动亮屏：清掉转向暂挂，避免结束后又重新关屏
+        clearAutomotiveSuspendState();
 
         if (isVisible())
             hideClock(false);
 
         const int brightness = m_savedBrightness;
         QTimer::singleShot(50, this, [this, brightness]() {
-            if (!m_blanked) {
-                return;
+            if (m_blanked) {
+                m_blanked = false;
             }
-            m_blanked = false;
             Backlight::set(brightness);
+
+            // 若转向/倒车影像仍在前台，由行车退出再恢复媒体，避免关屏中途亮屏误播
+            if (DrivingImageWindow *drive = findDrivingImageWindow()) {
+                if (drive->isVisible())
+                    return;
+            }
 
             if (MainWindow *main = findMainWindow()) {
                 if (main->mediaManager()) {
@@ -280,10 +302,91 @@ public:
         });
     }
 
+    void suspendForAutomotive() {
+        if (m_suspendedForAutomotive)
+            return;
+        if (!m_blanked && !isVisible())
+            return;
+
+        m_suspendedForAutomotive = true;
+        m_wasBlankedBeforeSuspend = m_blanked;
+        m_wasClockVisibleBeforeSuspend = isVisible();
+        qDebug() << "blanker: suspend for automotive blanked=" << m_wasBlankedBeforeSuspend
+                 << "clockVisible=" << m_wasClockVisibleBeforeSuspend;
+
+        if (isVisible())
+            hideClock(false);
+
+        if (m_wasBlankedBeforeSuspend)
+            restoreBrightnessForAutomotive();
+    }
+
+    void resumeAfterAutomotive() {
+        if (!m_suspendedForAutomotive)
+            return;
+
+        const bool restoreBlank = m_wasBlankedBeforeSuspend;
+        const bool restoreClock = m_wasClockVisibleBeforeSuspend || m_wasBlankedBeforeSuspend;
+        clearAutomotiveSuspendState();
+
+        qDebug() << "blanker: resume after automotive blank=" << restoreBlank
+                 << "clock=" << restoreClock;
+
+        if (restoreBlank) {
+            m_blanked = true;
+            Backlight::set(0);
+        }
+        if (restoreClock)
+            showOverlayOnly();
+    }
+
 private:
+    void clearAutomotiveSuspendState() {
+        m_suspendedForAutomotive = false;
+        m_wasBlankedBeforeSuspend = false;
+        m_wasClockVisibleBeforeSuspend = false;
+    }
+
+    void restoreBrightnessForAutomotive() {
+        // 关屏期间背光为 0；转向/倒车需亮屏。自动模式跟大灯昼夜，否则恢复关屏前亮度。
+        QSettings settings;
+        if (settings.value(QStringLiteral("brightness/mode"), 0).toInt() == 2) {
+            const int daySlider = qBound(0, settings.value(QStringLiteral("brightness/day"), 100).toInt(), 100);
+            const int nightSlider = qBound(0, settings.value(QStringLiteral("brightness/night"), 20).toInt(), 100);
+            const int sliderVal = automotiveIlluminationOn() ? nightSlider : daySlider;
+            const int bl = Backlight::sliderToBacklight(sliderVal);
+            Backlight::set(bl);
+            qDebug() << "blanker: automotive brightness auto"
+                     << (automotiveIlluminationOn() ? "night" : "day")
+                     << "slider=" << sliderVal << "bl=" << bl;
+            return;
+        }
+        const int bl = m_savedBrightness > 0 ? m_savedBrightness : Backlight::sliderToBacklight(100);
+        Backlight::set(bl);
+        qDebug() << "blanker: automotive brightness restore bl=" << bl;
+    }
+
     bool m_blanked = false;
+    bool m_suspendedForAutomotive = false;
+    bool m_wasBlankedBeforeSuspend = false;
+    bool m_wasClockVisibleBeforeSuspend = false;
     int  m_savedBrightness = 128;
 };
+
+bool screenBlankerHoldsMedia()
+{
+    return ScreenBlanker::instance()->holdsMedia();
+}
+
+void screenBlankerSuspendForAutomotive()
+{
+    ScreenBlanker::instance()->suspendForAutomotive();
+}
+
+void screenBlankerResumeAfterAutomotive()
+{
+    ScreenBlanker::instance()->resumeAfterAutomotive();
+}
 
 // ── 音量浮动指示条 ────────────────────────────────────────────────────────────
 // 按下音量键时显示在屏幕左侧，2 秒无操作后自动隐藏

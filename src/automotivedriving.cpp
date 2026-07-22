@@ -1,5 +1,4 @@
 #include "automotivedriving.h"
-
 #include "appsettings.h"
 #include "appsignals.h"
 #include "ahdsettings.h"
@@ -8,6 +7,7 @@
 #include "mainwindow.h"
 #include "mcuserialreader.h"
 #include "mediamanager.h"
+#include "screenblanker.h"
 
 #include <QApplication>
 #include <QDateTime>
@@ -69,6 +69,9 @@ DrivingImageWindow *findDrivingImageWindow()
 
 void activateDrivingImageMode(int mode, bool forceReengage)
 {
+    // 时钟/关屏在最上且关屏背光为 0：先暂挂遮罩并亮屏，才能看到转向/倒车
+    screenBlankerSuspendForAutomotive();
+
     MainWindow *main = findMainWindow();
     if (main && main->mediaManager()) {
         main->mediaManager()->pausePlaybackForOcclusion();
@@ -124,8 +127,11 @@ void hideDrivingImageWindow()
         QApplication::processEvents(QEventLoop::ExcludeUserInputEvents, 20);
     }
 
+    // 先恢复时钟/关屏（不恢复媒体），再决定是否恢复音乐/收音机
+    screenBlankerResumeAfterAutomotive();
+
     MainWindow *main = findMainWindow();
-    if (main && main->mediaManager()) {
+    if (main && main->mediaManager() && !screenBlankerHoldsMedia()) {
         main->mediaManager()->resumePlaybackAfterInterruption();
     }
 

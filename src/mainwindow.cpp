@@ -15,6 +15,7 @@
 #include "musicplayerwindow.h"
 #include "topbarwidget.h"
 #include "t507sdkbridge.h"
+#include "screenblanker.h"
 
 #include <QApplication>
 #include <QEventLoop>
@@ -694,7 +695,7 @@ void MainWindow::ensureDrivingImageWindow()
         m_drivingImageWindow = new DrivingImageWindow();
         m_drivingImageWindow->setAttribute(Qt::WA_DeleteOnClose);
         connect(m_drivingImageWindow, &DrivingImageWindow::requestReturnToMain, this, [this]() {
-            if (m_mediaManager) {
+            if (m_mediaManager && !screenBlankerHoldsMedia()) {
                 m_mediaManager->resumePlaybackAfterInterruption();
             }
             presentHome();
@@ -703,7 +704,7 @@ void MainWindow::ensureDrivingImageWindow()
                 &MainWindow::onDrivingRecordPlayRequested, Qt::UniqueConnection);
         connect(m_drivingImageWindow, &QObject::destroyed, this, [this]() {
             m_drivingImageWindow = nullptr;
-            if (m_mediaManager) {
+            if (m_mediaManager && !screenBlankerHoldsMedia()) {
                 m_mediaManager->resumePlaybackAfterInterruption();
             }
         }, Qt::UniqueConnection);
