@@ -1199,7 +1199,7 @@ void RadioWindow::onScanTick() {
 
             // tea685x signal: (raw_dBuV+20)*(0xffff/140)
             // signal 为 __s32，用有符号比较
-            const int threshold = m_isFM ? 22500 : 30000;
+            const int threshold = m_isFM ? 22500 : 35000;
             if (tuner.signal > threshold) {
                 // 找到电台！
                 m_scanTimer->stop();
