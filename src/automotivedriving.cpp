@@ -457,8 +457,13 @@ void setIllumination(bool on)
     emit AppSignals::instance()->illuminationChanged(on);
 
     // 亮度「自动」：大灯开=夜晚亮度，大灯关=白天亮度
+    // 关屏期间保持背光关闭，仅记录大灯状态；亮屏时再按昼夜应用
     QSettings settings;
     if (settings.value(QStringLiteral("brightness/mode"), 0).toInt() == 2) {
+        if (screenBlankerKeepsBacklightOff()) {
+            qDebug() << "[Automotive] auto brightness skipped: screen blanked";
+            return;
+        }
         const int daySlider = qBound(0, settings.value(QStringLiteral("brightness/day"), 100).toInt(), 100);
         const int nightSlider = qBound(0, settings.value(QStringLiteral("brightness/night"), 20).toInt(), 100);
         const int sliderVal = on ? nightSlider : daySlider;

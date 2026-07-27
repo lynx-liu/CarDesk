@@ -248,6 +248,11 @@ public:
         return m_blanked || isVisible() || m_suspendedForAutomotive;
     }
 
+    /** 关屏意图仍在，且当前未因转向/倒车临时亮屏 */
+    bool keepsBacklightOff() const {
+        return m_blanked && !m_suspendedForAutomotive;
+    }
+
     void blank() {
         if (m_blanked) return;
         qDebug() << "blank: hiding clock overlay and pausing playback";
@@ -278,7 +283,7 @@ public:
         if (isVisible())
             hideClock(false);
 
-        const int brightness = m_savedBrightness;
+        const int brightness = brightnessForUnblank();
         QTimer::singleShot(50, this, [this, brightness]() {
             if (m_blanked) {
                 m_blanked = false;
@@ -347,23 +352,22 @@ private:
         m_wasClockVisibleBeforeSuspend = false;
     }
 
-    void restoreBrightnessForAutomotive() {
-        // 关屏期间背光为 0；转向/倒车需亮屏。自动模式跟大灯昼夜，否则恢复关屏前亮度。
+    int brightnessForUnblank() const {
+        // 自动模式：亮屏时跟当前大灯昼夜，避免关屏期间开关大灯后仍用旧亮度
         QSettings settings;
         if (settings.value(QStringLiteral("brightness/mode"), 0).toInt() == 2) {
             const int daySlider = qBound(0, settings.value(QStringLiteral("brightness/day"), 100).toInt(), 100);
             const int nightSlider = qBound(0, settings.value(QStringLiteral("brightness/night"), 20).toInt(), 100);
             const int sliderVal = automotiveIlluminationOn() ? nightSlider : daySlider;
-            const int bl = Backlight::sliderToBacklight(sliderVal);
-            Backlight::set(bl);
-            qDebug() << "blanker: automotive brightness auto"
-                     << (automotiveIlluminationOn() ? "night" : "day")
-                     << "slider=" << sliderVal << "bl=" << bl;
-            return;
+            return Backlight::sliderToBacklight(sliderVal);
         }
-        const int bl = m_savedBrightness > 0 ? m_savedBrightness : Backlight::sliderToBacklight(100);
-        Backlight::set(bl);
-        qDebug() << "blanker: automotive brightness restore bl=" << bl;
+        return m_savedBrightness > 0 ? m_savedBrightness : Backlight::sliderToBacklight(100);
+    }
+
+    void restoreBrightnessForAutomotive() {
+        // 关屏期间背光为 0；转向/倒车需亮屏。自动模式跟大灯昼夜，否则恢复关屏前亮度。
+        Backlight::set(brightnessForUnblank());
+        qDebug() << "blanker: automotive brightness restore bl=" << Backlight::get();
     }
 
     bool m_blanked = false;
@@ -376,6 +380,11 @@ private:
 bool screenBlankerHoldsMedia()
 {
     return ScreenBlanker::instance()->holdsMedia();
+}
+
+bool screenBlankerKeepsBacklightOff()
+{
+    return ScreenBlanker::instance()->keepsBacklightOff();
 }
 
 void screenBlankerSuspendForAutomotive()
