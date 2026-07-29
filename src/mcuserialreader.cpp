@@ -150,7 +150,8 @@ void McuSerialReader::onReadyRead()
 {
     const QByteArray incoming = m_port->readAll();
     if (m_upgradeMode) {
-        qDebug() << "[MCU RX]" << QString::fromLatin1(incoming);
+        // YMODEM 控制字节用 hex，避免 0xFF 等被 Latin1 打成乱码
+        qDebug() << "[MCU RX]" << incoming.size() << "bytes hex=" << incoming.toHex();
         emit rawDataReceived(incoming);
         return;
     }

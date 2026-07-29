@@ -107,8 +107,11 @@ private:
     int m_mcuBytesSent;
     int m_mcuBlockNum;
     int m_mcuNakRetries = 0;
+    int m_mcuRestartRetries = 0; // 收到 'C' 整段重传次数
     int m_mcuState; // 0=idle,1=waitOTA_OK,2=waitC,3=waitC_after_name,31=waitACK,4=sentEOT,5=done
     void mcuUpgradeCleanup(const QString &statusText);
+    void mcuSendFileNameBlock();
+    bool mcuSendDataBlock(int blockNum);
     QString m_checkedUpdateFile;
     QString m_checkedNewVersion;
     
