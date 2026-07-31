@@ -1666,7 +1666,8 @@ void DiagnosticWindow::keyPressEvent(QKeyEvent *event)
 int DiagnosticWindow::controllerIndex(const QString &ctrl)
 {
     if (ctrl == QLatin1String("ABS")) return 0;
-    if (ctrl == QLatin1String("EBS")) return 1;
+    // DUAL_WARN 为 MCU 协议名，入库前应已归一成 EBS；此处再兜底一次
+    if (ctrl == QLatin1String("EBS") || ctrl == QLatin1String("DUAL_WARN")) return 1;
     if (ctrl == QLatin1String("BCM")) return 2;
     return -1;
 }
@@ -1674,10 +1675,14 @@ int DiagnosticWindow::controllerIndex(const QString &ctrl)
 void DiagnosticWindow::onFaultDataReceived(const QString &controller,
                                             const QVector<McuFaultInfo> &faults)
 {
-    m_activeFaults[controller] = faults;
+    QString key = controller;
+    if (key == QLatin1String("DUAL_WARN"))
+        key = QStringLiteral("EBS");
+
+    m_activeFaults[key] = faults;
 
     // 更新对应系统按钮上的徽标数量
-    const int idx = controllerIndex(controller);
+    const int idx = controllerIndex(key);
     if (idx >= 0 && m_faultBadgeLabels[idx]) {
         const int cnt = faults.size();
         if (cnt > 0) {
@@ -1690,7 +1695,7 @@ void DiagnosticWindow::onFaultDataReceived(const QString &controller,
 
     // 若详情页正在显示该控制器的故障，立即刷新
     if (m_pages && m_pages->currentIndex() == 6 &&
-        m_currentFaultController == controller) {
+        m_currentFaultController == key) {
         populateFaultDetailContent();
     }
 }

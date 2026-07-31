@@ -3,6 +3,7 @@
 #include "automotivedriving.h"
 
 #include <QDebug>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
@@ -173,7 +174,31 @@ void McuSerialReader::parseJsonLine(const QByteArray &raw)
     const QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
     if (err.error != QJsonParseError::NoError || !doc.isObject()) return;
     const QJsonObject obj = doc.object();
-    if (obj.value(QStringLiteral("type")).toString() != QLatin1String("VIST")) return;
+    const QString type = obj.value(QStringLiteral("type")).toString();
+
+    // DM1 JSON：协议推荐格式；原先只解析 VIST，双预警等故障会被直接丢掉
+    if (type == QLatin1String("DM1")) {
+        QString controller = obj.value(QStringLiteral("controller")).toString();
+        if (controller == QLatin1String("DUAL_WARN"))
+            controller = QStringLiteral("EBS"); // 与 UI/故障库命名一致
+        QVector<McuFaultInfo> faults;
+        const QJsonArray arr = obj.value(QStringLiteral("faults")).toArray();
+        for (const QJsonValue &v : arr) {
+            const QJsonObject f = v.toObject();
+            McuFaultInfo fi;
+            fi.spn = f.value(QStringLiteral("spn")).toInt();
+            fi.fmi = f.value(QStringLiteral("fmi")).toInt();
+            fi.oc = f.value(QStringLiteral("oc")).toInt();
+            fi.rawDesc = f.value(QStringLiteral("desc")).toString();
+            faults.append(fi);
+        }
+        qDebug() << "[MCU] DM1 JSON controller:" << controller
+                 << "faults:" << faults.size();
+        emit dm1Received(controller, faults);
+        return;
+    }
+
+    if (type != QLatin1String("VIST")) return;
     const QString name = obj.value(QStringLiteral("name")).toString();
     if (name == QLatin1String("OEL")) {
         // 0x0CFDCC21: turn_sig 0=无 1=左转 2=右转
@@ -219,11 +244,23 @@ void McuSerialReader::processLine(const QByteArray &raw)
     if (!m_inBlock) {
         // TEXT VIST 行格式: [ts][#seq][NAME] key=value ...
         // 匹配示例: [520][#2][TCO1] Speed=80.50km/h
+        // 注意：部分 MCU 的 DM1 头也可能写成无空格的 [ts][#seq][CTRL] MIL:...
+        // 若先当 VIST 解析会丢掉 DUAL_WARN/ABS/BCM 故障块
         static const QRegularExpression vistRe(
             QStringLiteral("^\\[\\d+\\]\\[#\\d+\\]\\[(\\w+)\\]\\s*(.*)"));
         const QRegularExpressionMatch vm = vistRe.match(line);
         if (vm.hasMatch()) {
-            parseVistTextLine(vm.captured(1), vm.captured(2));
+            const QString name = vm.captured(1);
+            const QString kv = vm.captured(2);
+            // 无空格 DM1 头会被 VIST 正则吃掉；带 MIL:/AWL: 的按诊断块处理
+            if (kv.contains(QLatin1String("MIL:")) || kv.contains(QLatin1String("AWL:"))) {
+                m_curController = (name == QLatin1String("DUAL_WARN"))
+                    ? QStringLiteral("EBS") : name;
+                m_curFaults.clear();
+                m_inBlock = true;
+                return;
+            }
+            parseVistTextLine(name, kv);
             return;
         }
 
@@ -233,6 +270,9 @@ void McuSerialReader::processLine(const QByteArray &raw)
         const QRegularExpressionMatch m = headerRe.match(line);
         if (m.hasMatch()) {
             m_curController = m.captured(1);
+            // 协议 CAN 侧名 DUAL_WARN，故障库/诊断 UI 使用 EBS（双预警）
+            if (m_curController == QLatin1String("DUAL_WARN"))
+                m_curController = QStringLiteral("EBS");
             m_curFaults.clear();
             m_inBlock = true;
         }
