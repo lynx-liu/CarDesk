@@ -4,7 +4,6 @@
 #include "t507sdkbridge.h"
 
 #include <QHBoxLayout>
-#include <QDateTime>
 #include <QApplication>
 
 static const QString kUsbMountDir    = QStringLiteral("/mnt/usb");
@@ -223,25 +222,14 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
 
     outerLay->addWidget(volGroup);
 
-    // ── 时间 ─────────────────────────────────────────────────────────────────
-    m_timeLabel = new QLabel(this);
-    m_timeLabel->setFixedWidth(150);
-    m_timeLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    m_timeLabel->setStyleSheet("QLabel { color: #fff; font-size: 36px; background: transparent; }");
-    outerLay->addWidget(m_timeLabel);
-
     // ── 初始化显示 ────────────────────────────────────────────────────────────
     const QVariant vp = qApp->property("appVolumeLevel");
     onVolumeChanged(vp.isValid() ? vp.toInt() : 10);
-    onClockTick();
 
     // ── 连接全局音量信号 ──────────────────────────────────────────────────────
     connect(AppSignals::instance(), &AppSignals::volumeLevelChanged,
             this, &TopBarRightWidget::onVolumeChanged);
 
-    // 时钟制式变化时立即刷新显示
-    connect(AppSignals::instance(), &AppSignals::clockFormatChanged,
-            this, [this](bool) { onClockTick(); });
     // ── USB 插拔检测定时器 ─────────────────────────────────────────────────────
     m_usbTimer = new QTimer(this);
     m_usbTimer->setInterval(5000); // 兜底轮询，主要靠 QFileSystemWatcher 即时触发
@@ -273,11 +261,6 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     });
 
     updateUsbState();
-    // ── 时钟定时器 ────────────────────────────────────────────────────────────
-    m_clockTimer = new QTimer(this);
-    m_clockTimer->setInterval(1000);
-    connect(m_clockTimer, &QTimer::timeout, this, &TopBarRightWidget::onClockTick);
-    m_clockTimer->start();
 }
 
 void TopBarRightWidget::onVolumeChanged(int level)
@@ -330,13 +313,6 @@ void TopBarRightWidget::onVolumeBtnClicked()
                     "background-repeat: no-repeat; background-position: center; }").arg(icon));
     }
     AppSignals::toggleMute();
-}
-
-void TopBarRightWidget::onClockTick()
-{
-    if (m_timeLabel) {
-        m_timeLabel->setText(QDateTime::currentDateTime().toString(AppSignals::timeFormat()));
-    }
 }
 
 void TopBarRightWidget::updateUsbState()

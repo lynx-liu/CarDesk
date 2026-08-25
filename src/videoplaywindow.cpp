@@ -1605,11 +1605,6 @@ void VideoPlayWindow::releaseSdkPlayer()
     m_sdkDi = nullptr;
 }
 
-void VideoPlayWindow::invalidateDeferredPlayRequests()
-{
-    ++m_playGeneration;
-}
-
 bool VideoPlayWindow::waitForPendingSdkRelease(int timeoutMs)
 {
 #ifdef CAR_DESK_USE_T507_SDK
@@ -1735,6 +1730,11 @@ bool VideoPlayWindow::restoreSdkPlaybackAfterInterruption()
     return true;
 }
 #endif
+
+void VideoPlayWindow::invalidateDeferredPlayRequests()
+{
+    ++m_playGeneration;
+}
 
 void VideoPlayWindow::continueSdkVideoSwitch()
 {

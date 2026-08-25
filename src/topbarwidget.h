@@ -13,7 +13,6 @@
  * TopBarRightWidget — 顶部栏右侧状态图标组件
  *
  * 统一封装：BT图标 / USB图标 / 音量图标(QPushButton) / 音量数值(QLabel,固定宽度)
- *           / 时钟(QLabel,每秒刷新)
  *
  * 通过 AppSignals::volumeLevelChanged 信号自动同步音量显示，无需外部调用。
  *
@@ -30,15 +29,14 @@ class TopBarRightWidget : public QWidget {
 public:
     explicit TopBarRightWidget(QWidget *parent = nullptr);
 
-    /** 建议的固定宽度（像素）：BT+USB+vol组+时间+间距之和 */
+    /** 建议的固定宽度（像素）：BT+USB+vol组+间距之和 */
     static int preferredWidth() {
-        return AppSettings::debugMode() ? 400 : 336;
+        return AppSettings::debugMode() ? 234 : 170;
     }
 
 private slots:
     void onVolumeChanged(int level);
     void onVolumeBtnClicked();
-    void onClockTick();
     void onBluetoothStateChanged(bool connected);
     void updateUsbState();
 
@@ -47,9 +45,7 @@ private:
     QPushButton *m_usbBtn   = nullptr;
     QPushButton *m_volBtn    = nullptr;
     QLabel      *m_volLabel  = nullptr;
-    QLabel      *m_timeLabel = nullptr;
     QTimer             *m_usbTimer = nullptr;
-    QTimer             *m_clockTimer = nullptr;
     QTimer             *m_usbDebounceTimer = nullptr;  // /proc/mounts 变化后防抖延迟
     QFileSystemWatcher *m_mountsWatcher = nullptr;
     bool         m_usbConnected = false;
