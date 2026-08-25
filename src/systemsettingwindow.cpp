@@ -1036,111 +1036,6 @@ QWidget *SystemSettingWindow::createDisplayPage()
 
     layout->addWidget(row1);
     layout->addWidget(makeDivider());
-    {
-        QSettings settings;
-        const QString initMode = settings.value("display/screenClockMode", "digital").toString();
-        const bool initAnalog = (initMode == QLatin1String("analog"));
-
-        auto *row = new QWidget(page);
-        row->setFixedHeight(98);
-        auto *h = new QHBoxLayout(row);
-        h->setContentsMargins(0, 27, 0, 27);
-        h->setSpacing(16);
-        auto *title = new QLabel(QStringLiteral("关屏时钟"), row);
-        title->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;}");
-        title->setFixedWidth(170);
-        h->addWidget(title);
-        h->addStretch();
-
-        auto *container = new QWidget(row);
-        container->setFixedSize(240, 44);
-        container->setStyleSheet(initAnalog
-            ? "QWidget{background:url(:/images/butt_setting_choose_right.png) no-repeat;}"
-            : "QWidget{background:url(:/images/butt_setting_choose_left.png) no-repeat;}");
-
-        auto *leftBtn  = new QPushButton(QStringLiteral("数字"),  container);
-        auto *rightBtn = new QPushButton(QStringLiteral("模拟"),  container);
-        leftBtn->setGeometry(0,   0, 120, 44);
-        rightBtn->setGeometry(120, 0, 120, 44);
-        const QString btnStyle =
-            "QPushButton{border:none;background:transparent;color:#fff;font-size:24px;}"
-            "QPushButton:hover{color:#00faff;}"
-            "QPushButton:focus, QPushButton:checked:focus, QPushButton:focus-visible {outline:none;border:none;}";
-        leftBtn->setStyleSheet(btnStyle);
-        rightBtn->setStyleSheet(btnStyle);
-        leftBtn->setCursor(Qt::PointingHandCursor);
-        rightBtn->setCursor(Qt::PointingHandCursor);
-
-        QObject::connect(leftBtn, &QPushButton::clicked, container, [container]() {
-            container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_left.png) no-repeat;}");
-            QSettings s;
-            s.setValue("display/screenClockMode", "digital");
-            s.sync();
-            qApp->setProperty("appScreenClockMode", QStringLiteral("digital"));
-        });
-        QObject::connect(rightBtn, &QPushButton::clicked, container, [container]() {
-            container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_right.png) no-repeat;}");
-            QSettings s;
-            s.setValue("display/screenClockMode", "analog");
-            s.sync();
-            qApp->setProperty("appScreenClockMode", QStringLiteral("analog"));
-        });
-
-        h->addWidget(container);
-        layout->addWidget(row);
-    }
-    layout->addWidget(makeDivider());
-
-    // 时钟制式行（单独实现以便连接 AppSignals::clockFormatChanged）
-    {
-        const bool init24h = qApp->property("appClock24h").toBool();
-        auto *clockRow = new QWidget(page);
-        clockRow->setFixedHeight(98);
-        auto *h = new QHBoxLayout(clockRow);
-        h->setContentsMargins(0, 27, 0, 27);
-        h->setSpacing(16);
-        auto *title = new QLabel(QStringLiteral("时钟制式"), clockRow);
-        title->setStyleSheet("QLabel{font-size:32px;color:#eaf2ff;}");
-        title->setFixedWidth(170);
-        h->addWidget(title);
-        h->addStretch();
-        auto *container = new QWidget(clockRow);
-        container->setFixedSize(240, 44);
-        container->setStyleSheet(init24h
-            ? "QWidget{background:url(:/images/butt_setting_choose_right.png) no-repeat;}"
-            : "QWidget{background:url(:/images/butt_setting_choose_left.png) no-repeat;}");
-        auto *h12Btn = new QPushButton(QStringLiteral("12小时"), container);
-        auto *h24Btn = new QPushButton(QStringLiteral("24小时"), container);
-        h12Btn->setGeometry(0,   0, 120, 44);
-        h24Btn->setGeometry(120, 0, 120, 44);
-        const QString btnStyle =
-            "QPushButton{border:none;background:transparent;color:#fff;font-size:24px;}"
-            "QPushButton:hover{color:#00faff;}"
-            "QPushButton:focus, QPushButton:checked:focus, QPushButton:focus-visible {outline:none;border:none;}";
-        h12Btn->setStyleSheet(btnStyle);
-        h24Btn->setStyleSheet(btnStyle);
-        h12Btn->setCursor(Qt::PointingHandCursor);
-        h24Btn->setCursor(Qt::PointingHandCursor);
-        QObject::connect(h12Btn, &QPushButton::clicked, container, [container]() {
-            container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_left.png) no-repeat;}");
-            QSettings settings;
-            settings.setValue("display/clock24h", false);
-            settings.sync();
-            qApp->setProperty("appClock24h", false);
-            AppSignals::instance()->clockFormatChanged(false);
-        });
-        QObject::connect(h24Btn, &QPushButton::clicked, container, [container]() {
-            container->setStyleSheet("QWidget{background:url(:/images/butt_setting_choose_right.png) no-repeat;}");
-            QSettings settings;
-            settings.setValue("display/clock24h", true);
-            settings.sync();
-            qApp->setProperty("appClock24h", true);
-            AppSignals::instance()->clockFormatChanged(true);
-        });
-        h->addWidget(container);
-        layout->addWidget(clockRow);
-        layout->addWidget(makeDivider());
-    }
 
     {
         const bool initEnabled = AppSettings::drivingVideoEnabled();
@@ -2159,8 +2054,7 @@ QWidget *SystemSettingWindow::createInfoPage()
     const QList<QPair<QString, QString>> rows = {
         {QStringLiteral("软件版本："), QStringLiteral(APP_VERSION)},
         {QStringLiteral("固件版本："), readFirmwareVersion()},
-        {QStringLiteral("电子手册版本："), QStringLiteral("1.0")},
-        {QStringLiteral("系统更新日期："), QStringLiteral(APP_BUILD_DATE)}
+        {QStringLiteral("电子手册版本："), QStringLiteral("1.0")}
     };
 
     for (const auto &row : rows) {

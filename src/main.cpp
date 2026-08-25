@@ -1363,26 +1363,17 @@ int main(int argc, char *argv[]) {
                         qDebug() << "KEY_N => cabin illumination OFF";
                         automotiveSetIllumination(false);
                         continue;
-                    case KEY_SLEEP:
-                        qDebug() << "KEY_SLEEP => blank screen";
-                        // 不投递 KeyPress，在此补点屏音
-                        scheduleTouchClickSound();
-                        if (DrivingImageWindow *drive = findDrivingImageWindow()) {
-                            if (!drive->isVisible()) {
-                                ScreenBlanker::instance()->blank();
-                            }
-                        }
-                        break;
                     case KEY_POWER:
-                        // 不投递 KeyPress，在此补点屏音
+                        // 不投递 KeyPress，在此补点屏音（ev.value==1 过滤已忽略长按重复）
                         scheduleTouchClickSound();
                         if (ScreenBlanker::instance()->isBlanked()) {
-                            qDebug() << "[InputNotifier] ev.code=116 KEY_POWER => unblank screen";
+                            qDebug() << "KEY_POWER => unblank screen";
                             ScreenBlanker::instance()->unblank();
                         } else {
+                            qDebug() << "KEY_POWER => blank screen";
                             if (DrivingImageWindow *drive = findDrivingImageWindow()) {
                                 if (!drive->isVisible()) {
-                                    ScreenBlanker::instance()->toggle();
+                                    ScreenBlanker::instance()->blank();
                                 }
                             }
                         }
