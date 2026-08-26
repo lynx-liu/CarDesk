@@ -852,16 +852,16 @@ void VideoPlayWindow::updateTitle() {
 
 bool VideoPlayWindow::isDrivingRecordPlayback() const
 {
-    return m_playbackOrigin == VideoPlaybackOrigin::DrivingRecord && !m_recordDateKey.isEmpty();
+    return m_playbackOrigin == VideoPlaybackOrigin::DrivingRecord;
 }
 
 void VideoPlayWindow::reloadDrivingRecordPlaylist()
 {
-    if (m_recordDateKey.isEmpty()) {
+    if (!isDrivingRecordPlayback()) {
         return;
     }
     m_videoFiles = AhdRecordStore::filterExistingFiles(
-        AhdRecordStore::listVideoFilesForDate(m_recordDateKey));
+        AhdRecordStore::listAllVideoFilesOrdered());
 }
 
 bool VideoPlayWindow::selectAdjacentRecordFile(int direction)
@@ -948,7 +948,6 @@ void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex,
     m_resumePath.clear();
     m_resumePositionMs = 0;
     m_playbackOrigin = origin;
-    m_recordDateKey.clear();
 #ifdef CAR_DESK_USE_T507_SDK
     if (m_useSdkPlayer) {
         forceReleaseSdkPlayer();
@@ -961,8 +960,7 @@ void VideoPlayWindow::setVideoFiles(const QStringList &files, int currentIndex,
         const int anchorIdx = qBound(0, currentIndex, files.count() - 1);
         if (origin == VideoPlaybackOrigin::DrivingRecord
             || cedarxIsAhdRecordVideoPath(files.at(anchorIdx))) {
-            m_recordDateKey = AhdRecordStore::dateKeyForFile(files.at(anchorIdx));
-            // 回放页已传入当日列表，只过滤失效项，禁止再整树 listVideoFilesForDate
+            // 回放页已传入完整有序列表，只过滤失效项，避免再整树扫盘
             const QString anchorPath = files.at(anchorIdx);
             m_videoFiles = AhdRecordStore::filterExistingFiles(m_videoFiles);
             if (m_videoFiles.isEmpty()) {

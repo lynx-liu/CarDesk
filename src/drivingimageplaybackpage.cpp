@@ -13,7 +13,6 @@
 #include <QPaintEvent>
 #include <QPushButton>
 #include <QShowEvent>
-#include <QStackedWidget>
 #include <QSizePolicy>
 #include <QTextDocument>
 #include <QTextCursor>
@@ -203,7 +202,7 @@ DrivingImagePlaybackPage::DrivingImagePlaybackPage(QWidget *parent)
         }
     });
 
-    reloadDates();
+    reloadFiles();
 }
 
 void DrivingImagePlaybackPage::setupUI()
@@ -218,58 +217,28 @@ void DrivingImagePlaybackPage::setupUI()
             &DrivingImagePlaybackPage::requestReturnToMain);
     root->addWidget(m_topBar);
 
-    m_backBtn = new QPushButton(this);
-    m_backBtn->setGeometry(60, 103, 60, 60);
-    m_backBtn->setFocusPolicy(Qt::NoFocus);
-    m_backBtn->hide();
-    m_backBtn->setStyleSheet(
-        QStringLiteral("QPushButton{border:none;background-image:url(:/images/butt_back_up.png);"
-                       "background-repeat:no-repeat;background-position:center;}"
-                       "QPushButton:hover,QPushButton:pressed{"
-                       "background-image:url(:/images/butt_back_down.png);}"));
-    connect(m_backBtn, &QPushButton::clicked, this, [this]() { showDateList(); });
-
     auto *content = new QWidget(this);
     auto *contentLayout = new QVBoxLayout(content);
     contentLayout->setContentsMargins(0, 48, 0, 0);
     contentLayout->setSpacing(0);
 
-    m_stack = new QStackedWidget(content);
-    m_stack->setStyleSheet(QStringLiteral("background:transparent;border:none;"));
-
-    auto *datePage = new QWidget(m_stack);
-    auto *dateLayout = new QVBoxLayout(datePage);
-    dateLayout->setContentsMargins(0, 0, 0, 0);
-    dateLayout->setSpacing(0);
-
-    m_emptyHint = new QLabel(QStringLiteral("暂无录像"), datePage);
+    m_emptyHint = new QLabel(QStringLiteral("暂无录像"), content);
     m_emptyHint->setAlignment(Qt::AlignCenter);
     m_emptyHint->setStyleSheet(
         QStringLiteral("color:#eaf2ff;font-size:28px;background:transparent;border:none;"));
     m_emptyHint->hide();
 
-    auto *dateGridCenter = new QHBoxLayout();
-    dateGridCenter->addStretch();
-    m_dateGridHost = createGridHost(&m_dateGrid);
-    dateGridCenter->addWidget(m_dateGridHost);
-    dateGridCenter->addStretch();
-
-    dateLayout->addWidget(m_emptyHint, 1);
-    dateLayout->addLayout(dateGridCenter);
-
-    auto *filePage = new QWidget(m_stack);
-    auto *fileLayout = new QVBoxLayout(filePage);
-    fileLayout->setContentsMargins(0, 0, 0, 0);
-    fileLayout->setSpacing(0);
     auto *fileGridCenter = new QHBoxLayout();
     fileGridCenter->addStretch();
     m_fileGridHost = createGridHost(&m_fileGrid);
     fileGridCenter->addWidget(m_fileGridHost);
     fileGridCenter->addStretch();
-    fileLayout->addLayout(fileGridCenter);
 
-    m_datePageIndex = m_stack->addWidget(datePage);
-    m_stack->addWidget(filePage);
+    auto *listArea = new QVBoxLayout();
+    listArea->setContentsMargins(0, 0, 0, 0);
+    listArea->setSpacing(0);
+    listArea->addWidget(m_emptyHint, 1);
+    listArea->addLayout(fileGridCenter);
 
     auto *pageBtnWrap = new QWidget(content);
     pageBtnWrap->setFixedWidth(597);
@@ -297,7 +266,7 @@ void DrivingImagePlaybackPage::setupUI()
     pageBtnCenter->addWidget(pageBtnWrap);
     pageBtnCenter->addStretch();
 
-    contentLayout->addWidget(m_stack, 1);
+    contentLayout->addLayout(listArea, 1);
     contentLayout->addLayout(pageBtnCenter);
     root->addWidget(content, 1);
 
@@ -306,24 +275,15 @@ void DrivingImagePlaybackPage::setupUI()
             return;
         }
         --m_currentPage;
-        if (m_showingFiles) {
-            populateFileGrid();
-        } else {
-            populateDateGrid();
-        }
+        populateFileGrid();
     });
     connect(m_nextPageBtn, &QPushButton::clicked, this, [this]() {
-        const int total = m_showingFiles ? m_allFiles.size() : m_allDates.size();
-        const int maxPage = qMax(0, (total - 1) / kItemsPerPage);
+        const int maxPage = qMax(0, (m_allFiles.size() - 1) / kItemsPerPage);
         if (m_currentPage >= maxPage) {
             return;
         }
         ++m_currentPage;
-        if (m_showingFiles) {
-            populateFileGrid();
-        } else {
-            populateDateGrid();
-        }
+        populateFileGrid();
     });
 }
 
@@ -332,7 +292,6 @@ void DrivingImagePlaybackPage::showEvent(QShowEvent *event)
     QWidget::showEvent(event);
     m_launchingPlayback = false;
     clearTilePressedStates(m_fileGrid);
-    clearTilePressedStates(m_dateGrid);
     if (m_skipRefreshOnNextShow) {
         m_skipRefreshOnNextShow = false;
         return;
@@ -342,68 +301,47 @@ void DrivingImagePlaybackPage::showEvent(QShowEvent *event)
 
 void DrivingImagePlaybackPage::refreshCurrentView()
 {
-    if (m_showingFiles && !m_currentDate.isEmpty()) {
-        const int page = m_currentPage;
-        m_allFiles = AhdRecordStore::filterExistingFiles(
-            AhdRecordStore::listVideoFilesForDate(m_currentDate));
-        const int maxPage = m_allFiles.isEmpty()
-            ? 0
-            : qMax(0, (m_allFiles.size() - 1) / kItemsPerPage);
-        m_currentPage = qMin(page, maxPage);
-        if (m_emptyHint) {
-            m_emptyHint->setVisible(m_allFiles.isEmpty());
-        }
-        populateFileGrid();
-        return;
+    const int page = m_currentPage;
+    m_allFiles = AhdRecordStore::filterExistingFiles(
+        AhdRecordStore::listAllVideoFilesOrdered());
+    const int maxPage = m_allFiles.isEmpty()
+        ? 0
+        : qMax(0, (m_allFiles.size() - 1) / kItemsPerPage);
+    m_currentPage = qMin(page, maxPage);
+    if (m_emptyHint) {
+        m_emptyHint->setVisible(m_allFiles.isEmpty());
     }
-    reloadDates();
+    if (m_fileGridHost) {
+        m_fileGridHost->setVisible(!m_allFiles.isEmpty());
+    }
+    populateFileGrid();
 }
 
-void DrivingImagePlaybackPage::reloadDates()
+void DrivingImagePlaybackPage::reloadFiles()
 {
-    m_allDates = AhdRecordStore::listDateFolders();
     m_currentPage = 0;
-    m_showingFiles = false;
-    const bool empty = m_allDates.isEmpty();
-    if (m_emptyHint) {
-        m_emptyHint->setVisible(empty);
-    }
-    if (m_dateGridHost) {
-        m_dateGridHost->setVisible(!empty);
-    }
-    populateDateGrid();
-    showDateList();
+    refreshCurrentView();
 }
 
 void DrivingImagePlaybackPage::restoreAfterVideoPlayback(const QString &anchorPath)
 {
     m_launchingPlayback = false;
-    if (!m_currentDate.isEmpty()) {
-        m_skipRefreshOnNextShow = true;
-        showFileList(m_currentDate, anchorPath);
-        return;
+    m_skipRefreshOnNextShow = true;
+    m_allFiles = AhdRecordStore::filterExistingFiles(
+        AhdRecordStore::listAllVideoFilesOrdered());
+    const int maxPage = m_allFiles.isEmpty()
+        ? 0
+        : qMax(0, (m_allFiles.size() - 1) / kItemsPerPage);
+    const int fileIndex = indexOfRecordPath(m_allFiles, anchorPath);
+    m_currentPage = fileIndex >= 0 ? (fileIndex / kItemsPerPage) : 0;
+    m_currentPage = qBound(0, m_currentPage, maxPage);
+    if (m_emptyHint) {
+        m_emptyHint->setVisible(m_allFiles.isEmpty());
     }
-    reloadDates();
-}
-
-void DrivingImagePlaybackPage::populateDateGrid()
-{
-    clearGrid(m_dateGrid);
-    const int start = m_currentPage * kItemsPerPage;
-    const int end = qMin(start + kItemsPerPage, m_allDates.size());
-    int slot = 0;
-    for (int i = start; i < end; ++i) {
-        const QString &dateKey = m_allDates.at(i);
-        auto *tile = new PlaybackTileButton(
-            dateKey,
-            QStringLiteral(":/images/butt_driving_image_playback_folder_up.png"),
-            QStringLiteral(":/images/butt_driving_image_playback_folder_down.png"),
-            m_dateGridHost);
-        connect(tile, &QPushButton::released, this, [this, dateKey]() { showFileList(dateKey); });
-        m_dateGrid->addWidget(tile, slot / kGridCols, slot % kGridCols);
-        ++slot;
+    if (m_fileGridHost) {
+        m_fileGridHost->setVisible(!m_allFiles.isEmpty());
     }
-    updatePageButtons();
+    populateFileGrid();
 }
 
 void DrivingImagePlaybackPage::populateFileGrid()
@@ -428,8 +366,7 @@ void DrivingImagePlaybackPage::populateFileGrid()
 
 void DrivingImagePlaybackPage::updatePageButtons()
 {
-    const int total = m_showingFiles ? m_allFiles.size() : m_allDates.size();
-    const int maxPage = qMax(0, (total - 1) / kItemsPerPage);
+    const int maxPage = qMax(0, (m_allFiles.size() - 1) / kItemsPerPage);
     if (m_prevPageBtn) {
         m_prevPageBtn->setEnabled(m_currentPage > 0);
     }
@@ -438,47 +375,19 @@ void DrivingImagePlaybackPage::updatePageButtons()
     }
 }
 
-void DrivingImagePlaybackPage::showDateList()
-{
-    m_showingFiles = false;
-    m_currentPage = 0;
-    m_stack->setCurrentIndex(m_datePageIndex);
-    m_backBtn->hide();
-    populateDateGrid();
-}
-
-void DrivingImagePlaybackPage::showFileList(const QString &dateKey, const QString &anchorPath)
-{
-    m_currentDate = dateKey;
-    m_allFiles = AhdRecordStore::filterExistingFiles(AhdRecordStore::listVideoFilesForDate(dateKey));
-    m_showingFiles = true;
-
-    const int maxPage = m_allFiles.isEmpty()
-        ? 0
-        : qMax(0, (m_allFiles.size() - 1) / kItemsPerPage);
-    const int fileIndex = indexOfRecordPath(m_allFiles, anchorPath);
-    m_currentPage = fileIndex >= 0 ? (fileIndex / kItemsPerPage) : 0;
-    m_currentPage = qBound(0, m_currentPage, maxPage);
-
-    populateFileGrid();
-    m_stack->setCurrentIndex(1);
-    m_backBtn->show();
-    m_backBtn->raise();
-}
-
 void DrivingImagePlaybackPage::playFile(const QString &path)
 {
     if (m_launchingPlayback) {
         return;
     }
 
-    // 列表页已有当日文件；打开时只过滤失效项，避免再整树扫盘卡住 UI
+    // 列表页已有文件列表；打开时只过滤失效项，避免再整树扫盘卡住 UI
     m_allFiles = AhdRecordStore::filterExistingFiles(m_allFiles);
     int index = m_allFiles.indexOf(path);
     if (index < 0 || !QFileInfo::exists(path)) {
-        // 锚点失效时才补一次当日扫描
+        // 锚点失效时才补一次全量扫描
         m_allFiles = AhdRecordStore::filterExistingFiles(
-            AhdRecordStore::listVideoFilesForDate(m_currentDate));
+            AhdRecordStore::listAllVideoFilesOrdered());
         index = m_allFiles.indexOf(path);
         if (m_allFiles.isEmpty() || index < 0 || !QFileInfo::exists(path)) {
             clearTilePressedStates(m_fileGrid);

@@ -11,9 +11,8 @@ public:
     /** 仅 TfCardMonitor 在 rescan 后调用 */
     static void updateStorageCache(bool present, const QStringList &roots);
 
-    static QStringList listDateFolders();
-    static QStringList listVideoFilesForDate(const QString &dateKey);
-    static QString dateKeyForFile(const QString &filePath);
+    /** 全部录像文件，按 SDK 实际写入顺序（最旧→最新），不依赖文件名时间 */
+    static QStringList listAllVideoFilesOrdered();
     static QStringList filterExistingFiles(const QStringList &paths);
     static QString displayNameForFile(const QString &filePath);
 

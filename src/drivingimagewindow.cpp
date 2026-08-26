@@ -620,7 +620,7 @@ void DrivingImageWindow::onSdcardStateChanged(bool hasTf)
         m_settingsPage->refreshStorageState();
     }
     if (m_playbackPage && storageChanged) {
-        m_playbackPage->reloadDates();
+        m_playbackPage->reloadFiles();
     }
     if (m_stack && m_stack->currentIndex() == 0 && m_ahdManager) {
         if (hasTf) {
@@ -782,7 +782,7 @@ void DrivingImageWindow::showPage(int index, int drivingModeOverride)
         m_previewChromeVisible = false;
         m_ahdManager->stopPreview();
         if (index == 2 && m_playbackPage) {
-            m_playbackPage->reloadDates();
+            m_playbackPage->reloadFiles();
         }
     }
     updatePreviewChrome();

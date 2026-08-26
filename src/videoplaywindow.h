@@ -141,7 +141,6 @@ private:
     int m_resumePositionMs;    // HOME 退出前的播放位置（ms）
     int m_resumeInterruptPositionMs; // 其他中断时的视频恢复位置（ms）
     VideoPlaybackOrigin m_playbackOrigin = VideoPlaybackOrigin::None;
-    QString m_recordDateKey;
     int m_switchDirection = 1;
     /** 隐藏/换片时递增，作废排队的延后 onPlayVideo */
     int m_playGeneration = 0;

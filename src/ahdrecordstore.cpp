@@ -1,14 +1,11 @@
 #include "ahdrecordstore.h"
 #include "tfcarddetect.h"
 
-#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QMutex>
 #include <QMutexLocker>
-#include <QRegularExpression>
-#include <QSet>
 
 #include <algorithm>
 
@@ -37,21 +34,6 @@ QStringList cachedRecordRoots()
     return storageCache().roots;
 }
 
-bool parseRecordTimestamp(const QString &baseName, QString *dateKey)
-{
-    static const QRegularExpression re(
-        QStringLiteral(R"((\d{4})(\d{2})(\d{2})_(\d{6}))"));
-    const QRegularExpressionMatch match = re.match(baseName);
-    if (!match.hasMatch()) {
-        return false;
-    }
-    if (dateKey) {
-        *dateKey = QStringLiteral("%1.%2.%3")
-                       .arg(match.captured(1), match.captured(2), match.captured(3));
-    }
-    return true;
-}
-
 void collectMp4(const QString &dirPath, QStringList *out)
 {
     QDir dir(dirPath);
@@ -68,44 +50,47 @@ void collectMp4(const QString &dirPath, QStringList *out)
     }
 }
 
-QString dateKeyFromFileInfo(const QFileInfo &fi)
+// SDK 录像文件名形如 "3-20260826_101512_CH1.mp4"，前缀数字是环形槽位号
+int slotIndexFromPath(const QString &path)
 {
-    const QString baseName = fi.completeBaseName();
-    QString dateKey;
-    if (parseRecordTimestamp(baseName, &dateKey)) {
-        return dateKey;
+    const QString name = QFileInfo(path).fileName();
+    const int dash = name.indexOf(QLatin1Char('-'));
+    if (dash <= 0) {
+        return -1;
     }
-
-    if (baseName.size() >= 10 && baseName.at(4) == QLatin1Char('.') && baseName.at(7) == QLatin1Char('.')) {
-        return baseName.left(10);
-    }
-
-    const QDir parentDir = fi.dir();
-    const QString parentName = parentDir.dirName();
-    if (parentName.size() >= 10 && parentName.at(4) == QLatin1Char('.') && parentName.at(7) == QLatin1Char('.')) {
-        return parentName.left(10);
-    }
-    if (parentName.size() == 8 && parentName.at(0).isDigit()) {
-        return QStringLiteral("%1.%2.%3")
-            .arg(parentName.mid(0, 4))
-            .arg(parentName.mid(4, 2))
-            .arg(parentName.mid(6, 2));
-    }
-
-    return fi.lastModified().toString(QStringLiteral("yyyy.MM.dd"));
+    bool ok = false;
+    const int idx = name.left(dash).toInt(&ok);
+    return (ok && idx >= 0) ? idx : -1;
 }
 
-quint64 recordFileTimeSortKey(const QString &path)
+// SDK 环形写入指针（下一个要覆盖的槽位，即最旧文件的槽位），
+// 由 sdk_camera 持久化在 /etc/dvrconfig.ini 的 [camera0] cur-fileidx，App 只读
+int sdkRecordWriteIndex()
 {
-    static const QRegularExpression re(
-        QStringLiteral(R"((\d{4})(\d{2})(\d{2})_(\d{6}))"));
-    const QRegularExpressionMatch match =
-        re.match(QFileInfo(path).completeBaseName());
-    if (match.hasMatch()) {
-        return match.captured(1).toUInt() * 10000000000ULL + match.captured(2).toUInt() * 100000000ULL
-               + match.captured(3).toUInt() * 1000000ULL + match.captured(4).toUInt();
+    QFile file(QStringLiteral("/etc/dvrconfig.ini"));
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return 0;
     }
-    return static_cast<quint64>(QFileInfo(path).lastModified().toSecsSinceEpoch());
+    bool inCameraSection = false;
+    while (!file.atEnd()) {
+        const QString line = QString::fromLatin1(file.readLine()).trimmed();
+        if (line.startsWith(QLatin1Char('['))) {
+            inCameraSection = (line == QLatin1String("[camera0]"));
+            continue;
+        }
+        if (!inCameraSection || !line.startsWith(QLatin1String("cur-fileidx"))) {
+            continue;
+        }
+        const int eq = line.indexOf(QLatin1Char('='));
+        if (eq > 0) {
+            bool ok = false;
+            const int idx = line.mid(eq + 1).trimmed().toInt(&ok);
+            if (ok && idx >= 0) {
+                return idx;
+            }
+        }
+    }
+    return 0;
 }
 
 } // namespace
@@ -128,24 +113,34 @@ bool AhdRecordStore::hasRecordStorage()
     return storageCache().present;
 }
 
-QStringList AhdRecordStore::listDateFolders()
+QStringList AhdRecordStore::listAllVideoFilesOrdered()
 {
-    QSet<QString> dates;
     QStringList all;
     for (const QString &root : cachedRecordRoots()) {
         collectMp4(root, &all);
     }
-    for (const QString &path : all) {
-        dates.insert(dateKeyFromFileInfo(QFileInfo(path)));
-    }
-    QStringList sorted = dates.values();
-    std::sort(sorted.begin(), sorted.end(), std::greater<QString>());
-    return sorted;
-}
 
-QString AhdRecordStore::dateKeyForFile(const QString &filePath)
-{
-    return dateKeyFromFileInfo(QFileInfo(filePath));
+    // 实际写入顺序：SDK 按槽位号环形覆盖，写入指针指向最旧的槽位；
+    // 从指针处回绕展开即为“最旧→最新”，不依赖文件名里的时间（系统时间可能不准）
+    const int writeIdx = sdkRecordWriteIndex();
+    constexpr quint64 kWrap = 1000000ULL;
+    auto orderKey = [writeIdx](const QString &path) -> quint64 {
+        const int slot = slotIndexFromPath(path);
+        if (slot < 0) {
+            return kWrap * 2;  // 无槽位号的文件排在最后
+        }
+        return slot >= writeIdx ? quint64(slot - writeIdx)
+                                : quint64(slot) + kWrap - quint64(writeIdx);
+    };
+    std::sort(all.begin(), all.end(), [&orderKey](const QString &a, const QString &b) {
+        const quint64 ka = orderKey(a);
+        const quint64 kb = orderKey(b);
+        if (ka != kb) {
+            return ka < kb;
+        }
+        return QFileInfo(a).fileName().compare(QFileInfo(b).fileName(), Qt::CaseInsensitive) < 0;
+    });
+    return all;
 }
 
 QStringList AhdRecordStore::filterExistingFiles(const QStringList &paths)
@@ -158,29 +153,6 @@ QStringList AhdRecordStore::filterExistingFiles(const QStringList &paths)
         }
     }
     return existing;
-}
-
-QStringList AhdRecordStore::listVideoFilesForDate(const QString &dateKey)
-{
-    QStringList matched;
-    QStringList all;
-    for (const QString &root : cachedRecordRoots()) {
-        collectMp4(root, &all);
-    }
-    for (const QString &path : all) {
-        if (dateKeyFromFileInfo(QFileInfo(path)) == dateKey) {
-            matched.append(path);
-        }
-    }
-    std::sort(matched.begin(), matched.end(), [](const QString &a, const QString &b) {
-        const quint64 ka = recordFileTimeSortKey(a);
-        const quint64 kb = recordFileTimeSortKey(b);
-        if (ka != kb) {
-            return ka < kb;
-        }
-        return QFileInfo(a).fileName().compare(QFileInfo(b).fileName(), Qt::CaseInsensitive) < 0;
-    });
-    return matched;
 }
 
 QString AhdRecordStore::displayNameForFile(const QString &filePath)
