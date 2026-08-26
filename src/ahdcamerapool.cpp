@@ -506,20 +506,6 @@ void disableSdkWatermark(dvr_factory *dvr)
     }
 }
 
-void applyRecordingTimestampWatermark(dvr_factory *dvr)
-{
-    CameraHardware *hw = recordingWatermarkHardware(dvr);
-    if (!hw) {
-        return;
-    }
-    if (hw->sendCommand(CAMERA_CMD_START_WATER_MARK, 0, 0) != NO_ERROR) {
-        qWarning() << "[Ahd] enable recording watermark failed camera" << dvr->mCameraId;
-        return;
-    }
-    // 仅一行：SDK 在录像帧上自动刷新时间；VIDEO_ONLY 不画到预览帧。
-    hw->setWaterMarkMultiple(const_cast<char *>("64,64,0"), WATER_MARK_DISP_MODE_VIDEO_ONLY);
-}
-
 } // namespace
 
 bool AhdCameraPool::uses360QuadrantCrop(int width, int height)
@@ -1406,7 +1392,8 @@ void AhdCameraPool::syncRecordingState()
                     continue;
                 }
                 ch.recordOn = true;
-                applyRecordingTimestampWatermark(dvr);
+                // 系统时间可能不同步，录像不再烧录日期时间水印
+                disableSdkWatermark(dvr);
                 qDebug() << "[Ahd] storage recording started camera" << ch.cameraId;
             } else if (!want && (ch.recordOn || isDvrStorageWriting(dvr))) {
                 ch.recordOn = false;
