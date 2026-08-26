@@ -1363,21 +1363,24 @@ int main(int argc, char *argv[]) {
                         qDebug() << "KEY_N => cabin illumination OFF";
                         automotiveSetIllumination(false);
                         continue;
-                    case KEY_POWER:
+                    case KEY_POWER: {
                         // 不投递 KeyPress，在此补点屏音（ev.value==1 过滤已忽略长按重复）
                         scheduleTouchClickSound();
                         if (ScreenBlanker::instance()->isBlanked()) {
                             qDebug() << "KEY_POWER => unblank screen";
                             ScreenBlanker::instance()->unblank();
+                            break;
+                        }
+                        DrivingImageWindow *drive = findDrivingImageWindow();
+                        if (drive && drive->isVisible()) {
+                            // 行车影像界面（手动或转向/倒车）禁止关屏
+                            qDebug() << "KEY_POWER ignored: driving image visible";
                         } else {
                             qDebug() << "KEY_POWER => blank screen";
-                            if (DrivingImageWindow *drive = findDrivingImageWindow()) {
-                                if (!drive->isVisible()) {
-                                    ScreenBlanker::instance()->blank();
-                                }
-                            }
+                            ScreenBlanker::instance()->blank();
                         }
                         break;
+                    }
                     default: break;
                     }
                     if (qtKey == 0) continue;
