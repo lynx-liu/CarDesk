@@ -1418,21 +1418,20 @@ int main(int argc, char *argv[]) {
         AppSignals::setVolumeLevel(savedLevel);
         app.setProperty("appVolumeLevel", savedLevel);
 
-        if (settings.contains(QStringLiteral("brightness/mode"))) {
-            const int mode = settings.value(QStringLiteral("brightness/mode")).toInt();
-            const int daySlider = qBound(0, settings.value(QStringLiteral("brightness/day"), 100).toInt(), 100);
-            const int nightSlider = qBound(0, settings.value(QStringLiteral("brightness/night"), 20).toInt(), 100);
-            int sliderVal = daySlider;
-            if (mode == 1) {
-                sliderVal = nightSlider;
-            } else if (mode == 2) {
-                // 自动：大灯开=夜晚，大灯关=白天（启动时大灯状态通常为关）
-                sliderVal = automotiveIlluminationOn() ? nightSlider : daySlider;
-            }
-            const int bl = Backlight::sliderToBacklight(sliderVal);
-            Backlight::set(bl);
-            qDebug() << "[Boot] restore brightness mode=" << mode << "slider=" << sliderVal << "bl=" << bl;
+        // 从未设置过：默认白天（mode=0，白天亮度 100）
+        const int mode = qBound(0, settings.value(QStringLiteral("brightness/mode"), 0).toInt(), 2);
+        const int daySlider = qBound(0, settings.value(QStringLiteral("brightness/day"), 100).toInt(), 100);
+        const int nightSlider = qBound(0, settings.value(QStringLiteral("brightness/night"), 20).toInt(), 100);
+        int sliderVal = daySlider;
+        if (mode == 1) {
+            sliderVal = nightSlider;
+        } else if (mode == 2) {
+            // 自动：大灯开=夜晚，大灯关=白天（启动时大灯状态通常为关）
+            sliderVal = automotiveIlluminationOn() ? nightSlider : daySlider;
         }
+        const int bl = Backlight::sliderToBacklight(sliderVal);
+        Backlight::set(bl);
+        qDebug() << "[Boot] restore brightness mode=" << mode << "slider=" << sliderVal << "bl=" << bl;
     }
 
     TfCardMonitor::instance()->start();

@@ -900,18 +900,13 @@ QWidget *SystemSettingWindow::createDisplayPage()
     auto *modeRowLayout = new QHBoxLayout(modeRow);
     modeRowLayout->setContentsMargins(0, 0, 0, 0);
     modeRowLayout->setSpacing(2);
-    const int actualSlider = Backlight::backlightToSlider(Backlight::get());
     const int kDefaultDay   = 100;
     const int kDefaultNight = 20;
     QSettings settings;
     const int daySlider   = settings.value("brightness/day", kDefaultDay).toInt();
     const int nightSlider = settings.value("brightness/night", kDefaultNight).toInt();
-    int savedMode = settings.value("brightness/mode", -1).toInt();
-    if (savedMode < 0) {
-        if (actualSlider == daySlider) savedMode = 0;
-        else if (actualSlider == nightSlider) savedMode = 1;
-        else savedMode = 2;
-    }
+    // 从未设置过：默认白天
+    const int savedMode = qBound(0, settings.value("brightness/mode", 0).toInt(), 2);
     const bool initDay   = (savedMode == 0);
     const bool initNight = (savedMode == 1);
     const bool initAuto  = (savedMode == 2);
