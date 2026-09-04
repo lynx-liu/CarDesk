@@ -255,7 +255,7 @@ public:
 
     void blank() {
         if (m_blanked) return;
-        qDebug() << "blank: hiding clock overlay and pausing playback";
+        qDebug() << "blank: black overlay and pausing playback";
         if (MainWindow *main = findMainWindow()) {
             if (main->mediaManager()) {
                 QTimer::singleShot(0, this, [main]() {
@@ -269,9 +269,10 @@ public:
         qDebug() << "blank: saved brightness=" << m_savedBrightness;
         m_blanked = true;
         Backlight::set(0);
+        // 纯黑遮罩挡点屏；勿走 showClock()（会画锁屏时钟）
         if (!isVisible())
-            showClock();
-
+            showOverlayOnly();
+        m_updateTimer.stop();
     }
     void unblank() {
         if (!m_blanked && !m_suspendedForAutomotive)
@@ -316,14 +317,25 @@ public:
         m_suspendedForAutomotive = true;
         m_wasBlankedBeforeSuspend = m_blanked;
         m_wasClockVisibleBeforeSuspend = isVisible();
+        // 关屏时先收遮罩，但背光仍保持 0，等行车窗真正上屏再亮，避免闪时钟
+        m_pendingAutomotiveBrightness = m_wasBlankedBeforeSuspend;
         qDebug() << "blanker: suspend for automotive blanked=" << m_wasBlankedBeforeSuspend
-                 << "clockVisible=" << m_wasClockVisibleBeforeSuspend;
+                 << "clockVisible=" << m_wasClockVisibleBeforeSuspend
+                 << "deferBrightness=" << m_pendingAutomotiveBrightness;
 
         if (isVisible())
             hideClock(false);
+    }
 
-        if (m_wasBlankedBeforeSuspend)
-            restoreBrightnessForAutomotive();
+    void presentAutomotiveDisplay() {
+        if (!m_suspendedForAutomotive)
+            return;
+        if (isVisible())
+            hideClock(false);
+        if (!m_pendingAutomotiveBrightness)
+            return;
+        m_pendingAutomotiveBrightness = false;
+        restoreBrightnessForAutomotive();
     }
 
     void resumeAfterAutomotive() {
@@ -341,8 +353,17 @@ public:
             m_blanked = true;
             Backlight::set(0);
         }
-        if (restoreClock)
+        if (restoreClock) {
             showOverlayOnly();
+            m_updateTimer.stop();
+        }
+    }
+
+protected:
+    // 关屏只挡点屏，不画锁屏时钟
+    void paintEvent(QPaintEvent *) override {
+        QPainter p(this);
+        p.fillRect(rect(), Qt::black);
     }
 
 private:
@@ -350,6 +371,7 @@ private:
         m_suspendedForAutomotive = false;
         m_wasBlankedBeforeSuspend = false;
         m_wasClockVisibleBeforeSuspend = false;
+        m_pendingAutomotiveBrightness = false;
     }
 
     int brightnessForUnblank() const {
@@ -374,6 +396,7 @@ private:
     bool m_suspendedForAutomotive = false;
     bool m_wasBlankedBeforeSuspend = false;
     bool m_wasClockVisibleBeforeSuspend = false;
+    bool m_pendingAutomotiveBrightness = false;
     int  m_savedBrightness = 128;
 };
 
@@ -390,6 +413,11 @@ bool screenBlankerKeepsBacklightOff()
 void screenBlankerSuspendForAutomotive()
 {
     ScreenBlanker::instance()->suspendForAutomotive();
+}
+
+void screenBlankerPresentAutomotiveDisplay()
+{
+    ScreenBlanker::instance()->presentAutomotiveDisplay();
 }
 
 void screenBlankerResumeAfterAutomotive()

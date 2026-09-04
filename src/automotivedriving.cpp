@@ -98,6 +98,8 @@ void activateDrivingImageMode(int mode, bool forceReengage)
         drive->applyAutomotiveMode(mode, forceReengage);
         drive->raise();
         drive->activateWindow();
+        // 行车窗已在前台：立刻恢复背光（关屏暂挂时延后到此）
+        screenBlankerPresentAutomotiveDisplay();
         return;
     }
 

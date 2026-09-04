@@ -678,6 +678,8 @@ void MainWindow::showDrivingImageForAutomotive(int mode)
         win->show();
         win->raise();
         win->activateWindow();
+        // 行车窗已上屏后再亮背光，避免关屏后转向闪锁屏时钟
+        screenBlankerPresentAutomotiveDisplay();
         QTimer::singleShot(0, qApp, []() {
             for (QWidget *tw : QApplication::topLevelWidgets()) {
                 if (tw->isVisible() && tw->isWindow()) {
