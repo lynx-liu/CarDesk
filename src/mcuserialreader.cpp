@@ -2,12 +2,27 @@
 #include "appsignals.h"
 #include "automotivedriving.h"
 
+#include <QApplication>
+#include <QDateTime>
 #include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QSerialPort>
+#include <QTimer>
+
+namespace {
+
+constexpr float kTpmsLeakThresholdPaS = 0.1f; // 分辨率 0.1 Pa/s
+constexpr int kTpmsLeakStaleMs = 3000;
+
+quint32 tpmsSlotKey(int axle, int tire)
+{
+    return (static_cast<quint32>(axle & 0xff) << 8) | static_cast<quint32>(tire & 0xff);
+}
+
+} // namespace
 
 McuSerialReader *McuSerialReader::s_shared = nullptr;
 
@@ -54,6 +69,11 @@ McuSerialReader::McuSerialReader(QObject *parent)
     , m_oelReceived(false)
 {
     connect(m_port, &QSerialPort::readyRead, this, &McuSerialReader::onReadyRead);
+
+    m_tpmsLeakTimer = new QTimer(this);
+    m_tpmsLeakTimer->setInterval(1000);
+    connect(m_tpmsLeakTimer, &QTimer::timeout, this, &McuSerialReader::refreshTpmsLeakWarning);
+    m_tpmsLeakTimer->start();
 }
 
 McuSerialReader::~McuSerialReader()
@@ -216,6 +236,7 @@ void McuSerialReader::parseJsonLine(const QByteArray &raw)
         info.alarm = obj.value(QStringLiteral("alarm")).toString();
         info.mcuTsMs = static_cast<quint32>(obj.value(QStringLiteral("ts")).toVariant().toULongLong());
         emit tpmsReceived(info);
+        noteTpmsLeak(info);
         return;
     }
 
@@ -411,8 +432,44 @@ void McuSerialReader::parseVistTextLine(const QString &name, const QString &kv)
             }
             info.alarm = m.captured(6).isEmpty() ? QStringLiteral("NORMAL") : m.captured(6);
             emit tpmsReceived(info);
+            noteTpmsLeak(info);
         } else {
             qDebug() << "[TXRX TEXT] TPMS parse failed raw=" << kv;
         }
     }
+}
+
+void McuSerialReader::noteTpmsLeak(const McuTpmsInfo &info)
+{
+    if (info.axle < 0 || info.axle > 6 || info.tire < 0 || info.tire > 3) {
+        return;
+    }
+    TpmsLeakSlot &slot = m_tpmsLeakSlots[tpmsSlotKey(info.axle, info.tire)];
+    slot.leakagePaS = info.leakagePaS;
+    slot.lastRxMs = QDateTime::currentMSecsSinceEpoch();
+    refreshTpmsLeakWarning();
+}
+
+void McuSerialReader::refreshTpmsLeakWarning()
+{
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    bool active = false;
+    for (auto it = m_tpmsLeakSlots.begin(); it != m_tpmsLeakSlots.end();) {
+        if ((now - it.value().lastRxMs) > kTpmsLeakStaleMs) {
+            it = m_tpmsLeakSlots.erase(it);
+            continue;
+        }
+        if (it.value().leakagePaS >= kTpmsLeakThresholdPaS) {
+            active = true;
+        }
+        ++it;
+    }
+    if (active == m_tpmsLeakActive) {
+        return;
+    }
+    m_tpmsLeakActive = active;
+    if (qApp) {
+        qApp->setProperty("appTpmsLeakWarning", active);
+    }
+    emit AppSignals::instance()->tpmsLeakWarningChanged(active);
 }

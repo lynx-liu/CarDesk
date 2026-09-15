@@ -12,7 +12,7 @@
 /**
  * TopBarRightWidget — 顶部栏右侧状态图标组件
  *
- * 统一封装：BT图标 / USB图标 / 音量图标(QPushButton) / 音量数值(QLabel,固定宽度)
+ * 统一封装：BT图标 / 漏气图标 / USB图标 / 音量图标(QPushButton) / 音量数值(QLabel,固定宽度)
  *
  * 通过 AppSignals::volumeLevelChanged 信号自动同步音量显示，无需外部调用。
  *
@@ -29,9 +29,9 @@ class TopBarRightWidget : public QWidget {
 public:
     explicit TopBarRightWidget(QWidget *parent = nullptr);
 
-    /** 建议的固定宽度（像素）：BT+USB+vol组+间距之和 */
+    /** 建议的固定宽度（像素）：BT+漏气位+USB+vol组+间距（漏气位始终预留） */
     static int preferredWidth() {
-        return AppSettings::debugMode() ? 234 : 170;
+        return AppSettings::debugMode() ? 298 : 234;
     }
 
 private slots:
@@ -39,9 +39,13 @@ private slots:
     void onVolumeBtnClicked();
     void onBluetoothStateChanged(bool connected);
     void updateUsbState();
+    void onTpmsLeakWarningChanged(bool active);
 
 private:
+    void setLeakIconVisible(bool visible);
+
     QPushButton *m_btBtn    = nullptr;
+    QLabel      *m_leakLab  = nullptr;
     QPushButton *m_usbBtn   = nullptr;
     QPushButton *m_volBtn    = nullptr;
     QLabel      *m_volLabel  = nullptr;

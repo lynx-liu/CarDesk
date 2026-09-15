@@ -41,6 +41,9 @@ signals:
     /** USB 设备插拔状态变化：true=已插入，false=已拔出 */
     void usbStateChanged(bool connected);
 
+    /** 胎压漏气报警：true=有轮漏气，false=无漏气 */
+    void tpmsLeakWarningChanged(bool active);
+
     /** TF 卡插拔状态变化：true=已插入且已挂载，false=未检测到有效存储 */
     void sdcardStateChanged(bool connected);
 

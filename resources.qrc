@@ -6,6 +6,7 @@
         <file alias="pict_bluetooth_on.png">ui/images/pict_buetooth_on.png</file>
         <file alias="pict_usb.png">ui/images/pict_usb.png</file>
         <file alias="pict_usb_on.png">ui/images/pict_usb_on.png</file>
+        <file alias="pict_Leak.png">ui/images/pict_Leak.png</file>
         <file alias="pict_volume.png">ui/images/pict_volume.png</file>
         <file alias="pict_volume_mute.png">ui/images/pict_volume_mute.png</file>
         <file alias="butt_home_radio_up.png">ui/images/butt_home_radio_up.png</file>

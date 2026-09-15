@@ -2,11 +2,13 @@
 #define MCUSERIALREADER_H
 
 #include <QByteArray>
+#include <QHash>
 #include <QObject>
 #include <QString>
 #include <QVector>
 
 class QSerialPort;
+class QTimer;
 
 // 单条故障信息（来自 MCU DM1 报文）
 struct McuFaultInfo {
@@ -84,6 +86,8 @@ private:
     // 解析 VIST TEXT 行（[ts][#seq][NAME] key=value ...）
     void parseVistTextLine(const QString &name, const QString &kv);
     void emitLcIfChanged();
+    void noteTpmsLeak(const McuTpmsInfo &info);
+    void refreshTpmsLeakWarning();
 
     static McuSerialReader *s_shared;
     QSerialPort          *m_port;
@@ -101,6 +105,14 @@ private:
     int                   m_lastEmittedRTurn = -1;
     int                   m_lastEmittedLTurn = -1;
     int                   m_lastEmittedBackup = -1;
+
+    struct TpmsLeakSlot {
+        float leakagePaS = 0.f;
+        qint64 lastRxMs = 0;
+    };
+    QHash<quint32, TpmsLeakSlot> m_tpmsLeakSlots;
+    QTimer *m_tpmsLeakTimer = nullptr;
+    bool m_tpmsLeakActive = false;
 };
 
 Q_DECLARE_METATYPE(McuTpmsInfo)

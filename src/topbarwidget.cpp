@@ -5,6 +5,7 @@
 
 #include <QHBoxLayout>
 #include <QApplication>
+#include <QPixmap>
 
 static const QString kUsbMountDir    = QStringLiteral("/mnt/usb");
 static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
@@ -185,6 +186,20 @@ TopBarRightWidget::TopBarRightWidget(QWidget *parent)
     connect(AppSignals::instance(), &AppSignals::bluetoothConnectedChanged,
             this, &TopBarRightWidget::onBluetoothStateChanged);
 
+    // ── 胎压漏气图标（USB 左侧；无报警时占位隐藏内容）────────────────────────
+    m_leakLab = new QLabel(this);
+    m_leakLab->setFixedSize(48, 48);
+    m_leakLab->setAlignment(Qt::AlignCenter);
+    m_leakLab->setStyleSheet(QStringLiteral("QLabel{background:transparent;border:none;}"));
+    m_leakLab->setToolTip(QStringLiteral("胎压漏气"));
+    setLeakIconVisible(false);
+    outerLay->addWidget(m_leakLab);
+    connect(AppSignals::instance(), &AppSignals::tpmsLeakWarningChanged,
+            this, &TopBarRightWidget::onTpmsLeakWarningChanged);
+    if (qApp && qApp->property("appTpmsLeakWarning").toBool()) {
+        setLeakIconVisible(true);
+    }
+
     // ── USB 图标 ─────────────────────────────────────────────────────────────
     m_usbBtn = new QPushButton(this);
     m_usbBtn->setFixedSize(48, 48);
@@ -358,4 +373,22 @@ void TopBarRightWidget::updateUsbState()
         QString("QPushButton { border: none; background-image: url(%1); "
                 "background-repeat: no-repeat; background-position: center; }")
             .arg(icon));
+}
+
+void TopBarRightWidget::onTpmsLeakWarningChanged(bool active)
+{
+    setLeakIconVisible(active);
+}
+
+void TopBarRightWidget::setLeakIconVisible(bool visible)
+{
+    if (!m_leakLab) {
+        return;
+    }
+    if (visible) {
+        m_leakLab->setPixmap(QPixmap(QStringLiteral(":/images/pict_Leak.png")).scaled(
+            48, 48, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    } else {
+        m_leakLab->clear();
+    }
 }
