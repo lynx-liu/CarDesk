@@ -16,6 +16,17 @@ struct McuFaultInfo {
     QString rawDesc;  // MCU 原始英文描述（作为备用显示）
 };
 
+// 胎压一条（MCU TPMS JSON/TEXT）
+struct McuTpmsInfo {
+    int     axle = 0;           // 0=前桥 … 6=备胎
+    int     tire = 0;           // 0~3 从左到右
+    int     pressureKpa = 0;
+    float   temperatureC = 0.f;
+    float   leakagePaS = 0.f;
+    QString alarm;              // NORMAL/LOW/HIGH/ULTRA_LOW/ULTRA_HIGH
+    quint32 mcuTsMs = 0;        // MCU 上电毫秒
+};
+
 /**
  * @brief 从 /dev/ttyS2 (115200,8N1) 读取 MCU TEXT 格式 DM1 输出，
  *        解析后通过 dm1Received 信号发出故障列表。
@@ -59,6 +70,8 @@ signals:
     void lcReceived(int rTurn, int lTurn, int backup);
     // TD 时间日期：年月日时分（已解码，可直接使用）
     void tdReceived(int year, int month, int day, int hour, int min);
+    // 胎压一条（JSON type=TPMS 或 TEXT [TPMS]）
+    void tpmsReceived(const McuTpmsInfo &info);
     // 升级模式下的原始接收数据
     void rawDataReceived(const QByteArray &data);
 
@@ -89,5 +102,7 @@ private:
     int                   m_lastEmittedLTurn = -1;
     int                   m_lastEmittedBackup = -1;
 };
+
+Q_DECLARE_METATYPE(McuTpmsInfo)
 
 #endif // MCUSERIALREADER_H

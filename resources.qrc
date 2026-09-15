@@ -186,6 +186,10 @@
         <file alias="pict_brightness_low.png">ui/images/pict_brightness_low.png</file>
         <file alias="pict_brightness_high.png">ui/images/pict_brightness_high.png</file>
         <file alias="pict_brightness_mark.png">ui/images/pict_brightness_mark.png</file>
+        <file alias="pic_setting_tire_bg.png">ui/images/pic_setting_tire_bg.png</file>
+        <file alias="pic_setting_tire_gc.png">ui/images/pic_setting_tire_gc.png</file>
+        <file alias="pic_setting_tire_line.png">ui/images/pic_setting_tire_line.png</file>
+        <file alias="pic_setting_tire_qyt.png">ui/images/pic_setting_tire_qyt.png</file>
         <file alias="pict_volume_low.png">ui/images/pict_volume_low.png</file>
         <file alias="pict_volume_loud.png">ui/images/pict_volume_loud.png</file>
         <file alias="butt_video_back_up.png">ui/images/butt_video_back_up.png</file>

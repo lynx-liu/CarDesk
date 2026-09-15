@@ -11,8 +11,15 @@
 
 McuSerialReader *McuSerialReader::s_shared = nullptr;
 
+static void ensureTpmsMetaType()
+{
+    static const int id = qRegisterMetaType<McuTpmsInfo>("McuTpmsInfo");
+    Q_UNUSED(id);
+}
+
 McuSerialReader *McuSerialReader::ensureShared(QObject *parent)
 {
+    ensureTpmsMetaType();
     if (!s_shared) {
         s_shared = new McuSerialReader(parent);
     }
@@ -198,6 +205,20 @@ void McuSerialReader::parseJsonLine(const QByteArray &raw)
         return;
     }
 
+    // 胎压：顶层 type=TPMS（非 VIST 包裹）
+    if (type == QLatin1String("TPMS")) {
+        McuTpmsInfo info;
+        info.axle = obj.value(QStringLiteral("axle")).toInt();
+        info.tire = obj.value(QStringLiteral("tire")).toInt();
+        info.pressureKpa = obj.value(QStringLiteral("pressure_kpa")).toInt();
+        info.temperatureC = static_cast<float>(obj.value(QStringLiteral("temperature_c")).toDouble());
+        info.leakagePaS = static_cast<float>(obj.value(QStringLiteral("leakage_pa_s")).toDouble());
+        info.alarm = obj.value(QStringLiteral("alarm")).toString();
+        info.mcuTsMs = static_cast<quint32>(obj.value(QStringLiteral("ts")).toVariant().toULongLong());
+        emit tpmsReceived(info);
+        return;
+    }
+
     if (type != QLatin1String("VIST")) return;
     const QString name = obj.value(QStringLiteral("name")).toString();
     if (name == QLatin1String("OEL")) {
@@ -374,6 +395,24 @@ void McuSerialReader::parseVistTextLine(const QString &name, const QString &kv)
         } else {
             qDebug() << "[TXRX TEXT]" << name << "parse failed raw=" << kv;
         }
+    } else if (name == QLatin1String("TPMS")) {
+        // [12345][#42][TPMS] Axle0 Tire0 | P=752kPa T=35.0C Leak=0.0Pa/s Alarm=NORMAL
+        static const QRegularExpression re(
+            QStringLiteral(R"(Axle(\d+)\s+Tire(\d+)\s*\|\s*P=(\d+)kPa\s+T=([0-9.]+)C(?:\s+Leak=([0-9.]+)Pa/s)?(?:\s+Alarm=(\w+))?)"));
+        const QRegularExpressionMatch m = re.match(kv);
+        if (m.hasMatch()) {
+            McuTpmsInfo info;
+            info.axle = m.captured(1).toInt();
+            info.tire = m.captured(2).toInt();
+            info.pressureKpa = m.captured(3).toInt();
+            info.temperatureC = m.captured(4).toFloat();
+            if (!m.captured(5).isEmpty()) {
+                info.leakagePaS = m.captured(5).toFloat();
+            }
+            info.alarm = m.captured(6).isEmpty() ? QStringLiteral("NORMAL") : m.captured(6);
+            emit tpmsReceived(info);
+        } else {
+            qDebug() << "[TXRX TEXT] TPMS parse failed raw=" << kv;
+        }
     }
-    // TD 时间日期在 TEXT 模式下暂未规定，依赖 JSON 模式处理
 }

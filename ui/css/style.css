@@ -2394,6 +2394,125 @@ button.bluetooth_btn {
 	margin-top: 36px;
 }
 
+.system_tire {
+	width:600px;
+	margin-left: 200px;
+	
+	
+}
+
+.system_tire h4 {
+	font-size: 36px;
+	line-height: 36px;
+	font-weight: bold;
+	margin-top: 16px;
+	text-align: center;
+}
+
+.system_tire_2 h4 {
+	
+	margin-top: 20px;
+	
+}
+
+.system_tire_con {
+	
+	
+	background: url(../images/pic_setting_tire_qyt.png) no-repeat center 38px;
+	display: flex;
+	justify-content: center;
+	position: relative;
+	margin:0 auto;
+    border-bottom: 1px dashed rgba(255, 255, 255, .75);
+	
+
+}
+.system_tire_con_2 {
+	
+	
+	background: url(../images/pic_setting_tire_gc.png) no-repeat center 36px;
+	
+    border-bottom: none;
+
+}
+
+
+
+
+.system_tire ul {
+
+	margin: 16px 12px 8px  12px;
+	overflow: hidden;
+	height: auto;
+}
+
+.system_tire ul:nth-child(2) {
+	margin-right: 70px;
+}
+
+.system_tire ul:nth-child(3) {
+	margin-left: 70px;
+}
+
+.system_tire li:first-child {
+	margin-bottom: 37px;
+}
+.system_tire .system_tire_con_2 li:first-child {
+	margin-bottom: 12px;
+}
+
+
+
+.system_tire li {
+	margin-bottom: 12px;
+	height: 60px
+}
+
+.system_tire li div {
+	float: ;
+}
+
+.system_tire li span {
+	display: block;
+}
+
+.system_tire li span:first-child {
+	font-size: 32px;
+	line-height: 32px;
+	margin-bottom: 4px;
+}
+
+.system_tire li span:last-child {
+	font-size: 24px;
+	line-height: 24px;
+	color: #00FAFF;
+	text-align: right;
+}
+
+.system_tire_wrap {
+	
+	position: relative;
+	
+}
+
+
+.system_tire_wrap>span {
+	position: absolute;
+	left: 74px;
+	top: 281px;
+	font-size: 48px;
+	line-height: 72px;
+	font-weight: bold;
+	color: #00FAFF;
+}
+
+.system_tire_wrap>span:last-child {
+	left: 893px;
+	
+	
+	
+}
+
 /*-----------------------弹出层-------------------------*/
 
 .popalert {

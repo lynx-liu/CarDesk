@@ -11,6 +11,7 @@ class QStackedWidget;
 class QTimer;
 class QTabWidget;
 class QPushButton;
+class QVBoxLayout;
 class QWidget;
 class OTAManager;
 
@@ -57,11 +58,14 @@ private:
     QWidget *createInfoPage();
     QWidget *createFactoryPage();
     QWidget *createUpdatePage();
+    QWidget *createTirePage();
 
     QStackedWidget *m_pages;
     QListWidget *m_subnavList;
+    QVBoxLayout *m_pageHostLayout = nullptr;
     BluetoothManager *m_bluetoothManager;
     int m_bluetoothPageIndex;
+    int m_tirePageIndex = -1;
     QLabel *m_bluetoothIntroLabel;
     QString m_bluetoothDeviceName;
     QString m_bluetoothPairPin;

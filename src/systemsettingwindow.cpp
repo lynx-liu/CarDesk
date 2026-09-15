@@ -10,6 +10,7 @@
 #include "appsettings.h"
 #include "automotivedriving.h"
 #include "t507sdkbridge.h"
+#include "tirepressurepage.h"
 
 static const QString kUsbMountDir    = QStringLiteral("/mnt/usb");
 static const QString kUsbMountPrefix = QStringLiteral("/mnt/usb/");
@@ -416,6 +417,12 @@ void SystemSettingWindow::onSubnavChanged(int index)
     }
     m_pages->setCurrentIndex(index);
 
+    // 胎压页对齐 HTML .system_infor(1000px)，取消其它页的 80px 左右内边距
+    if (m_pageHostLayout) {
+        const int pad = (index == m_tirePageIndex) ? 0 : 80;
+        m_pageHostLayout->setContentsMargins(pad, 0, pad, 0);
+    }
+
     if (index == m_bluetoothPageIndex && m_bluetoothPageIndex >= 0
         && m_bluetoothManager && m_bluetoothEnabled) {
         m_bluetoothManager->queryConnectedDevice();
@@ -803,7 +810,8 @@ void SystemSettingWindow::setupUI()
     }
     subnavItems << QStringLiteral("系统信息")
                 << QStringLiteral("恢复出厂")
-                << QStringLiteral("系统升级");
+                << QStringLiteral("系统升级")
+                << QStringLiteral("胎压显示");
     for (const QString &item : subnavItems) {
         auto *it = new QListWidgetItem(item, m_subnavList);
         it->setTextAlignment(Qt::AlignCenter | Qt::AlignVCenter);
@@ -818,9 +826,9 @@ void SystemSettingWindow::setupUI()
     m_subnavList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
     auto *pageHost = new QWidget(content);
-    auto *pageHostLayout = new QVBoxLayout(pageHost);
-    pageHostLayout->setContentsMargins(80, 0, 80, 0);
-    pageHostLayout->setSpacing(0);
+    m_pageHostLayout = new QVBoxLayout(pageHost);
+    m_pageHostLayout->setContentsMargins(80, 0, 80, 0);
+    m_pageHostLayout->setSpacing(0);
 
     m_pages = new QStackedWidget(pageHost);
     m_pages->setStyleSheet(
@@ -840,7 +848,9 @@ void SystemSettingWindow::setupUI()
     m_pages->addWidget(createInfoPage());
     m_pages->addWidget(createFactoryPage());
     m_pages->addWidget(createUpdatePage());
-    pageHostLayout->addWidget(m_pages);
+    m_tirePageIndex = m_pages->count();
+    m_pages->addWidget(createTirePage());
+    m_pageHostLayout->addWidget(m_pages);
 
     contentLayout->addWidget(m_subnavList);
     contentLayout->addWidget(pageHost, 1);
@@ -2021,6 +2031,11 @@ QWidget *SystemSettingWindow::createBluetoothPage()
 void SystemSettingWindow::setBluetoothManager(BluetoothManager *bluetoothManager)
 {
     m_bluetoothManager = bluetoothManager;
+}
+
+QWidget *SystemSettingWindow::createTirePage()
+{
+    return new TirePressurePage();
 }
 
 QWidget *SystemSettingWindow::createInfoPage()

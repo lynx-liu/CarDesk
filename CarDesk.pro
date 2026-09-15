@@ -129,6 +129,7 @@ HEADERS += \
     src/phonewindow.h \
     src/diagnosticwindow.h \
     src/systemsettingwindow.h \
+    src/tirepressurepage.h \
     src/drivingimagewindow.h \
     src/drivingimagenavbar.h \
     src/drivingimagepreviewtopbar.h \
@@ -180,6 +181,7 @@ SOURCES += \
     src/phonewindow.cpp \
     src/diagnosticwindow.cpp \
     src/systemsettingwindow.cpp \
+    src/tirepressurepage.cpp \
     src/drivingimagewindow.cpp \
     src/drivingimagenavbar.cpp \
     src/drivingimagepreviewtopbar.cpp \
