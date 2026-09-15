@@ -53,6 +53,7 @@ rm -f "$APP_DIR/qt.conf"
 echo "[INFO] 生成启动脚本"
 cat > "$OUT_DIR/run.sh" << EOF
 #!/bin/bash
+exec >/dev/null 2>&1
 set -e
 SCRIPT_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 
